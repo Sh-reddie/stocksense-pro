@@ -37,20 +37,9 @@ export async function onRequestPost({ request, env }) {
     );
   }
   try {
-    const incomingToken = request.headers.get('X-SS-Token') || '';
     const body = await request.json();
 
-    // Simple token auth — first write registers the token; later writes must match.
-    const storedToken = await env.STOCKSENSE_KV.get('ss_auth_token');
-    if (storedToken) {
-      if (incomingToken !== storedToken) {
-        return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401, headers: CORS });
-      }
-    } else if (incomingToken) {
-      // First-time: register this token (derived from PIN hash in the app)
-      await env.STOCKSENSE_KV.put('ss_auth_token', incomingToken);
-    }
-
+    // Auth is handled by Cloudflare Access (Zero Trust) — no need for token check here.
     // Strip internal fields, add server timestamp
     const { _token, _savedAt: _, ...portfolioData } = body;
     portfolioData._savedAt = new Date().toISOString();
