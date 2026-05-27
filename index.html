@@ -6571,35 +6571,68 @@ async function claude(prompt, sys) {
   }
 }
 
-// Fast JSON-structured AI call — always uses Llama 3.1 8B (non-reasoning, reliable JSON output).
+// Fast JSON-structured AI call — tries a cascade of non-reasoning free models until one responds.
 // Use this for all prompts that need structured JSON responses quickly (watchlist, portfolio doctor, etc.)
-// Falls back to the user's configured provider if OpenRouter key is missing.
+// Falls back to the user's configured claude() if no OpenRouter key.
 async function claudeJSON(prompt, sys) {
   const key = localStorage.getItem('orKey') || '';
-  if (!key) return claude(prompt, sys); // fallback to normal path if no OR key
+  if (!key) return claude(prompt, sys);
   const sysMsg = sys || "You are an expert Indian equity market analyst. Reply ONLY with valid compact JSON matching the exact schema requested. No markdown, no explanation, no extra keys.";
   const _ref = (location.protocol === 'http:' || location.protocol === 'https:') ? location.href : 'https://stocksense.local';
-  try {
-    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + key,
-        'HTTP-Referer': _ref,
-        'X-Title': 'StockSense Pro'
-      },
-      body: JSON.stringify({
-        model: 'meta-llama/llama-3.1-8b-instruct:free',
-        max_tokens: 1024,
-        temperature: 0.4,
-        messages: [{ role: 'system', content: sysMsg }, { role: 'user', content: prompt }]
-      }),
-      signal: AbortSignal.timeout(30000)
-    });
-    const d = await r.json();
-    if (d.error) return '⚠ OpenRouter error: ' + (d.error.message || JSON.stringify(d.error));
-    return d.choices?.[0]?.message?.content || 'Analysis unavailable.';
-  } catch(e) { return 'OpenRouter error: ' + e.message; }
+  // Ordered list of reliable non-reasoning free models (updated 2026)
+  const FAST_MODELS = [
+    'google/gemma-3-12b-it:free',
+    'google/gemma-3-4b-it:free',
+    'meta-llama/llama-3.2-3b-instruct:free',
+    'qwen/qwen-2.5-7b-instruct:free',
+    'mistralai/mistral-7b-instruct:free'
+  ];
+  for (const model of FAST_MODELS) {
+    try {
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + key,
+          'HTTP-Referer': _ref,
+          'X-Title': 'StockSense Pro'
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 1024,
+          temperature: 0.4,
+          messages: [{ role: 'system', content: sysMsg }, { role: 'user', content: prompt }]
+        }),
+        signal: AbortSignal.timeout(30000)
+      });
+      const d = await r.json();
+      if (d.error) {
+        const msg = d.error.message || JSON.stringify(d.error);
+        // No endpoints = model unavailable, try next
+        if (msg.includes('No endpoints') || msg.includes('not found') || r.status === 404) {
+          ilog && ilog('⚠ claudeJSON: "'+model+'" unavailable, trying next...', 'warn');
+          continue;
+        }
+        return '⚠ OpenRouter error: ' + msg;
+      }
+      const content = d.choices?.[0]?.message?.content;
+      if (content && content.length > 0) {
+        ilog && ilog('✅ claudeJSON used: ' + model, 'info');
+        return content;
+      }
+      // Empty content (reasoning model slipped through) — try next
+      continue;
+    } catch(e) {
+      if (e.name === 'TimeoutError' || e.name === 'AbortError') {
+        ilog && ilog('⚠ claudeJSON: "'+model+'" timed out, trying next...', 'warn');
+        continue;
+      }
+      return 'OpenRouter error: ' + e.message;
+    }
+  }
+  // All fast models failed — fall back to user's configured model
+  ilog && ilog('⚠ All fast JSON models unavailable, falling back to configured model', 'warn');
+  return claude(prompt, sys);
 }
 
 // ═══════════════════════════════════════════════════
