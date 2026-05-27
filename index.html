@@ -4859,6 +4859,34 @@ Reply ONLY with valid JSON, no markdown, no explanation:
   }
 }
 
+// Single-stock watchlist AI analysis (called from per-card button)
+async function _wlAnalyseSingle(id) {
+  const w = D.watchlist.find(x => x.id === id);
+  if (!w) return;
+  // Disable button and show loading
+  const btn = document.getElementById('wl-ai-btn-' + id);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Analysing…'; }
+  const card = document.getElementById('wlc-' + id);
+  if (card) card.style.opacity = '0.6';
+  try {
+    const ctx = D._marketCtx || await getMarketContext();
+    D._marketCtx = ctx;
+    await analyseWatchStock(w, ctx);
+    save('watchlist');
+    renderWatchlist();
+    // Auto-expand the card after analysis
+    setTimeout(() => {
+      const expand = document.getElementById('wle-' + id);
+      if (expand && expand.style.display === 'none') toggleWlExpand(id);
+    }, 100);
+    toast('✅ ' + w.symbol + ' watchlist analysis done · Decision: ' + (w.wlDecision || 'WAIT'));
+  } catch(e) {
+    toast('⚠ AI analysis failed: ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '🤖 AI'; }
+    if (card) card.style.opacity = '';
+  }
+}
+
 async function portfolioDoctor(ctx) {
   if(!D.holdings.length)return null;
   const inv=D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0);const cv=D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
@@ -5133,6 +5161,7 @@ function renderWatchlist() {
         <!-- RIGHT: Actions -->
         <div style="display:flex;flex-direction:column;gap:5px;min-width:80px">
           <button class="btn btn-grn btn-xs" onclick="quickAddToHoldings(${w.id})">+ Holdings</button>
+          <button id="wl-ai-btn-${w.id}" class="btn btn-p btn-xs" onclick="_wlAnalyseSingle(${w.id})">${hasAI ? '🔄 Re-analyse' : '🤖 AI'}</button>
           <button class="btn btn-g btn-xs" onclick="toggleWlExpand(${w.id})">${document.getElementById('wle-'+w.id)?.style.display!=='none'?'▲ Less':'▼ Detail'}</button>
           <button class="btn btn-red btn-xs" onclick="rmWatch(${w.id})">✕</button>
         </div>
@@ -5181,10 +5210,16 @@ function renderWatchlist() {
           <!-- Your note -->
           ${w.note ? `<div style="margin-top:12px;padding:8px 12px;background:var(--s2);border-left:2px solid var(--ac2);border-radius:4px;font-size:12px;color:var(--t3)">📝 ${w.note}</div>` : ''}
           ${w.catalyst ? `<div style="margin-top:6px;font-size:11px;color:var(--t3)">📅 Catalyst: ${w.catalyst}</div>` : ''}
+          <div style="margin-top:12px;text-align:right">
+            <button class="btn btn-g btn-xs" onclick="_wlAnalyseSingle(${w.id})">🔄 Re-analyse</button>
+          </div>
         </div>` : `
-        <div style="padding:14px;font-size:12px;color:var(--t4)">
-          ${w.note ? `<div style="padding:8px 12px;background:var(--s2);border-left:2px solid var(--ac2);border-radius:4px;color:var(--t3);margin-bottom:8px">📝 ${w.note}</div>` : ''}
-          Run <strong style="color:var(--t1)">🤖 AI Analyze</strong> to get entry recommendation, score breakdown, entry range, stop loss and targets.
+        <div style="padding:14px;text-align:center">
+          ${w.note ? `<div style="padding:8px 12px;background:var(--s2);border-left:2px solid var(--ac2);border-radius:4px;color:var(--t3);margin-bottom:12px;text-align:left;font-size:12px">📝 ${w.note}</div>` : ''}
+          <div style="font-size:32px;margin-bottom:8px">🤖</div>
+          <div style="font-size:13px;font-weight:600;color:var(--t2);margin-bottom:4px">No AI analysis yet</div>
+          <div style="font-size:11px;color:var(--t4);margin-bottom:14px">Get entry decision, score, entry range, stop loss &amp; targets</div>
+          <button class="btn btn-p" onclick="_wlAnalyseSingle(${w.id})">🤖 Analyse ${w.symbol}</button>
         </div>`}
       </div>
 
