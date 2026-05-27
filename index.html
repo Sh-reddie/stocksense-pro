@@ -745,6 +745,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('analysis')">🔍 Stock Analysis</div>
         <div class="tn-drop-item" onclick="go('plan')">🎯 Exit Planner</div>
         <div class="tn-drop-item" onclick="go('planner')">📐 Planner</div>
+        <div class="tn-drop-item" onclick="go('strategies')">🧠 AI Strategies</div>
       </div>
     </div>
     <!-- Tools dropdown -->
@@ -1483,6 +1484,211 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div style="display:flex;flex-direction:column;gap:14px">
         <div class="pn" style="flex:1"><div class="pn-h"><div class="pn-t">📋 Import Log</div><div style="display:flex;gap:6px"><button class="btn btn-yel btn-xs" onclick="const n=mergeHoldingsBySymbol();renderAll();toast(n?'✅ Merged '+n+' duplicate symbol(s)':'No duplicates to merge');ilog(n?'🔗 Merged '+n+' duplicate symbol(s) into single rows':'✅ No duplicate symbols found');" title="Merge multiple lots of same stock into one weighted-average row">🔗 Merge Dupes</button><button class="btn btn-g btn-xs" onclick="document.getElementById('ilog').innerHTML=''">Clear</button></div></div><div class="pn-b" id="ilog" style="font-family:var(--mono);font-size:11px;line-height:1.9;color:var(--t2);max-height:380px;overflow-y:auto">Waiting…</div></div>
         <div class="pn"><div class="pn-h"><div class="pn-t">📖 Groww Export Guide</div></div><div class="pn-b" style="font-size:12px;line-height:1.9;color:var(--t2)"><strong style="color:var(--t1)">Holdings:</strong> Groww App → Portfolio → ⋮ → Download Report<br><strong style="color:var(--t1)">P&L:</strong> Groww App → Reports → P&L → Download CSV<br><strong style="color:var(--t1)">Dividends:</strong> Groww App → Reports → Dividend → Download<br><br><span style="color:var(--yel)">⚠ "Scrip Name" and "Symbol" both handled automatically.</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ AI INVESTOR — ADVANCED STRATEGIES ════════════════════════ -->
+  <div class="sec" id="sec-strategies">
+    <div class="sec-head">
+      <div class="sec-title">🧠 AI Investor — Advanced Strategies</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-p btn-sm" onclick="runAllStrategies()">⚡ Run All Analysis</button>
+      </div>
+    </div>
+
+    <!-- Sub-tab bar -->
+    <div style="display:flex;gap:4px;padding:0 0 14px 0;border-bottom:1px solid var(--b2);margin-bottom:18px;flex-wrap:wrap">
+      <button class="btn btn-xs strat-tab on" id="stab-regime" onclick="switchStratTab('regime')">🎯 Market Regime & RSI</button>
+      <button class="btn btn-xs strat-tab" id="stab-factors" onclick="switchStratTab('factors')">📊 Factor Scoring</button>
+      <button class="btn btn-xs strat-tab" id="stab-optimise" onclick="switchStratTab('optimise')">⚖ Portfolio Optimiser</button>
+      <button class="btn btn-xs strat-tab" id="stab-options" onclick="switchStratTab('options')">📈 Options Strategy</button>
+    </div>
+
+    <!-- ── TAB: Market Regime + RSI ── -->
+    <div id="strat-regime" class="strat-panel">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:18px">
+        <div class="pn" style="text-align:center">
+          <div class="pn-h"><div class="pn-t">📡 Market Regime</div></div>
+          <div class="pn-b">
+            <div id="regime-badge" style="font-size:28px;font-weight:700;margin:8px 0;color:var(--ac)">—</div>
+            <div id="regime-label" style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:1px">Not analysed</div>
+          </div>
+        </div>
+        <div class="pn" style="text-align:center">
+          <div class="pn-h"><div class="pn-t">📈 Trend Strength</div></div>
+          <div class="pn-b">
+            <div id="regime-trend" style="font-size:28px;font-weight:700;margin:8px 0;color:var(--grn)">—</div>
+            <div style="font-size:11px;color:var(--t3)">Breadth &amp; Momentum</div>
+          </div>
+        </div>
+        <div class="pn" style="text-align:center">
+          <div class="pn-h"><div class="pn-t">🎯 Strategy Bias</div></div>
+          <div class="pn-b">
+            <div id="regime-bias" style="font-size:22px;font-weight:700;margin:8px 0;color:var(--yel)">—</div>
+            <div style="font-size:11px;color:var(--t3)">Recommended stance</div>
+          </div>
+        </div>
+        <div class="pn" style="text-align:center">
+          <div class="pn-h"><div class="pn-t">⏱ Regime Since</div></div>
+          <div class="pn-b">
+            <div id="regime-since" style="font-size:16px;font-weight:600;margin:8px 0;color:var(--t1)">—</div>
+            <div style="font-size:11px;color:var(--t3)">Estimated duration</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RSI Signals Table -->
+      <div class="pn" style="margin-bottom:16px">
+        <div class="pn-h" style="display:flex;justify-content:space-between;align-items:center">
+          <div class="pn-t">📉 RSI-Based Signals (52W Proxy)</div>
+          <button class="btn btn-xs btn-p" onclick="renderRSISignals()">🔄 Refresh</button>
+        </div>
+        <div class="pn-b" style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px" id="rsi-tbl">
+            <thead><tr style="color:var(--t4);text-transform:uppercase;font-size:10px">
+              <th style="text-align:left;padding:6px 8px">Stock</th>
+              <th style="padding:6px 8px">52W Pos%</th>
+              <th style="padding:6px 8px">RSI Zone</th>
+              <th style="padding:6px 8px">Signal</th>
+              <th style="padding:6px 8px">Momentum</th>
+              <th style="text-align:left;padding:6px 8px">Action</th>
+            </tr></thead>
+            <tbody id="rsi-tbody"><tr><td colspan="6" style="text-align:center;color:var(--t4);padding:20px">Click Refresh to load RSI signals</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- AI Regime Narrative -->
+      <div class="pn">
+        <div class="pn-h" style="display:flex;justify-content:space-between;align-items:center">
+          <div class="pn-t">🤖 AI Market Regime Analysis</div>
+          <button class="btn btn-xs btn-p" onclick="runRegimeAI()">🧠 Get AI Analysis</button>
+        </div>
+        <div class="pn-b"><div id="regime-ai-txt" style="color:var(--t3);font-size:13px;line-height:1.7">Click "Get AI Analysis" to get a full regime briefing and strategy recommendations.</div></div>
+      </div>
+    </div>
+
+    <!-- ── TAB: Factor Scoring ── -->
+    <div id="strat-factors" class="strat-panel" style="display:none">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px" id="factor-summary-cards">
+        <div class="pn" style="text-align:center"><div class="pn-h"><div class="pn-t">🏆 Top Ranked</div></div><div class="pn-b"><div id="fs-top" style="font-size:16px;font-weight:700;color:var(--grn);margin:6px 0">—</div></div></div>
+        <div class="pn" style="text-align:center"><div class="pn-h"><div class="pn-t">⚠ Lowest Score</div></div><div class="pn-b"><div id="fs-low" style="font-size:16px;font-weight:700;color:var(--red);margin:6px 0">—</div></div></div>
+        <div class="pn" style="text-align:center"><div class="pn-h"><div class="pn-t">📊 Avg Score</div></div><div class="pn-b"><div id="fs-avg" style="font-size:22px;font-weight:700;color:var(--ac);margin:6px 0">—</div></div></div>
+        <div class="pn" style="text-align:center"><div class="pn-h"><div class="pn-t">✅ Strong Buys</div></div><div class="pn-b"><div id="fs-strong" style="font-size:22px;font-weight:700;color:var(--grn);margin:6px 0">—</div></div></div>
+      </div>
+
+      <div class="pn" style="margin-bottom:16px">
+        <div class="pn-h" style="display:flex;justify-content:space-between;align-items:center">
+          <div class="pn-t">📊 Multi-Factor Score Ranking</div>
+          <button class="btn btn-xs btn-p" onclick="computeAndRenderFactors()">📊 Compute Scores</button>
+        </div>
+        <div class="pn-b" style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="color:var(--t4);text-transform:uppercase;font-size:10px;border-bottom:1px solid var(--b2)">
+              <th style="text-align:left;padding:6px 8px">Rank</th>
+              <th style="text-align:left;padding:6px 8px">Stock</th>
+              <th style="padding:6px 8px">Value</th>
+              <th style="padding:6px 8px">Momentum</th>
+              <th style="padding:6px 8px">Quality</th>
+              <th style="padding:6px 8px">Growth</th>
+              <th style="padding:6px 8px">RSI</th>
+              <th style="padding:6px 8px">Total</th>
+              <th style="padding:6px 8px">Rating</th>
+            </tr></thead>
+            <tbody id="factor-tbody"><tr><td colspan="9" style="text-align:center;color:var(--t4);padding:20px">Click "Compute Scores" to rank your holdings</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="pn">
+        <div class="pn-h" style="display:flex;justify-content:space-between;align-items:center">
+          <div class="pn-t">🤖 AI Factor Analysis — What to Do</div>
+          <button class="btn btn-xs btn-p" onclick="runFactorAI()">🧠 AI Recommendations</button>
+        </div>
+        <div class="pn-b"><div id="factor-ai-txt" style="color:var(--t3);font-size:13px;line-height:1.7">Compute scores first, then get AI recommendations on which stocks to add, hold, or exit based on factor ranks.</div></div>
+      </div>
+    </div>
+
+    <!-- ── TAB: Portfolio Optimiser ── -->
+    <div id="strat-optimise" class="strat-panel" style="display:none">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px">
+        <div class="pn" style="text-align:center"><div class="pn-h"><div class="pn-t">📐 Portfolio Sharpe</div></div><div class="pn-b"><div id="opt-sharpe" style="font-size:28px;font-weight:700;color:var(--ac);margin:6px 0">—</div><div style="font-size:10px;color:var(--t4)">Risk-free: 6.5% (10Y bond)</div></div></div>
+        <div class="pn" style="text-align:center"><div class="pn-h"><div class="pn-t">📊 Portfolio Beta</div></div><div class="pn-b"><div id="opt-beta" style="font-size:28px;font-weight:700;color:var(--yel);margin:6px 0">—</div><div style="font-size:10px;color:var(--t4)">Market sensitivity</div></div></div>
+        <div class="pn" style="text-align:center"><div class="pn-h"><div class="pn-t">💰 Actual Return</div></div><div class="pn-b"><div id="opt-return" style="font-size:22px;font-weight:700;margin:6px 0">—</div><div style="font-size:10px;color:var(--t4)">Unrealised P&L%</div></div></div>
+        <div class="pn" style="text-align:center"><div class="pn-h"><div class="pn-t">🎯 Concentration Risk</div></div><div class="pn-b"><div id="opt-conc" style="font-size:22px;font-weight:700;color:var(--orn);margin:6px 0">—</div><div style="font-size:10px;color:var(--t4)">Top holding weight</div></div></div>
+        <div class="pn" style="text-align:center"><div class="pn-h"><div class="pn-t">✅ Diversification</div></div><div class="pn-b"><div id="opt-hhi" style="font-size:22px;font-weight:700;color:var(--grn);margin:6px 0">—</div><div style="font-size:10px;color:var(--t4)">HHI score (lower=better)</div></div></div>
+      </div>
+
+      <div class="pn" style="margin-bottom:16px">
+        <div class="pn-h" style="display:flex;justify-content:space-between;align-items:center">
+          <div class="pn-t">⚖ Current vs Optimal Weights</div>
+          <button class="btn btn-xs btn-p" onclick="computeOptimalWeights()">⚖ Compute Optimisation</button>
+        </div>
+        <div class="pn-b" style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="color:var(--t4);text-transform:uppercase;font-size:10px;border-bottom:1px solid var(--b2)">
+              <th style="text-align:left;padding:6px 8px">Stock</th>
+              <th style="padding:6px 8px">Current %</th>
+              <th style="padding:6px 8px">Optimal %</th>
+              <th style="padding:6px 8px">Δ Action</th>
+              <th style="padding:6px 8px">Sharpe Contrib</th>
+              <th style="text-align:left;padding:6px 8px">Rationale</th>
+            </tr></thead>
+            <tbody id="opt-tbody"><tr><td colspan="6" style="text-align:center;color:var(--t4);padding:20px">Click "Compute Optimisation" to see rebalance plan</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="pn">
+        <div class="pn-h" style="display:flex;justify-content:space-between;align-items:center">
+          <div class="pn-t">🤖 AI Optimisation Narrative</div>
+          <button class="btn btn-xs btn-p" onclick="runOptimiseAI()">🧠 Get AI Plan</button>
+        </div>
+        <div class="pn-b"><div id="opt-ai-txt" style="color:var(--t3);font-size:13px;line-height:1.7">Run optimisation first, then get an AI-generated rebalancing plan with specific rupee amounts and priority order.</div></div>
+      </div>
+    </div>
+
+    <!-- ── TAB: Options Strategy ── -->
+    <div id="strat-options" class="strat-panel" style="display:none">
+      <div style="background:rgba(255,200,0,.07);border:1px solid rgba(255,200,0,.25);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--yel)">
+        ⚠ <strong>Educational only.</strong> Options involve significant risk. Consult a SEBI-registered advisor before trading. Premiums are indicative estimates — actual prices vary.
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px">
+        <div class="pn" style="text-align:center"><div class="pn-h"><div class="pn-t">📈 Covered Call Candidates</div></div><div class="pn-b"><div id="opt-cc-count" style="font-size:28px;font-weight:700;color:var(--grn);margin:6px 0">—</div></div></div>
+        <div class="pn" style="text-align:center"><div class="pn-h"><div class="pn-t">🛡 Protective Put Candidates</div></div><div class="pn-b"><div id="opt-pp-count" style="font-size:28px;font-weight:700;color:var(--orn);margin:6px 0">—</div></div></div>
+        <div class="pn" style="text-align:center"><div class="pn-h"><div class="pn-t">💡 Straddle Candidates</div></div><div class="pn-b"><div id="opt-st-count" style="font-size:28px;font-weight:700;color:var(--ac);margin:6px 0">—</div></div></div>
+        <div class="pn" style="text-align:center"><div class="pn-h"><div class="pn-t">💰 Est. Premium Income</div></div><div class="pn-b"><div id="opt-premium" style="font-size:20px;font-weight:700;color:var(--grn);margin:6px 0">—</div><div style="font-size:10px;color:var(--t4)">Monthly (covered calls)</div></div></div>
+      </div>
+
+      <div class="pn" style="margin-bottom:16px">
+        <div class="pn-h" style="display:flex;justify-content:space-between;align-items:center">
+          <div class="pn-t">📈 Options Strategy Suggestions</div>
+          <button class="btn btn-xs btn-p" onclick="buildOptionsStrategies()">📈 Build Strategies</button>
+        </div>
+        <div class="pn-b" style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="color:var(--t4);text-transform:uppercase;font-size:10px;border-bottom:1px solid var(--b2)">
+              <th style="text-align:left;padding:6px 8px">Stock</th>
+              <th style="padding:6px 8px">Strategy</th>
+              <th style="padding:6px 8px">Strike</th>
+              <th style="padding:6px 8px">Est. Premium</th>
+              <th style="padding:6px 8px">Max Profit</th>
+              <th style="padding:6px 8px">Max Loss</th>
+              <th style="text-align:left;padding:6px 8px">Why</th>
+            </tr></thead>
+            <tbody id="options-tbody"><tr><td colspan="7" style="text-align:center;color:var(--t4);padding:20px">Click "Build Strategies" to see options suggestions for your holdings</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="pn">
+        <div class="pn-h" style="display:flex;justify-content:space-between;align-items:center">
+          <div class="pn-t">🤖 AI Options Strategy Narrative</div>
+          <button class="btn btn-xs btn-p" onclick="runOptionsAI()">🧠 Get AI Strategy</button>
+        </div>
+        <div class="pn-b"><div id="options-ai-txt" style="color:var(--t3);font-size:13px;line-height:1.7">Build strategies first, then get a detailed AI narrative on which options plays suit your portfolio and current market conditions.</div></div>
       </div>
     </div>
   </div>
@@ -2681,13 +2887,13 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio', dividends:'portfolio', divcal:'portfolio',
   action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis',
-  analysis:'ai', plan:'ai', planner:'ai',
+  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai',
   alerts:'tools', notifications:'tools', calendar:'tools', deals:'tools', news:'tools', tax:'tools', import:'tools',
   settings:'settings'
 };
@@ -2721,6 +2927,7 @@ function go(id) {
   if(id==='rebalancer') renderRebalancer();
   if(id==='divcal') renderDivCalendar();
   if(id==='deals') renderDeals();
+  if(id==='strategies') renderStrategiesSection();
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -8183,6 +8390,530 @@ async function aiSectorAnalysis() {
   const prompt = `My Indian equity portfolio sector allocation:\n${sectorData.map(s=>`${s.sec}: ${s.allocPct}% (${s.stocks}) P&L: ${s.plPct!==null?s.plPct+'%':'—'}`).join('\n')}\n\nProvide sector rotation advice: which sectors to increase/reduce, identify overexposure/underexposure, and current market rotation trends in India. Be specific and actionable.`;
   const result = await claude(prompt);
   el.innerHTML = md2h(result);
+}
+
+// ═══════════════════════════════════════════════════
+// AI INVESTOR — ADVANCED STRATEGIES
+// ═══════════════════════════════════════════════════
+
+/* ── Tab switching ── */
+function switchStratTab(id) {
+  document.querySelectorAll('.strat-panel').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.strat-tab').forEach(b => b.classList.remove('on'));
+  const panel = document.getElementById('strat-' + id);
+  const btn   = document.getElementById('stab-' + id);
+  if (panel) panel.style.display = '';
+  if (btn)   btn.classList.add('on');
+  // Auto-compute on first visit
+  if (id === 'factors' && !document.getElementById('factor-tbody').querySelector('td[colspan]') === false) computeAndRenderFactors();
+  if (id === 'regime')  renderRSISignals();
+  if (id === 'optimise') computeOptimalWeights();
+  if (id === 'options') buildOptionsStrategies();
+}
+
+function renderStrategiesSection() {
+  renderRSISignals();
+}
+
+/* ── Helpers ── */
+function fC(n) { return n == null ? '—' : '₹' + Number(n).toLocaleString('en-IN', {maximumFractionDigits:0}); }
+function fP2(n) { return n == null ? '—' : (n > 0 ? '+' : '') + n.toFixed(1) + '%'; }
+function scoreBar(s) { // s = 0-10
+  const pct = Math.min(100, Math.max(0, s * 10));
+  const col = s >= 7 ? 'var(--grn)' : s >= 4 ? 'var(--yel)' : 'var(--red)';
+  return `<div style="display:inline-flex;align-items:center;gap:6px"><div style="width:60px;height:6px;background:var(--b2);border-radius:3px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${col};border-radius:3px"></div></div><span style="color:${col};font-weight:600">${s.toFixed(1)}</span></div>`;
+}
+
+/* ══════════════════════════════════════════════════════
+   1. MARKET REGIME + RSI SIGNALS
+══════════════════════════════════════════════════════ */
+
+function detectMarketRegime() {
+  const ctx = D._marketCtx;
+  if (!ctx) return null;
+  const s = ctx.sentimentScore || 50;
+  let regime, regimeEmoji, trend, bias;
+  if (s >= 70)      { regime = 'BULL'; regimeEmoji = '🐂'; trend = 'Strong'; bias = 'AGGRESSIVE BUY'; }
+  else if (s >= 55) { regime = 'CAUTIOUSLY BULLISH'; regimeEmoji = '📈'; trend = 'Moderate'; bias = 'BUY SELECTIVELY'; }
+  else if (s >= 40) { regime = 'SIDEWAYS'; regimeEmoji = '➡'; trend = 'Weak'; bias = 'HOLD / REDUCE'; }
+  else if (s >= 25) { regime = 'CAUTIOUSLY BEARISH'; regimeEmoji = '📉'; trend = 'Weak'; bias = 'REDUCE'; }
+  else              { regime = 'BEAR'; regimeEmoji = '🐻'; trend = 'Falling'; bias = 'DEFENSIVE / CASH'; }
+  return { regime, regimeEmoji, trend, bias, score: s, since: ctx.brief ? 'Recent' : 'This week' };
+}
+
+function renderRSISignals() {
+  // Compute 52W-proxy RSI zone for each holding
+  const tbody = document.getElementById('rsi-tbody');
+  if (!tbody) return;
+  if (!D.holdings.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:20px">No holdings found</td></tr>'; return; }
+
+  // Refresh regime cards
+  const reg = detectMarketRegime();
+  if (reg) {
+    const el = id => document.getElementById(id);
+    if (el('regime-badge'))  el('regime-badge').textContent = reg.regimeEmoji + ' ' + reg.regime;
+    if (el('regime-label'))  el('regime-label').textContent = 'Sentiment: ' + reg.score + '/100';
+    if (el('regime-trend'))  el('regime-trend').textContent = reg.trend;
+    if (el('regime-bias'))   el('regime-bias').textContent  = reg.bias;
+    if (el('regime-since'))  el('regime-since').textContent = reg.since;
+    // Colour regime badge
+    const bc = reg.regime.includes('BULL') ? 'var(--grn)' : reg.regime.includes('BEAR') ? 'var(--red)' : 'var(--yel)';
+    if (el('regime-badge'))  el('regime-badge').style.color = bc;
+  }
+
+  const rows = D.holdings.map(h => {
+    const ltp  = h.ltp || h.avgPrice;
+    const h52  = h.h52 || 0;
+    const l52  = h.l52 || 0;
+    const pos52 = (h52 && l52 && ltp) ? Math.round((ltp - l52) / (h52 - l52) * 100) : null;
+    // RSI zone based on 52W position
+    let rsiZone, rsiCol, signal, signalCol, momentum;
+    if (pos52 === null) { rsiZone = 'Unknown'; rsiCol = 'var(--t4)'; signal = 'No Data'; signalCol = 'var(--t4)'; momentum = '—'; }
+    else if (pos52 <= 20) { rsiZone = 'Oversold'; rsiCol = 'var(--grn)'; signal = '🟢 STRONG BUY'; signalCol = 'var(--grn)'; momentum = '↑ Reversal setup'; }
+    else if (pos52 <= 35) { rsiZone = 'Near Oversold'; rsiCol = 'var(--grn)'; signal = '✅ BUY'; signalCol = 'var(--grn)'; momentum = '↑ Building'; }
+    else if (pos52 <= 60) { rsiZone = 'Neutral'; rsiCol = 'var(--t2)'; signal = '⏸ HOLD'; signalCol = 'var(--t3)'; momentum = '→ Flat'; }
+    else if (pos52 <= 80) { rsiZone = 'Near Overbought'; rsiCol = 'var(--yel)'; signal = '⚠ REDUCE'; signalCol = 'var(--yel)'; momentum = '↓ Slowing'; }
+    else { rsiZone = 'Overbought'; rsiCol = 'var(--red)'; signal = '🔴 EXIT/SELL'; signalCol = 'var(--red)'; momentum = '↓ Risky'; }
+
+    const plPct = h.avgPrice ? ((ltp - h.avgPrice) / h.avgPrice * 100).toFixed(1) : null;
+    return `<tr style="border-bottom:1px solid var(--b2)">
+      <td style="padding:6px 8px;font-weight:600;color:var(--t1)">${h.symbol}<br><span style="font-size:10px;color:var(--t4)">${h.sector||''}</span></td>
+      <td style="text-align:center;padding:6px 8px">
+        ${pos52 !== null ? `<div style="font-weight:600;color:${rsiCol}">${pos52}%</div><div style="font-size:10px;color:var(--t4)">from 52W low</div>` : '—'}
+      </td>
+      <td style="text-align:center;padding:6px 8px"><span style="color:${rsiCol};font-weight:600">${rsiZone}</span></td>
+      <td style="text-align:center;padding:6px 8px"><span style="color:${signalCol};font-weight:600">${signal}</span></td>
+      <td style="text-align:center;padding:6px 8px;color:var(--t2)">${momentum}</td>
+      <td style="padding:6px 8px;font-size:11px;color:var(--t3)">
+        ${plPct !== null ? `<span style="color:${plPct>=0?'var(--grn)':'var(--red)'}">P&L: ${plPct}%</span>` : ''}
+        <br>LTP: ${fC(ltp)}
+      </td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = rows;
+}
+
+async function runRegimeAI() {
+  const el = document.getElementById('regime-ai-txt');
+  if (!el) return;
+  el.innerHTML = '<span style="color:var(--t4)">⏳ Analysing market regime…</span>';
+  const ctx = D._marketCtx || await getMarketContext();
+  D._marketCtx = ctx;
+  const reg = detectMarketRegime();
+
+  // RSI summary
+  const oversold  = D.holdings.filter(h => h.h52&&h.l52&&h.ltp && (h.ltp-h.l52)/(h.h52-h.l52) <= 0.25).map(h=>h.symbol);
+  const overbought = D.holdings.filter(h => h.h52&&h.l52&&h.ltp && (h.ltp-h.l52)/(h.h52-h.l52) >= 0.80).map(h=>h.symbol);
+
+  const prompt = `You are a professional Indian equity strategist. Analyse the current market regime and give actionable strategy.
+
+REGIME: ${reg?.regime||'Unknown'} | Sentiment: ${ctx.sentimentScore}/100 (${ctx.sentimentLabel})
+NIFTY OUTLOOK: ${ctx.niftyOutlook}
+FII/DII: ${ctx.fiiDii} | Sector Bias: Hot=${ctx.hotSectors?.join(',')} Weak=${ctx.weakSectors?.join(',')}
+TOP RISKS: ${ctx.topRisks?.join(', ')}
+STRATEGY BIAS: ${reg?.bias||ctx.actionBias}
+
+RSI SIGNALS FROM PORTFOLIO:
+- Oversold (buy zone, <25% from 52W low): ${oversold.join(', ')||'None'}
+- Overbought (risky, >80% from 52W low): ${overbought.join(', ')||'None'}
+
+Write a 200-word regime briefing covering:
+1. Current market phase and what it means for Indian retail investors
+2. Top 2-3 stocks from the oversold list to accumulate NOW (with reasoning)
+3. Top 1-2 overbought positions to book partial profits
+4. This week's key risk to watch
+5. Recommended portfolio stance (% in equity vs cash)
+
+Be specific, direct, India-market-focused. No generic advice.`;
+
+  const r = await claude(prompt);
+  el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
+}
+
+/* ══════════════════════════════════════════════════════
+   2. FACTOR SCORING
+══════════════════════════════════════════════════════ */
+
+function computeFactorScore(h) {
+  const ltp = h.ltp || h.avgPrice || 0;
+  const h52 = h.h52 || 0;
+  const l52 = h.l52 || 0;
+
+  // VALUE score (0-10): low PE = high value
+  let valueScore = 5;
+  if (h.pe) {
+    if (h.pe <= 10) valueScore = 10;
+    else if (h.pe <= 15) valueScore = 8.5;
+    else if (h.pe <= 20) valueScore = 7;
+    else if (h.pe <= 30) valueScore = 5.5;
+    else if (h.pe <= 50) valueScore = 3.5;
+    else valueScore = 2;
+  }
+  // P/B bonus
+  if (h.pb && h.pb < 2) valueScore = Math.min(10, valueScore + 1);
+  if (h.pb && h.pb > 8) valueScore = Math.max(0, valueScore - 1.5);
+
+  // MOMENTUM score (0-10): price vs avg buy + 52W position
+  let momentumScore = 5;
+  if (h52 && l52 && ltp) {
+    const pos = (ltp - l52) / (h52 - l52); // 0=at low, 1=at high
+    // Sweet spot: 20-50% from low = good entry momentum
+    if (pos >= 0.15 && pos <= 0.45) momentumScore = 8.5;
+    else if (pos < 0.15)  momentumScore = 7; // oversold — turnaround potential
+    else if (pos <= 0.65) momentumScore = 6;
+    else if (pos <= 0.82) momentumScore = 4;
+    else momentumScore = 2.5; // near 52W high — overextended
+  }
+  // Trend from avg price
+  if (h.avgPrice && ltp) {
+    const trend = (ltp - h.avgPrice) / h.avgPrice;
+    if (trend > 0.30) momentumScore = Math.min(10, momentumScore + 1);
+    else if (trend < -0.15) momentumScore = Math.max(0, momentumScore - 1);
+  }
+
+  // QUALITY score (0-10): low beta + good signal
+  let qualityScore = 5;
+  if (h.beta) {
+    if (h.beta < 0.5) qualityScore = 9;
+    else if (h.beta < 0.8) qualityScore = 7.5;
+    else if (h.beta < 1.2) qualityScore = 6;
+    else if (h.beta < 1.5) qualityScore = 4.5;
+    else qualityScore = 3;
+  }
+  // Signal quality
+  const sigBonus = {STRONG_BUY:1.5, BUY_MORE:1, HOLD:0, REDUCE:-1, EXIT:-2};
+  qualityScore = Math.min(10, Math.max(0, qualityScore + (sigBonus[h.signal] || 0)));
+
+  // GROWTH score (0-10): proxy using P/B and PE
+  let growthScore = 5;
+  if (h.pe && h.pb) {
+    // High P/B with moderate PE = growth stock; low P/B + low PE = value
+    const pgRatio = h.pe / Math.max(0.1, h.pb); // crude PEG proxy
+    if (pgRatio < 3)  growthScore = 8;
+    else if (pgRatio < 6) growthScore = 6;
+    else if (pgRatio < 12) growthScore = 4;
+    else growthScore = 2.5;
+  }
+
+  // RSI score (0-10): based on 52W position (lower = more upside = better RSI opportunity)
+  let rsiScore = 5;
+  if (h52 && l52 && ltp) {
+    const pos = (ltp - l52) / (h52 - l52);
+    rsiScore = Math.round((1 - pos) * 10 * 10) / 10; // inverted: near low = high score
+    rsiScore = Math.min(10, Math.max(0, rsiScore));
+  }
+
+  const total = (valueScore + momentumScore + qualityScore + growthScore + rsiScore) / 5;
+  return {
+    value: +valueScore.toFixed(1),
+    momentum: +momentumScore.toFixed(1),
+    quality: +qualityScore.toFixed(1),
+    growth: +growthScore.toFixed(1),
+    rsi: +rsiScore.toFixed(1),
+    total: +total.toFixed(1)
+  };
+}
+
+function computeAndRenderFactors() {
+  const tbody = document.getElementById('factor-tbody');
+  if (!tbody || !D.holdings.length) return;
+
+  const scored = D.holdings.map(h => ({ h, scores: computeFactorScore(h) }))
+    .sort((a, b) => b.scores.total - a.scores.total);
+
+  // Summary cards
+  const avg = scored.reduce((s,x) => s + x.scores.total, 0) / scored.length;
+  const strongBuys = scored.filter(x => x.scores.total >= 7).length;
+  const el = id => document.getElementById(id);
+  if (el('fs-top'))    el('fs-top').textContent    = scored[0]?.h.symbol + ' (' + scored[0]?.scores.total + ')';
+  if (el('fs-low'))    el('fs-low').textContent    = scored[scored.length-1]?.h.symbol + ' (' + scored[scored.length-1]?.scores.total + ')';
+  if (el('fs-avg'))    el('fs-avg').textContent    = avg.toFixed(1) + '/10';
+  if (el('fs-strong')) el('fs-strong').textContent = strongBuys;
+
+  tbody.innerHTML = scored.map((x, i) => {
+    const { h, scores } = x;
+    const rating = scores.total >= 8 ? '⭐⭐⭐ Strong Buy' : scores.total >= 6.5 ? '⭐⭐ Buy' : scores.total >= 5 ? '⭐ Hold' : scores.total >= 3.5 ? '⚠ Reduce' : '🔴 Exit';
+    const rc = scores.total >= 6.5 ? 'var(--grn)' : scores.total >= 5 ? 'var(--yel)' : 'var(--red)';
+    return `<tr style="border-bottom:1px solid var(--b2);${i<3?'background:rgba(79,142,247,.04)':''}">
+      <td style="padding:6px 8px;font-weight:700;color:var(--t3)">#${i+1}</td>
+      <td style="padding:6px 8px;font-weight:600;color:var(--t1)">${h.symbol}<br><span style="font-size:10px;color:var(--t4)">${h.sector||''}</span></td>
+      <td style="text-align:center;padding:6px 4px">${scoreBar(scores.value)}</td>
+      <td style="text-align:center;padding:6px 4px">${scoreBar(scores.momentum)}</td>
+      <td style="text-align:center;padding:6px 4px">${scoreBar(scores.quality)}</td>
+      <td style="text-align:center;padding:6px 4px">${scoreBar(scores.growth)}</td>
+      <td style="text-align:center;padding:6px 4px">${scoreBar(scores.rsi)}</td>
+      <td style="text-align:center;padding:6px 8px"><strong style="color:${rc};font-size:14px">${scores.total}</strong></td>
+      <td style="padding:6px 8px;font-size:11px;color:${rc};font-weight:600">${rating}</td>
+    </tr>`;
+  }).join('');
+
+  // Cache scores on holdings for optimiser
+  scored.forEach(x => { x.h._factorScore = x.scores.total; });
+}
+
+async function runFactorAI() {
+  const el = document.getElementById('factor-ai-txt');
+  if (!el) return;
+  el.innerHTML = '<span style="color:var(--t4)">⏳ Generating factor-based recommendations…</span>';
+
+  // Ensure scores computed
+  const scored = D.holdings.map(h => ({ sym: h.symbol, sector: h.sector||'?', score: computeFactorScore(h) }))
+    .sort((a,b) => b.score.total - a.score.total);
+  const top3    = scored.slice(0, 3).map(x => `${x.sym}(${x.score.total})`).join(', ');
+  const bottom3 = scored.slice(-3).map(x => `${x.sym}(${x.score.total})`).join(', ');
+  const ctx = D._marketCtx || {sentimentLabel:'Neutral', actionBias:'HOLD'};
+
+  const prompt = `You are a quant-driven Indian equity portfolio manager. Based on multi-factor scores, give specific BUY/HOLD/EXIT recommendations.
+
+TOP RANKED (add more): ${top3}
+BOTTOM RANKED (review): ${bottom3}
+MARKET BIAS: ${ctx.actionBias} | ${ctx.sentimentLabel}
+PORTFOLIO: ${D.holdings.length} holdings, ₹${fI(D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0))} current value
+
+Factor scoring: Value (PE/PB), Momentum (52W position+trend), Quality (Beta+signals), Growth (PEG proxy), RSI opportunity.
+
+Give a 200-word factor-based action plan:
+1. Top 2 stocks to ADD positions to (and approximate % to add)
+2. Top 1-2 stocks to EXIT or REDUCE (and why they rank poorly)
+3. Sector rotation: which sectors score high vs low overall
+4. One contrarian pick from bottom-ranked that might be a turnaround
+Be direct, specific, and India-market-focused.`;
+
+  const r = await claude(prompt);
+  el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
+}
+
+/* ══════════════════════════════════════════════════════
+   3. PORTFOLIO OPTIMISER
+══════════════════════════════════════════════════════ */
+
+function computeOptimalWeights() {
+  const tbody = document.getElementById('opt-tbody');
+  if (!tbody || !D.holdings.length) return;
+
+  const totalVal   = D.holdings.reduce((s,h) => s + h.qty*(h.ltp||h.avgPrice), 0);
+  const totalInv   = D.holdings.reduce((s,h) => s + h.qty*h.avgPrice, 0);
+  const portReturn = totalInv > 0 ? (totalVal - totalInv) / totalInv * 100 : 0;
+
+  // Portfolio beta (weighted)
+  const portBeta = D.holdings.reduce((s,h) => {
+    const w = h.qty*(h.ltp||h.avgPrice) / (totalVal||1);
+    return s + (h.beta||1) * w;
+  }, 0);
+
+  // Sharpe = (return - risk_free) / (beta * market_stddev_proxy)
+  const rfRate     = 6.5; // 10Y Gsec
+  const mktStddev  = 15;  // Nifty annual ~15% vol
+  const portStddev = portBeta * mktStddev;
+  const sharpe     = portStddev > 0 ? +((portReturn - rfRate) / portStddev).toFixed(2) : 0;
+
+  // Concentration (HHI = Σwi²)
+  const weights = D.holdings.map(h => h.qty*(h.ltp||h.avgPrice) / (totalVal||1));
+  const hhi     = +(weights.reduce((s,w) => s + w*w, 0) * 10000).toFixed(0); // HHI*10000
+  const topW    = Math.max(...weights) * 100;
+
+  // Update summary cards
+  const el = id => document.getElementById(id);
+  const shCol = sharpe >= 1 ? 'var(--grn)' : sharpe >= 0.3 ? 'var(--yel)' : 'var(--red)';
+  if (el('opt-sharpe'))  { el('opt-sharpe').textContent = sharpe; el('opt-sharpe').style.color = shCol; }
+  if (el('opt-beta'))    { el('opt-beta').textContent = portBeta.toFixed(2); el('opt-beta').style.color = portBeta>1.2?'var(--red)':portBeta<0.8?'var(--grn)':'var(--yel)'; }
+  if (el('opt-return'))  { el('opt-return').textContent = fP2(portReturn); el('opt-return').style.color = portReturn>=0?'var(--grn)':'var(--red)'; }
+  if (el('opt-conc'))    { el('opt-conc').textContent = topW.toFixed(1) + '%'; el('opt-conc').style.color = topW>20?'var(--red)':topW>12?'var(--yel)':'var(--grn)'; }
+  if (el('opt-hhi'))     { el('opt-hhi').textContent = hhi; el('opt-hhi').style.color = hhi>1500?'var(--red)':hhi>800?'var(--yel)':'var(--grn)'; }
+
+  // Optimal weight = factor-score-weighted allocation, target 12-15 stocks
+  const targetN   = Math.min(D.holdings.length, 15);
+  const factored  = D.holdings.map(h => {
+    const fs = h._factorScore || computeFactorScore(h).total;
+    return { h, fs, curW: h.qty*(h.ltp||h.avgPrice) / (totalVal||1) };
+  });
+  const totalFS = factored.reduce((s,x) => s + x.fs, 0);
+  factored.forEach(x => { x.optW = x.fs / (totalFS||1); });
+
+  tbody.innerHTML = factored.sort((a,b) => b.fs - a.fs).map(x => {
+    const { h, curW, optW, fs } = x;
+    const curPct = +(curW*100).toFixed(1);
+    const optPct = +(optW*100).toFixed(1);
+    const delta  = +(optPct - curPct).toFixed(1);
+    const action = Math.abs(delta) < 1 ? 'HOLD' : delta > 3 ? '🟢 ADD' : delta > 0 ? '↑ Add slightly' : delta < -3 ? '🔴 REDUCE' : '↓ Trim slightly';
+    const actCol = action.includes('ADD') ? 'var(--grn)' : action.includes('REDUCE') ? 'var(--red)' : 'var(--t3)';
+    // Sharpe contribution proxy = factor score * return
+    const hRet   = h.avgPrice && h.ltp ? (h.ltp-h.avgPrice)/h.avgPrice*100 : 0;
+    const shContrib = +(fs * hRet / 100).toFixed(2);
+    const rationale = delta > 2 ? 'High factor score, underweighted' : delta < -2 ? 'Low factor score, overweighted' : 'Near optimal weight';
+    return `<tr style="border-bottom:1px solid var(--b2)">
+      <td style="padding:6px 8px;font-weight:600">${h.symbol}</td>
+      <td style="text-align:center;padding:6px 8px">${curPct}%</td>
+      <td style="text-align:center;padding:6px 8px;font-weight:600;color:var(--ac)">${optPct}%</td>
+      <td style="text-align:center;padding:6px 8px;font-weight:600;color:${actCol}">${action}<br><span style="font-size:10px;font-weight:400">${delta>0?'+':''}${delta}%</span></td>
+      <td style="text-align:center;padding:6px 8px;color:${shContrib>=0?'var(--grn)':'var(--red)'}">${shContrib > 0 ? '+' : ''}${shContrib}</td>
+      <td style="padding:6px 8px;font-size:11px;color:var(--t3)">${rationale}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function runOptimiseAI() {
+  const el = document.getElementById('opt-ai-txt');
+  if (!el) return;
+  el.innerHTML = '<span style="color:var(--t4)">⏳ Generating optimisation plan…</span>';
+
+  computeOptimalWeights(); // Ensure metrics computed
+  const totalVal = D.holdings.reduce((s,h) => s+h.qty*(h.ltp||h.avgPrice),0);
+  const totalInv = D.holdings.reduce((s,h) => s+h.qty*h.avgPrice,0);
+  const portRet  = totalInv > 0 ? ((totalVal-totalInv)/totalInv*100).toFixed(1) : 0;
+  const portBeta = D.holdings.reduce((s,h) => s+(h.beta||1)*h.qty*(h.ltp||h.avgPrice)/(totalVal||1),0).toFixed(2);
+  const topHoldings = D.holdings.sort((a,b)=>b.qty*(b.ltp||b.avgPrice)-a.qty*(a.ltp||a.avgPrice)).slice(0,5).map(h=>`${h.symbol}(${(h.qty*(h.ltp||h.avgPrice)/totalVal*100).toFixed(1)}%)`).join(', ');
+  const rfRate = 6.5; const mktStd = 15;
+  const sharpe = ((portRet - rfRate) / (portBeta * mktStd)).toFixed(2);
+  const ctx = D._marketCtx || {sentimentLabel:'Neutral'};
+
+  const prompt = `You are a portfolio optimiser for Indian equities using Modern Portfolio Theory principles.
+
+PORTFOLIO METRICS:
+- Total value: ₹${fI(totalVal)} | Invested: ₹${fI(totalInv)} | Return: ${portRet}%
+- Portfolio Beta: ${portBeta} | Sharpe Ratio: ${sharpe} | Risk-free rate: 6.5%
+- Top 5 holdings by weight: ${topHoldings}
+- Holdings count: ${D.holdings.length} (ideal: 12-15 for ₹5L portfolio)
+- Market: ${ctx.sentimentLabel} | Bias: ${ctx.actionBias||'HOLD'}
+
+OBJECTIVE: Improve Sharpe ratio by optimising allocation weights.
+
+Write a 200-word optimisation plan:
+1. Assessment of current Sharpe (good/needs improvement) and why
+2. Top 3 specific rebalancing actions with rupee amounts (e.g., "Sell ₹15,000 of X, buy ₹10,000 of Y and ₹5,000 of Z")
+3. Target beta for current market regime (should it be higher or lower?)
+4. One structural change to improve diversification
+5. Expected Sharpe improvement if plan is followed
+Be quantitative, specific, and actionable.`;
+
+  const r = await claude(prompt);
+  el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
+}
+
+/* ══════════════════════════════════════════════════════
+   4. OPTIONS STRATEGY BUILDER
+══════════════════════════════════════════════════════ */
+
+function buildOptionsStrategies() {
+  const tbody = document.getElementById('options-tbody');
+  if (!tbody || !D.holdings.length) return;
+
+  let ccCount = 0, ppCount = 0, stCount = 0, premiumTotal = 0;
+  const rows = [];
+
+  D.holdings.forEach(h => {
+    const ltp   = h.ltp || h.avgPrice || 0;
+    const sig   = h.signal || 'HOLD';
+    const h52   = h.h52 || 0;
+    const l52   = h.l52 || 0;
+    const pos52 = h52 && l52 ? (ltp-l52)/(h52-l52) : 0.5;
+    const beta  = h.beta || 1;
+    const qty   = h.qty || 0;
+
+    // Only suggest for sufficiently large positions (>₹50K)
+    const posVal = qty * ltp;
+    if (posVal < 50000) return;
+
+    // Determine strategy based on signal and 52W position
+    let strategy, strike, why, estPremiumPct;
+
+    if ((sig === 'REDUCE' || sig === 'HOLD') && pos52 >= 0.65) {
+      // COVERED CALL: near high, HOLD/REDUCE signal — sell upside
+      strategy = '📞 Covered Call';
+      strike   = Math.round(ltp * 1.05 / 10) * 10; // 5% OTM rounded
+      estPremiumPct = Math.min(3, beta * 1.5);      // 1-3% of LTP
+      const estPremium = Math.round(ltp * estPremiumPct / 100) * qty;
+      why = `Near 52W high (${Math.round(pos52*100)}% pos), ${sig} signal — generate income`;
+      premiumTotal += estPremium;
+      ccCount++;
+      rows.push({ h, strategy, strike, estPremiumPct, estPremium, why, maxProfit: `Premium + (${strike}-${ltp})×qty`, maxLoss: 'Upside capped at strike', col: 'var(--grn)' });
+
+    } else if ((sig === 'STRONG_BUY' || sig === 'BUY_MORE') && pos52 <= 0.35) {
+      // PROTECTIVE PUT: confident holding, but want insurance
+      strategy = '🛡 Protective Put';
+      strike   = Math.round(ltp * 0.92 / 10) * 10; // 8% OTM put
+      estPremiumPct = Math.min(2.5, beta * 1.2);
+      const estPremium = Math.round(ltp * estPremiumPct / 100) * qty;
+      why = `Strong buy signal, oversold zone — insure against downside`;
+      ppCount++;
+      rows.push({ h, strategy, strike, estPremiumPct, estPremium, why, maxProfit: 'Unlimited (holding)', maxLoss: `Limited to ${strike}`, col: 'var(--orn)' });
+
+    } else if (Math.abs(pos52 - 0.5) < 0.1 && beta > 1.1) {
+      // STRADDLE: at neutral zone, high beta = high uncertainty
+      strategy = '⚡ Straddle';
+      strike   = Math.round(ltp / 10) * 10; // ATM
+      estPremiumPct = beta * 2;
+      const estPremium = Math.round(ltp * estPremiumPct / 100) * qty * 2; // 2 legs
+      why = `High beta (${beta}), neutral 52W position — profit from big move either way`;
+      stCount++;
+      rows.push({ h, strategy, strike, estPremiumPct, estPremium, why, maxProfit: 'Unlimited on big move', maxLoss: 'Both premiums if flat', col: 'var(--ac)' });
+    }
+  });
+
+  // Update summary cards
+  const el = id => document.getElementById(id);
+  if (el('opt-cc-count')) el('opt-cc-count').textContent = ccCount;
+  if (el('opt-pp-count')) el('opt-pp-count').textContent = ppCount;
+  if (el('opt-st-count')) el('opt-st-count').textContent = stCount;
+  if (el('opt-premium'))  el('opt-premium').textContent  = fC(premiumTotal) + '/mo';
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--t4);padding:20px">No options candidates found (positions must be >₹50K with strong signals)</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => `<tr style="border-bottom:1px solid var(--b2)">
+    <td style="padding:6px 8px;font-weight:600">${r.h.symbol}<br><span style="font-size:10px;color:var(--t4)">LTP: ${fC(r.h.ltp)}</span></td>
+    <td style="text-align:center;padding:6px 8px;font-weight:600;color:${r.col}">${r.strategy}</td>
+    <td style="text-align:center;padding:6px 8px;font-weight:600">₹${r.strike}</td>
+    <td style="text-align:center;padding:6px 8px;color:var(--grn)">~${r.estPremiumPct.toFixed(1)}%<br><span style="font-size:10px">${fC(r.estPremium)}</span></td>
+    <td style="text-align:center;padding:6px 8px;font-size:11px;color:var(--grn)">${r.maxProfit}</td>
+    <td style="text-align:center;padding:6px 8px;font-size:11px;color:var(--red)">${r.maxLoss}</td>
+    <td style="padding:6px 8px;font-size:11px;color:var(--t3)">${r.why}</td>
+  </tr>`).join('');
+}
+
+async function runOptionsAI() {
+  const el = document.getElementById('options-ai-txt');
+  if (!el) return;
+  el.innerHTML = '<span style="color:var(--t4)">⏳ Generating options strategy…</span>';
+
+  buildOptionsStrategies(); // Ensure computed
+  const ctx = D._marketCtx || {sentimentLabel:'Neutral', sentimentScore:50};
+  const largePosns = D.holdings
+    .filter(h => h.qty*(h.ltp||h.avgPrice) >= 50000)
+    .sort((a,b) => b.qty*(b.ltp||b.avgPrice) - a.qty*(a.ltp||a.avgPrice))
+    .slice(0,6)
+    .map(h => `${h.symbol}(qty:${h.qty},LTP:${fC(h.ltp)},signal:${h.signal||'HOLD'},52Wpos:${h.h52&&h.l52&&h.ltp?Math.round((h.ltp-h.l52)/(h.h52-h.l52)*100):50}%)`);
+
+  const prompt = `You are an options strategist for Indian equity markets (NSE). The investor holds Indian stocks and wants to use options for income generation and hedging.
+
+PORTFOLIO POSITIONS (eligible for options, >₹50K):
+${largePosns.join('\n')}
+
+MARKET: ${ctx.sentimentLabel} (${ctx.sentimentScore}/100) | Bias: ${ctx.actionBias||'HOLD'}
+India VIX context: ${ctx.sentimentScore > 60 ? 'Low VIX — good for selling premium' : 'Elevated VIX — buying puts makes sense'}
+
+Give a 200-word options strategy plan:
+1. Top 2 covered call setups (stock, strike, expiry month, expected premium %)
+2. Top 1 protective put recommendation (for highest-risk holding)
+3. Whether to use monthly or weekly options for this portfolio
+4. Risk warning specific to Indian options market (lot size, F&O margin requirements)
+5. Net premium income vs hedging cost estimate
+Keep it practical for a retail investor with ₹5L portfolio.`;
+
+  const r = await claude(prompt);
+  el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
+}
+
+/* ── Run ALL strategies ── */
+async function runAllStrategies() {
+  toast('⚡ Running all strategy analyses…');
+  computeAndRenderFactors();
+  renderRSISignals();
+  computeOptimalWeights();
+  buildOptionsStrategies();
+  toast('✅ Metrics computed — click AI buttons for full narratives');
 }
 
 // ═══════════════════════════════════════════════════
