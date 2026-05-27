@@ -4783,60 +4783,20 @@ async function analyseWatchStock(w, ctx) {
   // Pre-score (AI will refine)
   const preScore = Math.round((pos52Score + sectorScore + sentScore) / 3);
 
-  const prompt = `You are a professional Indian stock advisor evaluating a WATCHLIST stock for entry.
+  const prompt = `You are an Indian equity analyst. Evaluate this watchlist stock for entry. Reply ONLY with compact JSON, no markdown.
 
-STOCK: ${w.symbol} (${w.name}) | Exchange: ${w.exchange||'NSE'} | Sector: ${w.sector||'N/A'}
-Current Price (LTP): ₹${f(ltp)}
-52W High: ₹${f(w.h52)} | 52W Low: ₹${f(w.l52)}
-52W Position: ${w.h52&&w.l52&&ltp ? Math.round((ltp-w.l52)/(w.h52-w.l52)*100)+'% from low' : 'N/A'}
-P/E: ${w.pe||'N/A'} | P/B: ${w.pb||'N/A'} | Beta: ${w.beta||'N/A'}
-Why watching: ${w.note||'Not specified'} | Catalyst: ${w.catalyst||'Not specified'}
+${w.symbol} (${w.sector||'N/A'}) LTP ₹${f(ltp)} | 52W H/L ₹${f(w.h52)}/₹${f(w.l52)} | PE ${w.pe||'N/A'} PB ${w.pb||'N/A'} Beta ${w.beta||'N/A'}
+Watching because: ${w.note||'N/A'} | Catalyst: ${w.catalyst||'N/A'}
+Market: ${ctx?.sentimentLabel||'Neutral'} ${ctx?.sentimentScore||50}/100 | Sector: ${isHot?'HOT':isWeak?'WEAK':'Neutral'} | Bias: ${ctx?.actionBias||'HOLD'}
 
-MARKET CONTEXT:
-- Overall sentiment: ${ctx?.sentimentLabel||'Neutral'} (${ctx?.sentimentScore||50}/100)
-- Sector status: ${isHot?'HOT — money flowing in':isWeak?'WEAK — headwinds':'Neutral'}
-- Top risks: ${(ctx?.topRisks||[]).join(', ')}
-- Market bias: ${ctx?.actionBias||'HOLD'}
-
-INVESTOR PROFILE: ₹5L total portfolio, mid/small cap focus, theme+momentum, active monitor, balanced decisions.
-Position size guideline: ~₹25,000 per watchlist entry (5% of portfolio).
-
-Reply ONLY with valid JSON, no markdown, no explanation:
-{
-  "decision": "<ENTER NOW|WAIT|AVOID>",
-  "entryScore": <0-10 combined score — RSI position + sector momentum + 52W position + market sentiment>,
-  "conviction": "<HIGH|MEDIUM|LOW>",
-  "entryRangeLow": <price>,
-  "entryRangeHigh": <price>,
-  "awayPct": <how many % below current price is the entry range low, negative if above>,
-  "entryCondition": "<specific condition: e.g. 'Pullback to ₹420 support' or 'After Q4 results confirm NIM expansion'>",
-  "stopLoss": <price>,
-  "stopLossPct": <negative percentage from entry>,
-  "target1": <price>,
-  "target1Pct": <positive percentage from entry>,
-  "target1Timeline": "<e.g. 2-3 months>",
-  "target2": <price>,
-  "target2Pct": <positive percentage from entry>,
-  "target2Timeline": "<e.g. 6-12 months>",
-  "riskReward": "<e.g. 1:2.8>",
-  "suggestedQty": <number of shares for ₹25000 position at entry range low>,
-  "whyEnter": "<1 sentence bull case — why this stock, why now>",
-  "whyWait": "<1 sentence — what to wait for OR what risk makes you cautious>",
-  "alertTrigger": "<price level that would trigger ENTER NOW — e.g. 'Enter if falls to ₹4,100'>",
-  "scoreBreakdown": {
-    "pos52W": <0-10>,
-    "sectorMomentum": <0-10>,
-    "marketSentiment": <0-10>,
-    "valuationFit": <0-10>,
-    "rsiPosition": <0-10>
-  }
-}`;
+JSON fields (numbers only for prices/scores, no units):
+{"decision":"ENTER NOW|WAIT|AVOID","entryScore":<0-10>,"conviction":"HIGH|MEDIUM|LOW","entryRangeLow":<price>,"entryRangeHigh":<price>,"entryCondition":"<1 line>","stopLoss":<price>,"target1":<price>,"target2":<price>,"riskReward":"1:X.X","whyEnter":"<1 line>","whyWait":"<1 line>","alertTrigger":"<1 line>"}`;
 
   try {
     const r = await claude(prompt);
-    if(typeof r === 'string' && /^(⚠|AI error|OpenRouter error|⛔)/.test(r.trim())) {
-      w.aiError = r;
-      (window.D && D._aiErrors) && D._aiErrors.push(w.symbol+' (watch): '+r);
+    if(!r || typeof r !== 'string' || /^(⚠|AI error|OpenRouter error|⛔|Analysis unavailable)/.test(r.trim())) {
+      w.aiError = r || 'No response from AI';
+      (window.D && D._aiErrors) && D._aiErrors.push(w.symbol+' (watch): '+(r||'empty response'));
       w.wlDecision = 'WAIT';
       w.entryScore = preScore;
       return;
@@ -4848,18 +4808,19 @@ Reply ONLY with valid JSON, no markdown, no explanation:
     w.wlConviction     = j.conviction;
     w.wlEntryLow       = j.entryRangeLow;
     w.wlEntryHigh      = j.entryRangeHigh;
-    w.awayPct          = j.awayPct;
+    // Compute derived fields client-side (not requested from AI to save tokens)
+    w.awayPct          = j.awayPct != null ? j.awayPct : (ltp && j.entryRangeLow ? +((j.entryRangeLow - ltp) / ltp * 100).toFixed(1) : null);
     w.wlEntryCondition = j.entryCondition;
     w.stopLoss         = j.stopLoss;
-    w.stopLossPct      = j.stopLossPct;
+    w.stopLossPct      = j.stopLossPct != null ? j.stopLossPct : (j.entryRangeLow && j.stopLoss ? +((j.stopLoss - j.entryRangeLow) / j.entryRangeLow * 100).toFixed(1) : null);
     w.target1          = j.target1;
-    w.target1Pct       = j.target1Pct;
+    w.target1Pct       = j.target1Pct != null ? j.target1Pct : (j.entryRangeLow && j.target1 ? +((j.target1 - j.entryRangeLow) / j.entryRangeLow * 100).toFixed(1) : null);
     w.t1Timeline       = j.target1Timeline;
     w.target2          = j.target2;
-    w.target2Pct       = j.target2Pct;
+    w.target2Pct       = j.target2Pct != null ? j.target2Pct : (j.entryRangeLow && j.target2 ? +((j.target2 - j.entryRangeLow) / j.entryRangeLow * 100).toFixed(1) : null);
     w.t2Timeline       = j.target2Timeline;
     w.riskReward       = j.riskReward;
-    w.wlQty            = j.suggestedQty;
+    w.wlQty            = j.suggestedQty != null ? j.suggestedQty : (j.entryRangeLow ? Math.floor(25000 / j.entryRangeLow) : null);
     w.wlWhyEnter       = j.whyEnter;
     w.wlWhyWait        = j.whyWait;
     w.alertTrigger     = j.alertTrigger;
@@ -6546,7 +6507,7 @@ async function claude(prompt, sys) {
         },
         body:JSON.stringify({
           model,
-          max_tokens:1000,
+          max_tokens:2048,
           temperature:0.7,
           messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]
         }),
@@ -6566,7 +6527,7 @@ async function claude(prompt, sys) {
             const r2 = await fetch('https://openrouter.ai/api/v1/chat/completions',{
               method:'POST',
               headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro'},
-              body:JSON.stringify({model:'meta-llama/llama-3.1-8b-instruct:free',max_tokens:1000,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
+              body:JSON.stringify({model:'meta-llama/llama-3.1-8b-instruct:free',max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
               signal: AbortSignal.timeout(60000)
             });
             const d2 = await r2.json();
