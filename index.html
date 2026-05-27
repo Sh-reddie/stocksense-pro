@@ -4864,7 +4864,7 @@ async function portfolioDoctor(ctx) {
   const inv=D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0);const cv=D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
   const sigs=D.holdings.map(h=>`${h.symbol}:${h.signal||'HOLD'}(${((h.qty*(h.ltp||h.avgPrice)/cv)*100).toFixed(1)}%)`).join(', ');
   const prompt=`Portfolio Doctor for Indian retail investor.\nTotal: ₹${fI(inv)} invested, ₹${fI(cv)} current, ${D.holdings.length} stocks (ISSUE: too many for ₹5L — ideal 12-15)\nSignals: ${sigs} | Market: ${ctx?.sentimentLabel||'Neutral'}\nReply ONLY valid JSON:\n{"healthScore":<1-10>,"healthLabel":"<Excellent|Good|Fair|Poor|Critical>","topIssues":["<i1>","<i2>","<i3>"],"consolidationAdvice":"<advice>","topExitsToConsider":["<s1>","<s2>","<s3>"],"topAddMoreCandidates":["<s1>","<s2>"],"idealAllocationPerStock":"<e.g. ₹33K per stock for 15 stocks>","oneLineSummary":"<honest 1-line assessment>"}`;
-  try{const r=await claude(prompt); const j=extractJSON(r); return j||null;}catch(e){return null;}
+  try{const r=await claude(prompt); const j=extractJSON(r); return (j&&typeof j==='object'&&!Array.isArray(j)&&j.healthScore!=null)?j:null;}catch(e){return null;}
 }
 
 function renderPortfolioDoctor(doc) {
@@ -6500,7 +6500,8 @@ async function claude(prompt, sys) {
           max_tokens:1000,
           temperature:0.7,
           messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]
-        })
+        }),
+        signal: AbortSignal.timeout(60000)
       });
       const raw = await r.text();
       let d;
@@ -6516,7 +6517,8 @@ async function claude(prompt, sys) {
             const r2 = await fetch('https://openrouter.ai/api/v1/chat/completions',{
               method:'POST',
               headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro'},
-              body:JSON.stringify({model:'meta-llama/llama-3.1-8b-instruct:free',max_tokens:1000,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]})
+              body:JSON.stringify({model:'meta-llama/llama-3.1-8b-instruct:free',max_tokens:1000,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
+              signal: AbortSignal.timeout(60000)
             });
             const d2 = await r2.json();
             if(!d2.error) return d2.choices?.[0]?.message?.content || 'Analysis unavailable.';
@@ -6531,7 +6533,7 @@ async function claude(prompt, sys) {
     const key = localStorage.getItem('apiKey')||'';
     if(!key) return '⚠ No Anthropic API key. Go to Settings → add your key from console.anthropic.com';
     try {
-      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:sysMsg,messages:[{role:'user',content:prompt}]})});
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:sysMsg,messages:[{role:'user',content:prompt}]}),signal:AbortSignal.timeout(60000)});
       const raw = await r.text();
       let d; try { d = JSON.parse(raw); } catch(e) { return '⚠ Anthropic returned non-JSON ['+r.status+']: '+raw.slice(0,200); }
       if(d.error) return '⚠ Anthropic error ['+r.status+']: '+(d.error.message||JSON.stringify(d.error));
