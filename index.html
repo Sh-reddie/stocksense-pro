@@ -3380,14 +3380,45 @@ async function fetchFund(sym, exch) {
     if (cached?.quote) { const fd=_quoteToFund(cached.quote); if(fd) return fd; }
   }
 
-  // ── 1. Yahoo Finance v7 batch quote (has PE, PB, beta, ROE, etc.) ───────
+  // ── 1. Cloudflare /api/fundamentals proxy — primary path, no CORS/rate-limit ──
+  for (const yfSym of _yfCandidates(sym, exch)) {
+    try {
+      const r = await fetch(`/api/fundamentals?sym=${encodeURIComponent(yfSym)}`, { signal: AbortSignal.timeout(10000) });
+      if (r.ok) {
+        const d = await r.json();
+        if (d.ok && (d.pe || d.mcap || d.roe || d.eps)) {
+          const fd = { pe:d.pe, fpe:d.fpe, eps:d.eps, mcap:d.mcap, dy:d.dy, beta:d.beta, pb:d.pb, roe:d.roe, de:d.de, rg:d.rg, eg:d.eg, cr:d.cr, rcm:d.rcm };
+          _symMapSave(sym, yfSym);
+          return fd;
+        }
+      }
+    } catch(e) {}
+  }
+
+  // ── 2. Yahoo Finance v7 batch quote via /api/quote proxy ────────────────
+  const candidates = _yfCandidates(sym, exch);
+  try {
+    const r = await fetch(`/api/quote?symbols=${encodeURIComponent(candidates.join(','))}`, { signal: AbortSignal.timeout(10000) });
+    if (r.ok) {
+      const data = await r.json();
+      const results = data?.quoteResponse?.result || [];
+      for (const q of results) {
+        if (q.trailingPE || q.marketCap || q.returnOnEquity) {
+          _symMapSave(sym, q.symbol);
+          return { pe:q.trailingPE, fpe:q.forwardPE, eps:q.trailingEps, mcap:q.marketCap, dy:q.dividendYield, beta:q.beta, pb:q.priceToBook, roe:q.returnOnEquity, de:q.debtToEquity, rg:q.revenueGrowth, eg:q.earningsGrowth, cr:q.currentRatio, rcm:q.recommendationKey };
+        }
+      }
+    }
+  } catch(e) {}
+
+  // ── 3. Yahoo Finance v7 batch quote — direct fallback ───────────────────
   const map = await _fetchQuoteBatch(_yfCandidates(sym, exch));
   for (const yfSym of _yfCandidates(sym, exch)) {
     const q = map.get(yfSym);
     if (q) { _cacheSet(yfSym, _quoteToPrice(q), q); _symMapSave(sym, yfSym); const fd=_quoteToFund(q); if(fd) return fd; }
   }
 
-  // ── 2. Yahoo Finance v11 quoteSummary — direct then proxy ───────────────
+  // ── 4. Yahoo Finance v11 quoteSummary — direct then proxy ───────────────
   let yfResult = null;
   for (const yfSym of _yfCandidates(sym, exch)) {
     const url = 'https://query2.finance.yahoo.com/v11/finance/quoteSummary/' + encodeURIComponent(yfSym) + '?modules=summaryDetail,defaultKeyStatistics,financialData';
@@ -3731,15 +3762,25 @@ async function fetchStooq(sym, exchange) {
 
 // fetchYFSeries — used by charts in stock detail modal + benchmark
 async function fetchYFSeries(sym, range='6mo', interval='1d') {
+  // 1) Cloudflare Pages /api/chart proxy — primary path, no CORS issues
+  try {
+    const r = await fetch(`/api/chart?sym=${encodeURIComponent(sym)}&range=${range}&interval=${interval}`,
+      { signal: AbortSignal.timeout(10000) });
+    if (r.ok) {
+      const data = await r.json();
+      const series = _parseYFSeries(data);
+      if (series?.length >= 2) return series;
+    }
+  } catch(e) {}
+  // 2) Direct Yahoo Finance — may succeed if CORS not blocked
   const path = '/v8/finance/chart/' + encodeURIComponent(sym) + '?interval=' + interval + '&range=' + range;
-  // 1) Direct fetch — avoids proxy entirely, much faster when not rate-limited
   for (const host of ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com']) {
     try {
       const r = await fetch(host + path, { signal: AbortSignal.timeout(7000) });
       if (r.ok) { const series = _parseYFSeries(await r.json()); if (series?.length >= 2) return series; }
     } catch(e) {}
   }
-  // 2) Proxy fallback
+  // 3) Proxy fallback via allorigins/corsproxy
   for (const host of ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com']) {
     try {
       const series = _parseYFSeries(await _proxyFetch(host + path, 14000));
