@@ -8810,9 +8810,9 @@ function buildOptionsStrategies() {
     const beta  = h.beta || 1;
     const qty   = h.qty || 0;
 
-    // Only suggest for sufficiently large positions (>₹50K)
+    // Only suggest for positions worth >₹10K (realistic for retail portfolio)
     const posVal = qty * ltp;
-    if (posVal < 50000) return;
+    if (posVal < 10000) return;
 
     // Determine strategy based on signal and 52W position
     let strategy, strike, why, estPremiumPct;
@@ -8858,7 +8858,7 @@ function buildOptionsStrategies() {
   if (el('opt-premium'))  el('opt-premium').textContent  = fC(premiumTotal) + '/mo';
 
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--t4);padding:20px">No options candidates found (positions must be >₹50K with strong signals)</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--t4);padding:20px">No options candidates found — need positions with strong Buy/Sell/Overbought signals</td></tr>';
     return;
   }
 
@@ -8881,7 +8881,7 @@ async function runOptionsAI() {
   buildOptionsStrategies(); // Ensure computed
   const ctx = D._marketCtx || {sentimentLabel:'Neutral', sentimentScore:50};
   const largePosns = D.holdings
-    .filter(h => h.qty*(h.ltp||h.avgPrice) >= 50000)
+    .filter(h => h.qty*(h.ltp||h.avgPrice) >= 10000)
     .sort((a,b) => b.qty*(b.ltp||b.avgPrice) - a.qty*(a.ltp||a.avgPrice))
     .slice(0,6)
     .map(h => `${h.symbol}(qty:${h.qty},LTP:${fC(h.ltp)},signal:${h.signal||'HOLD'},52Wpos:${h.h52&&h.l52&&h.ltp?Math.round((h.ltp-h.l52)/(h.h52-h.l52)*100):50}%)`);
@@ -8909,6 +8909,11 @@ Keep it practical for a retail investor with ₹5L portfolio.`;
 /* ── Run ALL strategies ── */
 async function runAllStrategies() {
   toast('⚡ Running all strategy analyses…');
+  // Fetch market context first so regime detection works
+  if (!D._marketCtx) {
+    toast('📡 Fetching market context…');
+    try { D._marketCtx = await getMarketContext(); applySentimentToUI(D._marketCtx); } catch(e) {}
+  }
   computeAndRenderFactors();
   renderRSISignals();
   computeOptimalWeights();
