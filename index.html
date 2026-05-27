@@ -6537,7 +6537,22 @@ async function claude(prompt, sys) {
         }
         return '⚠ OpenRouter error ['+r.status+']: '+errMsg;
       }
-      return d.choices?.[0]?.message?.content || 'Analysis unavailable.';
+      const content = d.choices?.[0]?.message?.content;
+      const finishReason = d.choices?.[0]?.finish_reason;
+      // Reasoning model burned all tokens in <think> block — content is null, finish_reason is "length"
+      // Auto-retry with a non-reasoning model (Llama 3.1 8B) that produces JSON output directly
+      if((!content || content.length === 0) && finishReason === 'length' && model !== 'meta-llama/llama-3.1-8b-instruct:free') {
+        ilog && ilog('⚠ Reasoning model hit token limit mid-think, retrying with Llama 3.1 8B...','warn');
+        const r3 = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro'},
+          body:JSON.stringify({model:'meta-llama/llama-3.1-8b-instruct:free',max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
+          signal: AbortSignal.timeout(60000)
+        });
+        const d3 = await r3.json();
+        if(!d3.error) return d3.choices?.[0]?.message?.content || 'Analysis unavailable.';
+      }
+      return content || 'Analysis unavailable.';
     } catch(e){return 'OpenRouter error: '+e.message;}
   } else {
     const key = localStorage.getItem('apiKey')||'';
