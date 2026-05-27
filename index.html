@@ -3981,7 +3981,12 @@ async function slPick(idx) {
   slSelected=stock;
   closeSpotlight();
   toast(`Fetching data for ${stock.sym}…`,'info');
-  const [priceData,fund]=await Promise.all([fetchPrice(stock.sym,stock.exch),fetchFund(stock.sym,stock.exch)]);
+  // Cap fundamentals fetch at 5s so the add modal opens quickly even when Yahoo Finance is slow
+  const fundTimeout=new Promise(r=>setTimeout(()=>r(null),5000));
+  const [priceData,fund]=await Promise.all([
+    fetchPrice(stock.sym,stock.exch),
+    Promise.race([fetchFund(stock.sym,stock.exch),fundTimeout])
+  ]);
   slSelected._price=priceData;
   slSelected._fund=fund;
   if(slTarget==='watchlist'){openWatchModal(stock,priceData,fund);}
