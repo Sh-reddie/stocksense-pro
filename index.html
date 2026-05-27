@@ -6598,6 +6598,13 @@ async function claudeJSON(prompt, sys) {
   if (!key) return claude(prompt, sys);
   const sysMsg = sys || "You are an expert Indian equity market analyst. Reply ONLY with valid compact JSON matching the exact schema requested. No markdown, no explanation, no extra keys.";
   const _ref = (location.protocol === 'http:' || location.protocol === 'https:') ? location.href : 'https://stocksense.local';
+  // Session-level cache: if all fast models failed recently, skip cascade and go straight to claude()
+  const _cacheKey = '_claudeJSONFastFailed';
+  const _cacheTs  = window[_cacheKey + '_ts'] || 0;
+  const _cacheTTL = 5 * 60 * 1000; // 5 minutes
+  if (window[_cacheKey] && (Date.now() - _cacheTs) < _cacheTTL) {
+    return claude(prompt, sys);
+  }
   // Ordered list of non-reasoning free models to try (auto-skips unavailable ones)
   const FAST_MODELS = [
     'qwen/qwen-2.5-7b-instruct:free',
@@ -6648,8 +6655,10 @@ async function claudeJSON(prompt, sys) {
       continue;
     }
   }
-  // All fast models failed — fall back to user's configured model
-  ilog && ilog('⚠ All fast JSON models unavailable, falling back to configured model', 'warn');
+  // All fast models failed — cache result for 5 min and fall back to user's configured model
+  window[_cacheKey] = true;
+  window[_cacheKey + '_ts'] = Date.now();
+  ilog && ilog('⚠ All fast JSON models unavailable, caching for 5min and falling back to configured model', 'warn');
   return claude(prompt, sys);
 }
 
