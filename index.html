@@ -6579,13 +6579,16 @@ async function claudeJSON(prompt, sys) {
   if (!key) return claude(prompt, sys);
   const sysMsg = sys || "You are an expert Indian equity market analyst. Reply ONLY with valid compact JSON matching the exact schema requested. No markdown, no explanation, no extra keys.";
   const _ref = (location.protocol === 'http:' || location.protocol === 'https:') ? location.href : 'https://stocksense.local';
-  // Ordered list of reliable non-reasoning free models (updated 2026)
+  // Ordered list of non-reasoning free models to try (auto-skips unavailable ones)
   const FAST_MODELS = [
+    'qwen/qwen-2.5-7b-instruct:free',
+    'mistralai/mistral-7b-instruct:free',
     'google/gemma-3-12b-it:free',
     'google/gemma-3-4b-it:free',
     'meta-llama/llama-3.2-3b-instruct:free',
-    'qwen/qwen-2.5-7b-instruct:free',
-    'mistralai/mistral-7b-instruct:free'
+    'microsoft/phi-3-mini-128k-instruct:free',
+    'nvidia/llama-3.1-nemotron-nano-8b-v1:free',
+    'tngtech/deepseek-r1t-chimera:free'
   ];
   for (const model of FAST_MODELS) {
     try {
@@ -6607,27 +6610,23 @@ async function claudeJSON(prompt, sys) {
       });
       const d = await r.json();
       if (d.error) {
-        const msg = d.error.message || JSON.stringify(d.error);
-        // No endpoints = model unavailable, try next
-        if (msg.includes('No endpoints') || msg.includes('not found') || r.status === 404) {
-          ilog && ilog('⚠ claudeJSON: "'+model+'" unavailable, trying next...', 'warn');
-          continue;
-        }
-        return '⚠ OpenRouter error: ' + msg;
-      }
-      const content = d.choices?.[0]?.message?.content;
-      if (content && content.length > 0) {
-        ilog && ilog('✅ claudeJSON used: ' + model, 'info');
-        return content;
-      }
-      // Empty content (reasoning model slipped through) — try next
-      continue;
-    } catch(e) {
-      if (e.name === 'TimeoutError' || e.name === 'AbortError') {
-        ilog && ilog('⚠ claudeJSON: "'+model+'" timed out, trying next...', 'warn');
+        // Any API error = model unavailable or rate-limited, try next
+        ilog && ilog('⚠ claudeJSON: "'+model+'" failed ('+((d.error.message||'').slice(0,40))+'), trying next...', 'warn');
         continue;
       }
-      return 'OpenRouter error: ' + e.message;
+      const content = d.choices?.[0]?.message?.content;
+      const finishReason = d.choices?.[0]?.finish_reason;
+      // Skip if empty content or reasoning-model token overflow
+      if (!content || content.length === 0 || (finishReason === 'length' && content.length < 20)) {
+        ilog && ilog('⚠ claudeJSON: "'+model+'" returned empty/truncated, trying next...', 'warn');
+        continue;
+      }
+      ilog && ilog('✅ claudeJSON used model: ' + model, 'info');
+      return content;
+    } catch(e) {
+      // Timeout or network error — try next model
+      ilog && ilog('⚠ claudeJSON: "'+model+'" error ('+e.message.slice(0,40)+'), trying next...', 'warn');
+      continue;
     }
   }
   // All fast models failed — fall back to user's configured model
