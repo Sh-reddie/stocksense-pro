@@ -4684,9 +4684,23 @@ async function runAllAI() {
 // ── Robust JSON extractor — handles models that add text around JSON ────────
 function extractJSON(text) {
   if(!text) return null;
+  // Strategy 0: strip reasoning blocks (<think>, <reasoning>, <reflection>) used by models like nemotron
+  let stripped = text.replace(/<think>[\s\S]*?<\/think>/gi, '')
+                     .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+                     .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+                     .replace(/<reflection>[\s\S]*?<\/reflection>/gi, '')
+                     .trim();
+  if(stripped !== text) {
+    // Try parsing the stripped version first
+    try { return JSON.parse(stripped.trim()); } catch(e) {}
+    const mdS = stripped.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if(mdS) { try { return JSON.parse(mdS[1].trim()); } catch(e) {} }
+    const fb = stripped.indexOf('{'), lb = stripped.lastIndexOf('}');
+    if(fb >= 0 && lb > fb) { try { return JSON.parse(stripped.slice(fb, lb+1)); } catch(e) {} }
+  }
   // Strategy 1: direct parse
   try { return JSON.parse(text.trim()); } catch(e) {}
-  // Strategy 2: find JSON block in ```json ... ``` 
+  // Strategy 2: find JSON block in ```json ... ```
   const md = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if(md) { try { return JSON.parse(md[1].trim()); } catch(e) {} }
   // Strategy 3: find first { ... } block
