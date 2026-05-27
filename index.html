@@ -4730,7 +4730,7 @@ async function getMarketContext() {
   const holdSummary=D.holdings.map(h=>`${h.symbol}(${h.sector})`).join(', ');
   const prompt=`Indian equity market analyst. Date: ${today}. Sectors: ${sectors}. Holdings: ${holdSummary}.
 Reply ONLY valid JSON: {"sentimentScore":<0-100>,"sentimentLabel":"Strongly Bullish|Bullish|Cautiously Bullish|Neutral|Cautiously Bearish|Bearish","niftyOutlook":"<phrase>","fiiDii":"<stance>","topRisks":["r1","r2","r3"],"hotSectors":["s1","s2"],"weakSectors":["s1","s2"],"brief":"<3 sentence summary>","actionBias":"AGGRESSIVE_BUY|BUY_SELECTIVELY|HOLD|REDUCE|DEFENSIVE"}`;
-  try{const r=await claude(prompt); const parsed=extractJSON(r); if(parsed) return parsed; throw new Error('parse');}
+  try{const r=await claudeJSON(prompt); const parsed=extractJSON(r); if(parsed) return parsed; throw new Error('parse');}
   catch(e){return{sentimentScore:50,sentimentLabel:'Neutral',niftyOutlook:'Sideways',fiiDii:'Mixed',topRisks:['Global uncertainty','Earnings season','Currency risk'],hotSectors:['Defence','Infra'],weakSectors:['IT','FMCG'],brief:'Market analysis unavailable. Prices refreshed. Please check individual stock signals.',actionBias:'HOLD'};}
 }
 
@@ -4745,7 +4745,7 @@ LTP ₹${f(ltp)} | Avg ₹${f(h.avgPrice)} | Qty ${h.qty} | P&L ${plp}% | ${days
 Sector ${h.sector} (${isHot?'HOT':'NEUTRAL'}) | Market ${ctx?.sentimentLabel||'Neutral'} | Bias ${ctx?.actionBias||'HOLD'}
 Reply ONLY valid JSON: {"signal":"STRONG BUY|BUY MORE|HOLD|REDUCE|EXIT","urgency":"ACT TODAY|WATCH|STABLE","stopLoss":<n>,"stopLossPct":<n>,"target1":<n>,"target1Pct":<n>,"target1Timeline":"<str>","target2":<n>,"target2Pct":<n>,"target2Timeline":"<str>","confidence":<1-10>,"bullCase":"<1s>","bearCase":"<1s>","action":"<advice>","reasoning":"<2 sentences>","tradeType":"SHORT_TERM|LONG_TERM|BOTH"}`;
   try{
-    const r=await claude(prompt);
+    const r=await claudeJSON(prompt);
     if(typeof r === 'string' && /^(⚠|AI error|OpenRouter error|⛔)/.test(r.trim())) {
       h.aiError = r;
       (window.D && D._aiErrors) && D._aiErrors.push(h.symbol+': '+r);
@@ -4793,7 +4793,7 @@ JSON fields (numbers only for prices/scores, no units):
 {"decision":"ENTER NOW|WAIT|AVOID","entryScore":<0-10>,"conviction":"HIGH|MEDIUM|LOW","entryRangeLow":<price>,"entryRangeHigh":<price>,"entryCondition":"<1 line>","stopLoss":<price>,"target1":<price>,"target2":<price>,"riskReward":"1:X.X","whyEnter":"<1 line>","whyWait":"<1 line>","alertTrigger":"<1 line>"}`;
 
   try {
-    const r = await claude(prompt);
+    const r = await claudeJSON(prompt);
     if(!r || typeof r !== 'string' || /^(⚠|AI error|OpenRouter error|⛔|Analysis unavailable)/.test(r.trim())) {
       w.aiError = r || 'No response from AI';
       (window.D && D._aiErrors) && D._aiErrors.push(w.symbol+' (watch): '+(r||'empty response'));
@@ -4867,7 +4867,7 @@ async function portfolioDoctor(ctx) {
   const inv=D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0);const cv=D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
   const sigs=D.holdings.map(h=>`${h.symbol}:${h.signal||'HOLD'}(${((h.qty*(h.ltp||h.avgPrice)/cv)*100).toFixed(1)}%)`).join(', ');
   const prompt=`Portfolio Doctor for Indian retail investor.\nTotal: ₹${fI(inv)} invested, ₹${fI(cv)} current, ${D.holdings.length} stocks (ISSUE: too many for ₹5L — ideal 12-15)\nSignals: ${sigs} | Market: ${ctx?.sentimentLabel||'Neutral'}\nReply ONLY valid JSON:\n{"healthScore":<1-10>,"healthLabel":"<Excellent|Good|Fair|Poor|Critical>","topIssues":["<i1>","<i2>","<i3>"],"consolidationAdvice":"<advice>","topExitsToConsider":["<s1>","<s2>","<s3>"],"topAddMoreCandidates":["<s1>","<s2>"],"idealAllocationPerStock":"<e.g. ₹33K per stock for 15 stocks>","oneLineSummary":"<honest 1-line assessment>"}`;
-  try{const r=await claude(prompt); const j=extractJSON(r); return (j&&typeof j==='object'&&!Array.isArray(j)&&j.healthScore!=null)?j:null;}catch(e){return null;}
+  try{const r=await claudeJSON(prompt); const j=extractJSON(r); return (j&&typeof j==='object'&&!Array.isArray(j)&&j.healthScore!=null)?j:null;}catch(e){return null;}
 }
 
 function renderPortfolioDoctor(doc) {
@@ -6569,6 +6569,37 @@ async function claude(prompt, sys) {
       return 'AI error: '+e.message+hint;
     }
   }
+}
+
+// Fast JSON-structured AI call — always uses Llama 3.1 8B (non-reasoning, reliable JSON output).
+// Use this for all prompts that need structured JSON responses quickly (watchlist, portfolio doctor, etc.)
+// Falls back to the user's configured provider if OpenRouter key is missing.
+async function claudeJSON(prompt, sys) {
+  const key = localStorage.getItem('orKey') || '';
+  if (!key) return claude(prompt, sys); // fallback to normal path if no OR key
+  const sysMsg = sys || "You are an expert Indian equity market analyst. Reply ONLY with valid compact JSON matching the exact schema requested. No markdown, no explanation, no extra keys.";
+  const _ref = (location.protocol === 'http:' || location.protocol === 'https:') ? location.href : 'https://stocksense.local';
+  try {
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + key,
+        'HTTP-Referer': _ref,
+        'X-Title': 'StockSense Pro'
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-3.1-8b-instruct:free',
+        max_tokens: 1024,
+        temperature: 0.4,
+        messages: [{ role: 'system', content: sysMsg }, { role: 'user', content: prompt }]
+      }),
+      signal: AbortSignal.timeout(30000)
+    });
+    const d = await r.json();
+    if (d.error) return '⚠ OpenRouter error: ' + (d.error.message || JSON.stringify(d.error));
+    return d.choices?.[0]?.message?.content || 'Analysis unavailable.';
+  } catch(e) { return 'OpenRouter error: ' + e.message; }
 }
 
 // ═══════════════════════════════════════════════════
