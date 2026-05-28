@@ -9487,27 +9487,15 @@ async function runScreener() {
     const batch = candidates.slice(i, i + batchSize);
     const fetched = await Promise.all(batch.map(async s => {
       try {
-        const r = await fetch('/api/quote?sym=' + s.sym + '.NS', {signal: AbortSignal.timeout(8000)});
-        if (!r.ok) return null;
-        const d = await r.json();
-        const q = d?.chart?.result?.[0];
-        if (!q) return null;
-        const meta = q.meta || {};
-        const ltp  = meta.regularMarketPrice || meta.previousClose;
-        const h52  = meta.fiftyTwoWeekHigh;
-        const l52  = meta.fiftyTwoWeekLow;
+        const price = await fetchPriceRace(s.sym, 'NSE').catch(()=>null);
+        if (!price?.ltp) return null;
+        const ltp  = price.ltp;
+        const h52  = price.h52;
+        const l52  = price.l52;
         const pos52 = h52 && l52 && ltp ? Math.round((ltp - l52) / (h52 - l52) * 100) : null;
-        // Try fundamentals from existing fetchGoogleFund pattern
-        let pe = null, roe = null;
-        try {
-          const fr = await fetch('/api/quote?sym=' + s.sym + '.NS&modules=financialData,defaultKeyStatistics', {signal: AbortSignal.timeout(6000)});
-          if (fr.ok) {
-            const fd = await fr.json();
-            const fin = fd?.quoteSummary?.result?.[0];
-            pe  = fin?.defaultKeyStatistics?.trailingEps?.raw ? (ltp / fin.defaultKeyStatistics.trailingEps.raw) : fin?.summaryDetail?.trailingPE?.raw;
-            roe = fin?.financialData?.returnOnEquity?.raw ? fin.financialData.returnOnEquity.raw * 100 : null;
-          }
-        } catch(e) {}
+        const fund = await fetchFund(s.sym, 'NSE').catch(()=>null);
+        const pe  = fund?.pe || null;
+        const roe = fund?.roe ? fund.roe * 100 : null;
         return { ...s, ltp, h52, l52, pos52, pe, roe };
       } catch(e) { return null; }
     }));
