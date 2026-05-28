@@ -9329,26 +9329,13 @@ async function runRiskProAI() {
   const totalInv = D.holdings.reduce((s,h) => s + h.qty*h.avgPrice, 0);
   const portRet  = totalInv > 0 ? ((totalVal-totalInv)/totalInv*100).toFixed(1) : 0;
   const portBeta = D.holdings.reduce((s,h) => s+(h.beta||1)*h.qty*(h.ltp||h.avgPrice)/(totalVal||1),0).toFixed(2);
-  const varE     = document.getElementById('rp-var95')?.textContent || '—';
-  const maxDD    = document.getElementById('rp-maxdd')?.textContent || '—';
   const sharpe   = document.getElementById('rp-sharpe')?.textContent || '—';
-  const highRisk = D.holdings.filter(h => h.h52 && (h.ltp||h.avgPrice) < h.h52*0.8).map(h=>h.symbol);
+  const maxDD    = document.getElementById('rp-maxdd')?.textContent || '—';
+  const highRisk = D.holdings.filter(h => h.h52 && (h.ltp||h.avgPrice) < h.h52*0.8).map(h=>h.symbol).join(',')||'none';
+  const top3 = D.holdings.sort((a,b)=>b.qty*(b.ltp||b.avgPrice)-a.qty*(a.ltp||a.avgPrice)).slice(0,3).map(h=>h.symbol).join(',');
   const ctx = D._marketCtx || {sentimentLabel:'Neutral'};
-  const prompt = `You are a risk manager for an Indian equity portfolio.
-
-PORTFOLIO: ₹${Math.round(totalVal).toLocaleString('en-IN')} | Return: ${portRet}% | Beta: ${portBeta} | Sharpe: ${sharpe}
-95% Daily VaR: ${varE} | Max Drawdown from 52W: ${maxDD}
-High-risk holdings (>20% below 52W high): ${highRisk.join(', ')||'None'}
-Market regime: ${ctx.sentimentLabel}
-Top 5 by weight: ${D.holdings.sort((a,b)=>b.qty*(b.ltp||b.avgPrice)-a.qty*(a.ltp||a.avgPrice)).slice(0,5).map(h=>h.symbol+'('+((h.qty*(h.ltp||h.avgPrice)/totalVal)*100).toFixed(0)+'%)').join(', ')}
-
-Write a 200-word risk report:
-1. VaR interpretation — what does this mean in plain language for this investor?
-2. Top 3 risk concentrations to address now (specific stocks/sectors)
-3. Drawdown recovery assessment — which holdings are most vulnerable
-4. 3 specific hedging actions (e.g., reduce X by Y%, add Z as hedge)
-5. Risk-adjusted return verdict: is this portfolio taking the right amount of risk?
-Be direct and quantitative.`;
+  const prompt = `Indian equity risk analyst. Portfolio: ₹${Math.round(totalVal/1000)}K, return ${portRet}%, beta ${portBeta}, Sharpe ${sharpe}, maxDD ${maxDD}. Top3: ${top3}. High-risk: ${highRisk}. Market: ${ctx.sentimentLabel}.
+Give 3 specific risk actions (one sentence each): biggest concentration risk, worst drawdown holding action, and one hedge recommendation. Then one-line verdict on risk level.`;
   const r = await claude(prompt);
   el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
   switchRpTab('metrics');
@@ -9594,16 +9581,10 @@ async function runScreenerAI() {
   if (!el) return;
   if (!_scrResults.length) { toast('Run screener first'); return; }
   el.innerHTML = '<span style="color:var(--t4)">⏳ Getting AI picks…</span>';
-  const top = _scrResults.slice(0,10).map(s=>`${s.sym}(${s.sector},PE:${s.pe?s.pe.toFixed(0):'?'},ROE:${s.roe?s.roe.toFixed(0)+'%':'?'},52W:${s.pos52!==null?s.pos52+'%':'?'})`).join(', ');
+  const top = _scrResults.slice(0,8).map(s=>`${s.sym}(${s.sector},PE:${s.pe?s.pe.toFixed(0):'?'},ROE:${s.roe?s.roe.toFixed(0)+'%':'?'},52Wpos:${s.pos52!==null?s.pos52+'%':'?'})`).join(', ');
   const ctx = D._marketCtx || {sentimentLabel:'Neutral', hotSectors:[]};
-  const prompt = `You are a stock analyst. From a Nifty 500 screener, these stocks passed the filters:
-${top}
-Current market: ${ctx.sentimentLabel}. Hot sectors: ${(ctx.hotSectors||[]).join(', ')||'None'}.
-Pick the top 3 most attractive stocks from this list and for each give:
-1. Why it's attractive now (2 sentences max)
-2. Key risk
-3. Suggested entry zone and target
-Format as a clean numbered list.`;
+  const prompt = `Indian equity analyst. Screener results: ${top}. Market: ${ctx.sentimentLabel}. Hot sectors: ${(ctx.hotSectors||[]).slice(0,2).join(',')||'None'}.
+Pick top 2 buy candidates. For each: symbol, one-sentence thesis, key risk, entry range. Keep it brief.`;
   const r = await claude(prompt);
   el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
 }
@@ -9759,25 +9740,14 @@ async function runJournalAI() {
   el.innerHTML = '<span style="color:var(--t4)">⏳ Analysing trading patterns…</span>';
   const closed = trades.filter(t=>t.exitPrice);
   const wins = closed.filter(t=>t.plPct>0);
-  const winRate = closed.length ? (wins.length/closed.length*100).toFixed(0) : 'N/A';
-  const totalPL = closed.reduce((s,t)=>s+(t.plAbs||0),0);
+  const winRate = closed.length ? (wins.length/closed.length*100).toFixed(0)+'%' : 'N/A';
+  const totalPL = Math.round(closed.reduce((s,t)=>s+(t.plAbs||0),0));
   const byReason = {};
   closed.forEach(t=>{if(!byReason[t.reason])byReason[t.reason]={c:0,pl:0};byReason[t.reason].c++;byReason[t.reason].pl+=t.plAbs||0;});
-  const reasonSummary = Object.entries(byReason).map(([r,d])=>`${r}:${d.c}trades,P&L:₹${Math.round(d.pl)}`).join('; ');
-  const recent5 = trades.slice(-5).map(t=>`${t.symbol}(${t.reason},${t.plPct?t.plPct.toFixed(1)+'%':'open'})`).join(', ');
-  const prompt = `You are a trading coach analysing a retail investor's trade journal.
-
-SUMMARY: ${trades.length} total trades, ${closed.length} closed, Win rate: ${winRate}%, Total P&L: ₹${Math.round(totalPL)}
-By entry reason: ${reasonSummary||'N/A'}
-Recent 5 trades: ${recent5}
-
-Write a 200-word performance attribution report:
-1. Which entry reason (BREAKOUT/FUNDAMENTALS/MOMENTUM/etc.) has the best edge? Give numbers.
-2. Pattern analysis — what does the win rate tell us? Is it sustainable?
-3. Biggest mistake pattern visible in the data
-4. 3 specific improvements to the trading process
-5. Verdict: is this investor improving or making the same mistakes?
-Be honest, data-driven, and specific.`;
+  const bestReason = Object.entries(byReason).sort((a,b)=>b[1].pl-a[1].pl)[0];
+  const recent3 = trades.slice(-3).map(t=>`${t.symbol}(${t.reason},${t.plPct?t.plPct.toFixed(1)+'%':'open'})`).join(', ');
+  const prompt = `Trading coach for Indian retail investor. Journal: ${trades.length} trades, win rate ${winRate}, P&L ₹${totalPL}. Best strategy: ${bestReason?bestReason[0]+'(₹'+Math.round(bestReason[1].pl)+')':'N/A'}. Recent: ${recent3}.
+Give 3 specific coaching points (one sentence each): best edge to double down on, worst habit to fix, and one process improvement. Then a one-line verdict.`;
   const r = await claude(prompt);
   el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
 }
@@ -9903,25 +9873,9 @@ async function runMacroAI() {
   const gsec   = document.getElementById('mac-gsec')?.textContent || '—';
   const crude  = document.getElementById('mac-crude')?.textContent || '—';
   const ctx    = D._marketCtx || {sentimentLabel:'Neutral', sentimentScore:50};
-  const sectors = [...new Set(D.holdings.map(h=>h.sector).filter(Boolean))].join(', ');
-  const prompt = `You are a macro analyst covering Indian equities.
-
-CURRENT MACRO DATA:
-- India VIX: ${vix} (fear gauge)
-- USD/INR: ${usdinr}
-- India 10Y G-Sec: ${gsec}
-- Brent Crude: ${crude}
-- Market sentiment: ${ctx.sentimentLabel} (${ctx.sentimentScore}/100)
-
-INVESTOR'S PORTFOLIO SECTORS: ${sectors}
-
-Write a 200-word macro view:
-1. VIX interpretation — is market complacent or fearful? What does it mean for positions?
-2. Rupee impact — which of the investor's sectors benefit or suffer from current USD/INR?
-3. Rate environment — how does the 10Y yield affect portfolio sectors?
-4. Crude oil impact — which sectors are winners/losers at current price?
-5. Net macro verdict: is the macro environment currently supportive or headwind for this portfolio?
-Be specific about the investor's actual sector exposure.`;
+  const sectors = [...new Set(D.holdings.map(h=>h.sector).filter(Boolean))].slice(0,5).join(', ');
+  const prompt = `Indian macro analyst. Data: VIX ${vix}, USD/INR ${usdinr}, 10Y ${gsec}, Brent ${crude}, sentiment ${ctx.sentimentLabel}. Portfolio sectors: ${sectors}.
+Give 3 macro signals (one sentence each): VIX risk reading, USD/INR impact on these sectors, rate+crude combined verdict. End with: bullish or bearish for this portfolio and why in one line.`;
   const r = await claude(prompt);
   el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
 }
