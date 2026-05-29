@@ -10032,9 +10032,9 @@ function computeFairValue(ltp, pe, eps, bvps, sector) {
   // Relative PE fallback: rebase current price to sector avg PE
   const relPE = pe && pe>0 ? Math.round(ltp * avgPE / pe) : null;
   const fair   = graham || peBand || relPE || ltp;
-  const method = graham?'Graham Number':peBand?'PE-Band':'Relative PE';
-  const mos    = Math.round((fair - ltp) / fair * 100);
-  return {fair, method, mos, cheap: mos>10, expensive: mos<-10,
+  const method = graham?'Graham Number':peBand?'PE-Band':relPE?'Relative PE':'Fetching…';
+  const mos    = fair && fair!==ltp ? Math.round((fair - ltp) / fair * 100) : null;
+  return {fair, method, mos, cheap: mos!=null&&mos>10, expensive: mos!=null&&mos<-10,
           graham, peBand, avgPE, eps, bvps};
 }
 
@@ -10154,12 +10154,29 @@ Reply JSON only: {"confidence":0-100,"rec":"BUY|HOLD|AVOID","reasons":["","",""]
 // ════════════════════════════════════════════════════════════════════════
 // ██  FAIR VALUE ENGINE SECTION  ████████████████████████████████████████
 // ════════════════════════════════════════════════════════════════════════
-function renderFairValueEngine() {
+async function renderFairValueEngine() {
   const tbody = document.getElementById('fv-tbody');
   if (!tbody) return;
   if (!D.holdings.length) {
     tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--t4)">No holdings to value</td></tr>';
     return;
+  }
+  // Show loading state for holdings missing fundamentals
+  const missing = D.holdings.filter(h => !h._pe);
+  if (missing.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--t4)">⏳ Fetching fundamentals for ${missing.length} stocks…</td></tr>`;
+    await Promise.all(missing.map(async h => {
+      try {
+        const fund = await fetchFund(h.symbol, 'NSE').catch(()=>null);
+        if (fund) {
+          if (fund.pe)   h._pe   = fund.pe;
+          if (fund.eps)  h._eps  = fund.eps;
+          if (fund.bvps) h._bvps = fund.bvps;
+          if (fund.roe)  h._roe  = fund.roe;
+          if (fund.beta) h._beta = fund.beta;
+        }
+      } catch(e) {}
+    }));
   }
   tbody.innerHTML = D.holdings.map(h => {
     const ltp  = h._ltp || h.ltp || h.avgPrice || 0;
@@ -10168,14 +10185,15 @@ function renderFairValueEngine() {
     const eps  = h._eps || null;
     const bvps = h._bvps|| null;
     const fv   = computeFairValue(ltp, pe, eps, bvps, h.sector);
-    const mosCol = fv.cheap?'var(--grn)':fv.expensive?'var(--red)':'var(--yel)';
-    const verdict = fv.cheap?'🟢 Undervalued':fv.expensive?'🔴 Overvalued':'🟡 Fair';
+    const mosCol = fv.cheap?'var(--grn)':fv.expensive?'var(--red)':fv.mos==null?'var(--t4)':'var(--yel)';
+    const verdict = fv.cheap?'🟢 Undervalued':fv.expensive?'🔴 Overvalued':fv.mos==null?'⏳ Loading':'🟡 Fair';
+    const mosTxt  = fv.mos==null?'—':fv.mos>0?'MoS '+fv.mos+'%':'Prem '+Math.abs(fv.mos)+'%';
     return `<tr style="border-bottom:1px solid var(--b2)">
       <td style="padding:10px 12px"><div style="font-weight:600;font-size:13px">${h.symbol}</div><div style="font-size:10px;color:var(--t4)">${h.sector||'—'}</div></td>
       <td style="text-align:right;padding:10px 12px;font-weight:600;font-family:var(--mono)">₹${f(ltp)}</td>
-      <td style="text-align:right;padding:10px 12px;font-weight:700;font-family:var(--mono);color:${mosCol}">₹${f(fv.fair)}</td>
+      <td style="text-align:right;padding:10px 12px;font-weight:700;font-family:var(--mono);color:${mosCol}">₹${fv.mos==null?'—':f(fv.fair)}</td>
       <td style="text-align:right;padding:10px 12px;font-size:11px;color:var(--t4)">${fv.method}</td>
-      <td style="text-align:right;padding:10px 12px;font-weight:600;color:${mosCol}">${fv.mos>0?'MoS '+fv.mos+'%':'Prem '+Math.abs(fv.mos)+'%'}</td>
+      <td style="text-align:right;padding:10px 12px;font-weight:600;color:${mosCol}">${mosTxt}</td>
       <td style="text-align:center;padding:10px 12px;font-size:12px">${verdict}</td>
     </tr>`;
   }).join('');
