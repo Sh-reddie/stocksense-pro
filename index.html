@@ -745,10 +745,12 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="tn-drop-wrap">
       <div class="tn-tab" id="tnt-ai" onclick="go('analysis')">🤖 AI ▾</div>
       <div class="tn-drop">
+        <div class="tn-drop-item" onclick="go('daily-brief')" style="font-weight:600;color:var(--ac)">🌅 Daily Brief</div>
         <div class="tn-drop-item" onclick="go('analysis')">🔍 Stock Analysis</div>
         <div class="tn-drop-item" onclick="go('plan')">🎯 Exit Planner</div>
         <div class="tn-drop-item" onclick="go('planner')">📐 Planner</div>
         <div class="tn-drop-item" onclick="go('strategies')">🧠 AI Strategies</div>
+        <div class="tn-drop-item" onclick="go('fair-value')">💎 Fair Value Engine</div>
       </div>
     </div>
     <!-- Tools dropdown -->
@@ -1916,6 +1918,99 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="pn"><div class="pn-h"><div class="pn-t">🤖 AI Macro View</div></div><div class="pn-b"><div id="mac-ai-txt" style="color:var(--t4);font-size:12px">Click "AI Macro View" for AI commentary on current macro environment and your portfolio exposure.</div></div></div>
   </div>
 
+  <!-- ═══ DAILY AI BRIEF ═══════════════════════════════════ -->
+  <div class="sec" id="sec-daily-brief">
+    <div style="max-width:960px;margin:0 auto;padding:20px 16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div>
+          <div style="font-size:17px;font-weight:700;color:var(--t1)">🌅 Daily AI Brief</div>
+          <div style="font-size:11px;color:var(--t4);margin-top:2px" id="brief-ts">Not yet generated — click Refresh</div>
+        </div>
+        <button class="btn btn-p" onclick="refreshDailyBrief()">🔄 Refresh Brief</button>
+      </div>
+      <!-- Health + Market row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+        <div class="pn">
+          <div class="pn-h"><div class="pn-t">🏥 Portfolio Health</div></div>
+          <div class="pn-b" id="brief-health"><div style="color:var(--t4);font-size:12px">Click Refresh Brief</div></div>
+        </div>
+        <div class="pn">
+          <div class="pn-h"><div class="pn-t">🌡 Market Pulse</div></div>
+          <div class="pn-b" id="brief-market"><div style="color:var(--t4);font-size:12px">–</div></div>
+        </div>
+      </div>
+      <!-- Opportunities / Risks / Actions -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px">
+        <div class="pn">
+          <div class="pn-h"><div class="pn-t" style="color:var(--grn)">🟢 Opportunities</div></div>
+          <div class="pn-b" id="brief-opps"><div style="color:var(--t4);font-size:12px">–</div></div>
+        </div>
+        <div class="pn">
+          <div class="pn-h"><div class="pn-t" style="color:var(--red)">🔴 Risks</div></div>
+          <div class="pn-b" id="brief-risks"><div style="color:var(--t4);font-size:12px">–</div></div>
+        </div>
+        <div class="pn">
+          <div class="pn-h"><div class="pn-t" style="color:var(--ac)">⚡ Suggested Actions</div></div>
+          <div class="pn-b" id="brief-actions"><div style="color:var(--t4);font-size:12px">–</div></div>
+        </div>
+      </div>
+      <!-- AI Commentary -->
+      <div class="pn" style="margin-bottom:14px">
+        <div class="pn-h"><div class="pn-t">🤖 AI Commentary</div></div>
+        <div class="pn-b" id="brief-narrative"><div style="color:var(--t4);font-size:12px">–</div></div>
+      </div>
+      <!-- Holdings Intelligence table -->
+      <div class="pn">
+        <div class="pn-h"><div class="pn-t">📊 Holdings Intelligence Scores</div></div>
+        <div class="pn-b" id="brief-scores" style="padding:0">
+          <div style="color:var(--t4);font-size:12px;padding:16px">–</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ FAIR VALUE ENGINE ═══════════════════════════════ -->
+  <div class="sec" id="sec-fair-value">
+    <div style="max-width:960px;margin:0 auto;padding:20px 16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div>
+          <div style="font-size:17px;font-weight:700;color:var(--t1)">💎 Fair Value Engine</div>
+          <div style="font-size:11px;color:var(--t4);margin-top:2px">Graham Number + PE-Band valuation for all holdings</div>
+        </div>
+        <button class="btn btn-p" onclick="renderFairValueEngine()">🔄 Recalculate</button>
+      </div>
+      <!-- Legend -->
+      <div style="display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3)"><span style="width:10px;height:10px;border-radius:50%;background:var(--grn);display:inline-block"></span>Undervalued (MoS &gt; 10%)</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3)"><span style="width:10px;height:10px;border-radius:50%;background:var(--yel);display:inline-block"></span>Fair Value (±10%)</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3)"><span style="width:10px;height:10px;border-radius:50%;background:var(--red);display:inline-block"></span>Overvalued (&gt;10% premium)</div>
+      </div>
+      <div class="pn" style="padding:0">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="border-bottom:2px solid var(--b1)">
+              <th style="text-align:left;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">Stock</th>
+              <th style="text-align:right;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">CMP</th>
+              <th style="text-align:right;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">Fair Value</th>
+              <th style="text-align:right;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">Method</th>
+              <th style="text-align:right;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">MoS / Premium</th>
+              <th style="text-align:center;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">Verdict</th>
+            </tr>
+          </thead>
+          <tbody id="fv-tbody"><tr><td colspan="6" style="padding:20px;text-align:center;color:var(--t4);font-size:12px">Click Recalculate to compute valuations</td></tr></tbody>
+        </table>
+      </div>
+      <!-- AI Valuation Commentary -->
+      <div class="pn" style="margin-top:14px">
+        <div class="pn-h">
+          <div class="pn-t">🤖 AI Valuation Commentary</div>
+          <button class="btn btn-g btn-sm" onclick="runFairValueAI()">🤖 AI Analyse</button>
+        </div>
+        <div class="pn-b" id="fv-ai-txt"><div style="color:var(--t4);font-size:12px">Run AI Analyse after computing valuations.</div></div>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ SETTINGS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-settings">
     <div class="sec-head"><div class="sec-title">Settings</div></div>
@@ -2202,6 +2297,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="sd-tabs">
       <div class="sd-tab on" id="sdt-chart" onclick="sdTab('chart',this)">📈 Chart</div>
       <div class="sd-tab" id="sdt-fund" onclick="sdTab('fund',this)">🏢 Fundamentals</div>
+      <div class="sd-tab" id="sdt-score" onclick="sdTab('score',this);renderScoreTab()">📊 Score</div>
       <div class="sd-tab" id="sdt-hold" onclick="sdTab('hold',this)">💼 My Holdings</div>
       <div class="sd-tab" id="sdt-ai" onclick="sdTab('ai',this);_sdAutoRunAI()">🤖 AI Analysis</div>
       <div class="sd-tab" id="sdt-edit" onclick="sdTab('edit',this);_sdEditContent(D.holdings.find(x=>x.id==_sdHid))">✏ Edit</div>
@@ -2231,6 +2327,12 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="sd-tp" id="sd-tab-fund">
         <div class="sd-fund-grid" id="sd-fund-content">
           <div style="color:var(--t4);font-size:12px;padding:20px">Loading fundamentals…</div>
+        </div>
+      </div>
+      <!-- SCORE TAB -->
+      <div class="sd-tp" id="sd-tab-score">
+        <div id="sd-score-content" style="padding:18px 20px">
+          <div style="color:var(--t4);font-size:12px">Click the Score tab to compute intelligence report.</div>
         </div>
       </div>
       <!-- MY HOLDINGS TAB -->
@@ -3110,14 +3212,14 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio', dividends:'portfolio', divcal:'portfolio',
   action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis', riskpro:'analysis',
   screener:'portfolio', journal:'portfolio',
-  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai',
+  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai',
   alerts:'tools', notifications:'tools', calendar:'tools', deals:'tools', news:'tools', tax:'tools', import:'tools', macro:'tools',
   settings:'settings'
 };
@@ -3156,6 +3258,8 @@ function go(id) {
   if(id==='screener') renderScreener();
   if(id==='journal') renderJournal();
   if(id==='macro') renderMacro();
+  if(id==='daily-brief') renderDailyBrief();
+  if(id==='fair-value') renderFairValueEngine();
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -9868,7 +9972,382 @@ Give 3 macro signals (one sentence each): VIX risk reading, USD/INR impact on th
 
 // ═══════════════════════════════════════════════════
 // PORTFOLIO REBALANCER
-// ═══════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════
+// ██████  AI INVESTMENT OS — PHASE 1 INTELLIGENCE ENGINE  ████████████████
+// ════════════════════════════════════════════════════════════════════════
+
+// ── SECTOR PE BENCHMARKS ───────────────────────────────────────────────
+const SECTOR_PE = {IT:28,Banking:14,FMCG:48,Pharma:32,Auto:20,Energy:15,
+  Infra:18,Metals:12,Defence:35,Chemicals:28,Telecom:22,'Real Estate':25,default:22};
+
+// ── SCORE ENGINE (Rule-based, instant, no API) ─────────────────────────
+function computeStockScores(data) {
+  const ltp   = data.ltp  || data.buyPrice || 0;
+  const h52   = data.h52  || ltp * 1.35;
+  const l52   = data.l52  || ltp * 0.72;
+  const pe    = data.pe   || 30;
+  const roe   = data.roe  || 10;   // as % (e.g. 18 = 18%)
+  const beta  = data.beta || 1.0;
+  const ret   = data.ret  || 0;    // % return since buy
+  const sector= data.sector || 'default';
+
+  const pos52 = h52 > l52 ? Math.max(0, Math.min(100, (ltp - l52)/(h52 - l52)*100)) : 50;
+
+  // Fundamental (PE + ROE weighted)
+  const peScore  = pe<=10?100:pe<=18?88:pe<=28?74:pe<=42?58:pe<=60?40:22;
+  const roeScore = roe>=25?100:roe>=18?86:roe>=12?72:roe>=7?54:roe>=3?36:18;
+  const fundamental = Math.round(peScore*0.5 + roeScore*0.5);
+
+  // Technical (52W position — lower = more upside potential)
+  const technical = pos52<=15?92:pos52<=30?80:pos52<=50?65:pos52<=70?48:pos52<=85?34:20;
+
+  // Valuation (stock PE vs sector PE)
+  const avgPE   = SECTOR_PE[sector] || SECTOR_PE.default;
+  const peDisc  = (avgPE - pe) / avgPE * 100;
+  const valuation = peDisc>=30?96:peDisc>=15?82:peDisc>=0?66:peDisc>=-15?50:peDisc>=-30?34:18;
+
+  // Risk (beta + proximity to 52W high = risk)
+  const betaS = beta<=0.6?90:beta<=0.85?78:beta<=1.1?64:beta<=1.4?48:beta<=1.8?32:18;
+  const risk  = Math.max(10, Math.min(100, betaS + (pos52>=85?-14:pos52>=70?-7:0)));
+
+  // Momentum (actual P&L % from buy price)
+  const momentum = ret>=50?92:ret>=25?80:ret>=10?66:ret>=0?54:ret>=-15?38:ret>=-30?24:14;
+
+  const overall = Math.round((fundamental+technical+valuation+risk+momentum)/5);
+  const grade   = overall>=80?'A':overall>=68?'B+':overall>=56?'B':overall>=44?'C':'D';
+  const rec     = overall>=72?'BUY':overall>=52?'HOLD':'AVOID';
+  const recColor= rec==='BUY'?'var(--grn)':rec==='HOLD'?'var(--yel)':'var(--red)';
+  return {fundamental,technical,valuation,risk,momentum,overall,grade,rec,recColor,
+          pos52:Math.round(pos52),pe,roe,beta,ret};
+}
+
+// ── FAIR VALUE ENGINE ──────────────────────────────────────────────────
+function computeFairValue(ltp, pe, eps, bvps, sector) {
+  const avgPE = SECTOR_PE[sector||'default'] || SECTOR_PE.default;
+  let graham = null, peBand = null;
+  if (eps && eps>0 && bvps && bvps>0)
+    graham = Math.round(Math.sqrt(22.5 * eps * bvps));
+  if (eps && eps>0)
+    peBand = Math.round(avgPE * eps);
+  // Relative PE fallback: rebase current price to sector avg PE
+  const relPE = pe && pe>0 ? Math.round(ltp * avgPE / pe) : null;
+  const fair   = graham || peBand || relPE || ltp;
+  const method = graham?'Graham Number':peBand?'PE-Band':'Relative PE';
+  const mos    = Math.round((fair - ltp) / fair * 100);
+  return {fair, method, mos, cheap: mos>10, expensive: mos<-10,
+          graham, peBand, avgPE, eps, bvps};
+}
+
+// ── SCORE BAR HTML helper ──────────────────────────────────────────────
+function _scoreBar(label, score, hint) {
+  const col = score>=75?'var(--grn)':score>=55?'var(--ac)':score>=40?'var(--yel)':'var(--red)';
+  return `<div style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <span style="font-size:12px;color:var(--t2);font-weight:500">${label}</span>
+      <span style="font-size:13px;font-weight:700;color:${col}">${score}</span>
+    </div>
+    <div style="background:var(--b2);border-radius:4px;height:6px;overflow:hidden">
+      <div style="width:${score}%;height:100%;background:${col};border-radius:4px;transition:width .5s"></div>
+    </div>
+    <div style="font-size:10px;color:var(--t4);margin-top:3px">${hint}</div>
+  </div>`;
+}
+
+// ── RENDER SCORE TAB (Stock Detail Modal) ─────────────────────────────
+function renderScoreTab() {
+  const el = document.getElementById('sd-score-content');
+  if (!el) return;
+
+  // Find holding from current modal
+  const h = D.holdings.find(x => x.id == _sdHid) || {};
+  const sym = h.symbol || (_sdSym||'');
+  const ltp = h._ltp || h.ltp || h.avgPrice || 0;
+  const pe  = h._pe  || null;
+  const roe = (h._roe != null) ? h._roe * (h._roe > 1 ? 1 : 100) : null; // normalise
+  const beta= h._beta|| null;
+  const h52 = h._h52 || null;
+  const l52 = h._l52 || null;
+  const ret = ltp && h.avgPrice ? (ltp - h.avgPrice)/h.avgPrice*100 : 0;
+
+  const scores = computeStockScores({ltp, h52, l52, pe: pe||28, roe: roe||12,
+    beta: beta||1, ret, sector: h.sector||'default'});
+  const fv = computeFairValue(ltp, pe, h._eps, h._bvps, h.sector);
+
+  const gradeCol = scores.grade==='A'?'var(--grn)':scores.grade.startsWith('B')?'var(--ac)':
+                   scores.grade==='C'?'var(--yel)':'var(--red)';
+
+  el.innerHTML = `
+  <div style="padding:16px 20px">
+    <!-- Overall score header -->
+    <div style="display:flex;align-items:center;gap:16px;padding:16px;background:var(--s2);border-radius:10px;margin-bottom:18px">
+      <div style="text-align:center;width:70px">
+        <div style="font-size:32px;font-weight:800;color:${gradeCol}">${scores.overall}</div>
+        <div style="font-size:11px;color:var(--t4)">/ 100</div>
+        <div style="font-size:16px;font-weight:700;color:${gradeCol};margin-top:2px">${scores.grade}</div>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:4px">${sym} · AI Score</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span style="background:${scores.recColor};color:#fff;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700">${scores.rec}</span>
+          <span style="background:var(--s3);color:var(--t3);padding:3px 10px;border-radius:12px;font-size:11px">52W pos: ${scores.pos52}%</span>
+          <span style="background:var(--s3);color:var(--t3);padding:3px 10px;border-radius:12px;font-size:11px">Beta: ${(scores.beta||1).toFixed(2)}</span>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:10px;color:var(--t4);margin-bottom:3px">Fair Value</div>
+        <div style="font-size:15px;font-weight:700;color:${fv.cheap?'var(--grn)':fv.expensive?'var(--red)':'var(--yel)'}">₹${f(fv.fair)}</div>
+        <div style="font-size:11px;color:var(--t4)">${fv.method}</div>
+        <div style="font-size:12px;font-weight:600;color:${fv.cheap?'var(--grn)':fv.expensive?'var(--red)':'var(--t3)'}">
+          ${fv.mos>0?'MoS '+fv.mos+'%':'Premium '+Math.abs(fv.mos)+'%'}
+        </div>
+      </div>
+    </div>
+    <!-- 5 score bars -->
+    <div style="margin-bottom:16px">
+      ${_scoreBar('📊 Fundamental',scores.fundamental,`PE: ${scores.pe?.toFixed(0)||'—'}  ·  ROE: ${scores.roe?.toFixed(0)||'—'}%`)}
+      ${_scoreBar('📈 Technical',scores.technical,`52W position: ${scores.pos52}% from 52W low`)}
+      ${_scoreBar('💎 Valuation',scores.valuation,`vs sector avg PE ${SECTOR_PE[h.sector||'default']||22}x`)}
+      ${_scoreBar('🛡 Risk',scores.risk,`Beta: ${(scores.beta||1).toFixed(2)} · Lower beta = safer`)}
+      ${_scoreBar('🚀 Momentum',scores.momentum,`Return since buy: ${ret>=0?'+':''}${ret.toFixed(1)}%`)}
+    </div>
+    <!-- AI Research Button -->
+    <button class="btn btn-p" style="width:100%" onclick="runStockScoreAI('${sym}')">🤖 Get AI Research Recommendation</button>
+    <div id="score-ai-out" style="margin-top:12px"></div>
+  </div>`;
+}
+
+// ── AI RESEARCH AGENT for single stock ────────────────────────────────
+async function runStockScoreAI(sym) {
+  const el = document.getElementById('score-ai-out');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--t4);font-size:12px">⏳ Research Agent thinking…</div>';
+  const h = D.holdings.find(x=>x.symbol===sym)||{};
+  const ltp = h._ltp||h.avgPrice||0;
+  const ret  = ltp&&h.avgPrice?(ltp-h.avgPrice)/h.avgPrice*100:0;
+  const ctx  = D._marketCtx||{sentimentLabel:'Neutral'};
+  const prompt = `Indian equity research analyst. Stock: ${sym}, sector: ${h.sector||'—'}, CMP ₹${Math.round(ltp)}, PE ${h._pe?.toFixed(0)||'—'}, ROE ${h._roe?+(h._roe*100).toFixed(0)+'%':'—'}, beta ${h._beta?.toFixed(2)||'—'}, return-since-buy ${ret.toFixed(1)}%, market: ${ctx.sentimentLabel}.
+Reply JSON only: {"confidence":0-100,"rec":"BUY|HOLD|AVOID","reasons":["","",""],"entry":"₹X-Y","sl":"₹Z","target":"₹W","horizon":"3-6M or 6-12M or 1-3Y","thesis":"one sentence"}`;
+  const raw = await claudeJSON(prompt);
+  if (!raw || typeof raw !== 'object') {
+    el.innerHTML = `<div class="ai-txt">${md2h(typeof raw==='string'?raw:'Research unavailable.')}</div>`;
+    return;
+  }
+  const recCol = raw.rec==='BUY'?'var(--grn)':raw.rec==='HOLD'?'var(--yel)':'var(--red)';
+  el.innerHTML = `
+  <div style="background:var(--s2);border-radius:10px;padding:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div>
+        <span style="background:${recCol};color:#fff;padding:3px 10px;border-radius:12px;font-size:13px;font-weight:700">${raw.rec}</span>
+        <span style="font-size:12px;color:var(--t4);margin-left:8px">Confidence: ${raw.confidence}%</span>
+      </div>
+      <div style="text-align:right;font-size:11px;color:var(--t4)">
+        Entry ${raw.entry||'—'} · SL ${raw.sl||'—'} · Target ${raw.target||'—'}<br>Horizon: ${raw.horizon||'—'}
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:8px;font-style:italic">"${raw.thesis||''}"</div>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      ${(raw.reasons||[]).map(r=>`<div style="font-size:12px;color:var(--t3)">• ${r}</div>`).join('')}
+    </div>
+  </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// ██  FAIR VALUE ENGINE SECTION  ████████████████████████████████████████
+// ════════════════════════════════════════════════════════════════════════
+function renderFairValueEngine() {
+  const tbody = document.getElementById('fv-tbody');
+  if (!tbody) return;
+  if (!D.holdings.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--t4)">No holdings to value</td></tr>';
+    return;
+  }
+  tbody.innerHTML = D.holdings.map(h => {
+    const ltp  = h._ltp || h.ltp || h.avgPrice || 0;
+    const pe   = h._pe  || null;
+    const roe  = h._roe || null;
+    const eps  = h._eps || null;
+    const bvps = h._bvps|| null;
+    const fv   = computeFairValue(ltp, pe, eps, bvps, h.sector);
+    const mosCol = fv.cheap?'var(--grn)':fv.expensive?'var(--red)':'var(--yel)';
+    const verdict = fv.cheap?'🟢 Undervalued':fv.expensive?'🔴 Overvalued':'🟡 Fair';
+    return `<tr style="border-bottom:1px solid var(--b2)">
+      <td style="padding:10px 12px"><div style="font-weight:600;font-size:13px">${h.symbol}</div><div style="font-size:10px;color:var(--t4)">${h.sector||'—'}</div></td>
+      <td style="text-align:right;padding:10px 12px;font-weight:600;font-family:var(--mono)">₹${f(ltp)}</td>
+      <td style="text-align:right;padding:10px 12px;font-weight:700;font-family:var(--mono);color:${mosCol}">₹${f(fv.fair)}</td>
+      <td style="text-align:right;padding:10px 12px;font-size:11px;color:var(--t4)">${fv.method}</td>
+      <td style="text-align:right;padding:10px 12px;font-weight:600;color:${mosCol}">${fv.mos>0?'MoS '+fv.mos+'%':'Prem '+Math.abs(fv.mos)+'%'}</td>
+      <td style="text-align:center;padding:10px 12px;font-size:12px">${verdict}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function runFairValueAI() {
+  const el = document.getElementById('fv-ai-txt');
+  if (!el || !D.holdings.length) return;
+  el.innerHTML = '<div style="color:var(--t4);font-size:12px">⏳ Valuation Agent analysing…</div>';
+  const vals = D.holdings.slice(0,10).map(h => {
+    const ltp = h._ltp||h.avgPrice||0;
+    const fv  = computeFairValue(ltp, h._pe, h._eps, h._bvps, h.sector);
+    return `${h.symbol}(CMP:${Math.round(ltp)},FV:${fv.fair},${fv.mos>0?'MoS'+fv.mos+'%':'Prem'+Math.abs(fv.mos)+'%'})`;
+  }).join(', ');
+  const ctx = D._marketCtx||{sentimentLabel:'Neutral'};
+  const prompt = `Indian valuation analyst. Holdings vs fair value: ${vals}. Market: ${ctx.sentimentLabel}.
+Give 3 specific actions (one sentence each): most undervalued pick, most overvalued to reduce, and one portfolio-wide valuation observation. End with one-line verdict.`;
+  const r = await claude(prompt);
+  el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// ██  DAILY AI BRIEF  ████████████████████████████████████████████████████
+// ════════════════════════════════════════════════════════════════════════
+async function renderDailyBrief() {
+  // Render holdings score table immediately (no API needed)
+  _renderBriefScores();
+}
+
+function _renderBriefScores() {
+  const el = document.getElementById('brief-scores');
+  if (!el || !D.holdings.length) return;
+  const rows = D.holdings.map(h => {
+    const ltp = h._ltp||h.avgPrice||0;
+    const ret = ltp&&h.avgPrice?(ltp-h.avgPrice)/h.avgPrice*100:0;
+    const s   = computeStockScores({ltp, h52:h._h52, l52:h._l52,
+      pe:h._pe||28, roe:h._roe?h._roe*100:12, beta:h._beta||1, ret, sector:h.sector});
+    const gradeCol = s.grade==='A'?'var(--grn)':s.grade.startsWith('B')?'var(--ac)':
+                     s.grade==='C'?'var(--yel)':'var(--red)';
+    const recCol = s.rec==='BUY'?'var(--grn)':s.rec==='HOLD'?'var(--yel)':'var(--red)';
+    return `<tr style="border-bottom:1px solid var(--b2)">
+      <td style="padding:9px 12px;font-weight:600">${h.symbol}<div style="font-size:10px;color:var(--t4);font-weight:400">${h.sector||'—'}</div></td>
+      <td style="text-align:center;padding:9px 12px"><span style="font-size:16px;font-weight:800;color:${gradeCol}">${s.overall}</span><span style="font-size:10px;color:var(--t4)"> /100</span></td>
+      <td style="text-align:center;padding:9px 12px"><span style="font-size:11px;font-weight:700;color:${gradeCol}">${s.grade}</span></td>
+      <td style="text-align:center;padding:9px 6px"><span style="background:${recCol};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${s.rec}</span></td>
+      <td style="text-align:center;padding:9px 12px">
+        <div style="display:flex;gap:3px">
+          ${[['F',s.fundamental],['T',s.technical],['V',s.valuation],['R',s.risk],['M',s.momentum]].map(([l,v])=>{
+            const c=v>=70?'var(--grn)':v>=50?'var(--ac)':v>=35?'var(--yel)':'var(--red)';
+            return `<div style="width:28px;text-align:center"><div style="font-size:9px;color:var(--t4)">${l}</div><div style="font-size:11px;font-weight:700;color:${c}">${v}</div></div>`;
+          }).join('')}
+        </div>
+      </td>
+      <td style="text-align:right;padding:9px 12px;font-size:11px;color:var(--t3)">${ret>=0?'+':''}${ret.toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="border-bottom:2px solid var(--b1)">
+      <th style="text-align:left;padding:8px 12px;font-size:11px;color:var(--t4);font-weight:600">Stock</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;color:var(--t4);font-weight:600">Score</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;color:var(--t4);font-weight:600">Grade</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;color:var(--t4);font-weight:600">Signal</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;color:var(--t4);font-weight:600">F · T · V · R · M</th>
+      <th style="text-align:right;padding:8px 12px;font-size:11px;color:var(--t4);font-weight:600">Return</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+async function refreshDailyBrief() {
+  const ts = document.getElementById('brief-ts');
+  if (ts) ts.textContent = 'Generating brief…';
+
+  // Step 1: scores table immediately
+  _renderBriefScores();
+
+  // Step 2: portfolio health (rule-based)
+  const holdings = D.holdings;
+  if (!holdings.length) {
+    ['brief-health','brief-market','brief-opps','brief-risks','brief-actions','brief-narrative'].forEach(id=>{
+      const el=document.getElementById(id);if(el)el.innerHTML='<div style="color:var(--t4);font-size:12px">No holdings yet</div>';
+    });
+    return;
+  }
+
+  const totalVal  = holdings.reduce((s,h)=>s+h.qty*(h._ltp||h.avgPrice),0);
+  const totalCost = holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0);
+  const portRet   = totalCost>0?((totalVal-totalCost)/totalCost*100):0;
+  const portBeta  = holdings.length?holdings.reduce((s,h)=>s+(h._beta||1)*h.qty*(h._ltp||h.avgPrice),0)/totalVal:1;
+
+  // Compute scores for all holdings
+  const scoredH = holdings.map(h=>{
+    const ltp=h._ltp||h.avgPrice;
+    const ret=ltp&&h.avgPrice?(ltp-h.avgPrice)/h.avgPrice*100:0;
+    return {...h,_scores:computeStockScores({ltp,h52:h._h52,l52:h._l52,
+      pe:h._pe||28,roe:h._roe?h._roe*100:12,beta:h._beta||1,ret,sector:h.sector})};
+  });
+  const avgScore = Math.round(scoredH.reduce((s,h)=>s+h._scores.overall,0)/scoredH.length);
+  const buyCount = scoredH.filter(h=>h._scores.rec==='BUY').length;
+  const avoidCount = scoredH.filter(h=>h._scores.rec==='AVOID').length;
+  const topBuy  = [...scoredH].sort((a,b)=>b._scores.overall-a._scores.overall).slice(0,3).map(h=>h.symbol);
+  const topAvoid= [...scoredH].sort((a,b)=>a._scores.overall-b._scores.overall).slice(0,2).map(h=>h.symbol);
+  const healthScore = Math.min(100, Math.round(avgScore*0.6 + Math.min(100,100-avoidCount*15)*0.4));
+  const hCol = healthScore>=70?'var(--grn)':healthScore>=50?'var(--yel)':'var(--red)';
+
+  // Render health card
+  const healthEl = document.getElementById('brief-health');
+  if (healthEl) healthEl.innerHTML = `
+    <div style="display:flex;align-items:center;gap:14px">
+      <div style="font-size:42px;font-weight:800;color:${hCol}">${healthScore}</div>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:${hCol}">${healthScore>=70?'Healthy':healthScore>=50?'Needs Attention':'At Risk'}</div>
+        <div style="font-size:11px;color:var(--t4);margin-top:3px">Avg score: ${avgScore}/100</div>
+        <div style="font-size:11px;color:var(--t4)">BUY signals: ${buyCount}  ·  AVOID: ${avoidCount}</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;background:var(--b2);border-radius:6px;height:8px;overflow:hidden">
+      <div style="width:${healthScore}%;height:100%;background:${hCol};border-radius:6px"></div>
+    </div>
+    <div style="font-size:11px;color:var(--t4);margin-top:6px">Portfolio ₹${Math.round(totalVal/1000)}K · Return ${portRet>=0?'+':''}${portRet.toFixed(1)}% · Beta ${portBeta.toFixed(2)}</div>`;
+
+  // Step 3: AI agents in parallel
+  const ctx = D._marketCtx || {};
+  if (!D._marketCtx) {
+    try { D._marketCtx = await getMarketContext(); } catch(e) {}
+  }
+  const mCtx = D._marketCtx || {sentimentLabel:'Neutral',hotSectors:[]};
+
+  const marketEl  = document.getElementById('brief-market');
+  const oppsEl    = document.getElementById('brief-opps');
+  const risksEl   = document.getElementById('brief-risks');
+  const actionsEl = document.getElementById('brief-actions');
+  const narrativeEl = document.getElementById('brief-narrative');
+
+  [marketEl,oppsEl,risksEl,actionsEl,narrativeEl].forEach(el=>{
+    if(el) el.innerHTML='<div style="color:var(--t4);font-size:11px">⏳ Agent thinking…</div>';
+  });
+
+  // Market pulse (rule-based)
+  if (marketEl) marketEl.innerHTML = `
+    <div style="font-size:13px;font-weight:600;color:var(--t1);margin-bottom:6px">${mCtx.sentimentLabel||'Neutral'} Market</div>
+    <div style="font-size:11px;color:var(--t3);line-height:1.6">
+      ${(mCtx.hotSectors||[]).length?'Hot sectors: '+(mCtx.hotSectors||[]).join(', '):'—'}<br>
+      VIX: ${mCtx.vix||'—'} · USD/INR: ${mCtx.usdinr||'—'}<br>
+      Portfolio beta vs market: ${portBeta.toFixed(2)}
+    </div>`;
+
+  // Sectors in portfolio
+  const sectors = [...new Set(holdings.map(h=>h.sector).filter(Boolean))].join(', ');
+  const holdSummary = scoredH.map(h=>`${h.symbol}(${h._scores.overall}/100,${h._scores.rec})`).join(', ');
+
+  // AI: Opportunities + Risks + Actions + Narrative (parallel)
+  const [briefData] = await Promise.allSettled([
+    claudeJSON(`Portfolio advisor, Indian equities. Holdings: ${holdSummary}. Market: ${mCtx.sentimentLabel||'Neutral'}. Hot: ${(mCtx.hotSectors||[]).join(',')}.
+Reply JSON: {"opps":["","",""],"risks":["","",""],"actions":["","",""],"narrative":"2-3 sentences on portfolio outlook"}`)
+  ]);
+
+  const bd = briefData.status==='fulfilled'&&typeof briefData.value==='object'?briefData.value:null;
+
+  const li = (arr,col) => arr?.length
+    ? arr.map(x=>`<div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:7px"><span style="color:${col};font-size:14px;flex-shrink:0">•</span><span style="font-size:12px;color:var(--t2);line-height:1.4">${x}</span></div>`).join('')
+    : '<div style="color:var(--t4);font-size:12px">–</div>';
+
+  if (oppsEl)    oppsEl.innerHTML    = li(bd?.opps||topBuy.map(s=>`${s} rated BUY — consider adding`),'var(--grn)');
+  if (risksEl)   risksEl.innerHTML   = li(bd?.risks||topAvoid.map(s=>`${s} rated AVOID — review position`),'var(--red)');
+  if (actionsEl) actionsEl.innerHTML = li(bd?.actions||['Review AVOID-rated holdings','Rebalance sector concentration'],'var(--ac)');
+  if (narrativeEl) narrativeEl.innerHTML = `<div class="ai-txt">${md2h(bd?.narrative||'Portfolio analysis complete. Review scores above.')}</div>`;
+
+  if (ts) ts.textContent = 'Generated: ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+}
+
+// ════════════════════════════════════════════════════════════════════════
 let _rebTargets = {};
 
 function renderRebalancer() {
