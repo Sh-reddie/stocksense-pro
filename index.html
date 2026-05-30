@@ -10529,28 +10529,40 @@ Reply JSON: {"opps":["","",""],"risks":["","",""],"actions":["","",""],"narrativ
 // ██  AI NEWS SENTIMENT  █████████████████████████████████████████████████
 // ════════════════════════════════════════════════════════════════════════
 
-// Fetch Google News RSS headlines for a stock via allorigins.win proxy
+// Fetch Google News RSS headlines for a stock — tries multiple CORS proxies.
+// Returns [] if all fail; scoreSentiment handles the no-headlines case gracefully.
 async function fetchStockHeadlines(sym) {
-  try {
-    const q = encodeURIComponent(`${sym} NSE stock India`);
-    const rssUrl = `https://news.google.com/rss/search?q=${q}&hl=en-IN&gl=IN&ceid=IN:en`;
-    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`;
-    const r = await fetch(proxy, {signal: AbortSignal.timeout(9000)});
-    const j = await r.json();
-    const xml = j.contents || '';
-    // Try CDATA titles first, then plain titles
-    let titles = [...xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/gs)].slice(1,9).map(m=>m[1].trim());
-    if (!titles.length) titles = [...xml.matchAll(/<title>(.*?)<\/title>/gs)].slice(1,9).map(m=>m[1].replace(/<[^>]+>/g,'').trim());
-    return titles.filter(t=>t.length>5);
-  } catch(e) { return []; }
+  const q = encodeURIComponent(`${sym} NSE stock India`);
+  const rssUrl = `https://news.google.com/rss/search?q=${q}&hl=en-IN&gl=IN&ceid=IN:en`;
+  const attempts = [
+    () => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`,{signal:AbortSignal.timeout(5000)})
+            .then(r=>r.json()).then(j=>j.contents||''),
+    () => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`,{signal:AbortSignal.timeout(5000)})
+            .then(r=>r.text()),
+  ];
+  for (const attempt of attempts) {
+    try {
+      const xml = await attempt();
+      if (!xml.includes('<item>')) continue;
+      let titles = [...xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/gs)].slice(1,9).map(m=>m[1].trim());
+      if (!titles.length) titles = [...xml.matchAll(/<title>(.*?)<\/title>/gs)].slice(1,9).map(m=>m[1].replace(/<[^>]+>/g,'').trim());
+      const filtered = titles.filter(t=>t.length>5);
+      if (filtered.length) return filtered;
+    } catch(e) {}
+  }
+  return []; // Fallback: scoreSentiment will use AI knowledge mode
 }
 
-// Score headlines with claudeJSON → {sentiment, score, reason, catalyst, risk}
-async function scoreSentiment(sym, headlines) {
-  if (!headlines || !headlines.length) return null;
-  const hl = headlines.slice(0,6).join(' | ');
-  const prompt = `Indian stock ${sym}. Recent news: "${hl}". Rate overall market sentiment as Bullish, Neutral, or Bearish with a brief reason, key catalyst and main risk.
-Reply JSON: {"sentiment":"Bullish","score":7,"reason":"<15 words>","catalyst":"<10 words>","risk":"<10 words>"}`;
+// Score with claudeJSON — works with or without live headlines.
+// When headlines=[], AI reasons from its training knowledge of the stock/sector.
+async function scoreSentiment(sym, headlines, sector) {
+  const hasNews = headlines && headlines.length > 0;
+  const ctx = hasNews
+    ? `Recent headlines: "${headlines.slice(0,5).join(' | ')}".`
+    : `No live headlines — use your knowledge of ${sym}${sector?' ('+sector+' sector)':''} and current Indian market conditions.`;
+  const src = hasNews ? 'news' : 'ai-knowledge';
+  const prompt = `Indian equity analyst. Stock: ${sym}. ${ctx} Rate overall sentiment as Bullish, Neutral, or Bearish.
+Reply JSON: {"sentiment":"Bullish","score":7,"reason":"<15 words>","catalyst":"<10 words>","risk":"<10 words>","source":"${src}"}`;
   return await claudeJSON(prompt);
 }
 
@@ -10571,7 +10583,7 @@ async function runSentimentAll() {
     await Promise.all(batch.map(async h => {
       try {
         const headlines = await fetchStockHeadlines(h.symbol);
-        const result = await scoreSentiment(h.symbol, headlines);
+        const result = await scoreSentiment(h.symbol, headlines, h.sector);
         if (result && result.sentiment) {
           h._sentiment = result;
           h._sentimentHeadlines = headlines;
@@ -10601,7 +10613,7 @@ async function runSentimentSingle(hid) {
   if (sentCell) sentCell.innerHTML = '<span style="color:var(--t4);font-size:10px">⏳</span>';
   try {
     const headlines = await fetchStockHeadlines(h.symbol);
-    const result = await scoreSentiment(h.symbol, headlines);
+    const result = await scoreSentiment(h.symbol, headlines, h.sector);
     if (result && result.sentiment) {
       h._sentiment = result;
       h._sentimentHeadlines = headlines;
@@ -10670,7 +10682,7 @@ async function _sdSentimentContent(h) {
   const isFresh = h._sentimentAt && (Date.now() - h._sentimentAt < 6*60*60*1000);
   if (!isFresh) {
     const headlines = await fetchStockHeadlines(h.symbol).catch(()=>[]);
-    const result = await scoreSentiment(h.symbol, headlines).catch(()=>null);
+    const result = await scoreSentiment(h.symbol, headlines, h.sector).catch(()=>null);
     if (result && result.sentiment) {
       h._sentiment = result;
       h._sentimentHeadlines = headlines;
@@ -10694,7 +10706,10 @@ async function _sdSentimentContent(h) {
   const ic = st.sentiment==='Bullish'?'▲':st.sentiment==='Bearish'?'▼':'—';
   const age = h._sentimentAt ? Math.round((Date.now()-h._sentimentAt)/3600000) : null;
   const ageStr = age!=null?(age<1?'just now':age+'h ago'):'';
-  const scoreBar = st.score ? `<div style="margin:8px 0 0 0;background:var(--b2);border-radius:4px;height:6px;overflow:hidden"><div style="width:${Math.round(st.score/10*100)}%;height:100%;background:${sc};border-radius:4px"></div></div><div style="font-size:10px;color:var(--t4);margin-top:3px">Score: ${st.score}/10</div>` : '';
+  const scoreBar = st.score ? `<div style="margin:8px 0 0 0;background:var(--b2);border-radius:4px;height:6px;overflow:hidden"><div style="width:${Math.round(st.score/10*100)}%;height:100%;background:${sc};border-radius:4px"></div></div><div style="font-size:10px;color:var(--t4);margin-top:3px">Confidence: ${st.score}/10</div>` : '';
+  const srcBadge = st.source==='news'
+    ? `<span style="font-size:9px;color:var(--cyn);background:var(--cyn)18;border-radius:8px;padding:1px 6px;font-weight:600">📰 news</span>`
+    : `<span style="font-size:9px;color:var(--ac2);background:var(--ac2)18;border-radius:8px;padding:1px 6px;font-weight:600">🤖 AI knowledge</span>`;
 
   el.innerHTML = `
     <div style="padding:16px 20px">
@@ -10702,8 +10717,9 @@ async function _sdSentimentContent(h) {
       <div style="display:flex;align-items:flex-start;gap:14px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-left:3px solid ${sc};border-radius:8px;margin-bottom:16px">
         <div style="font-size:28px;flex-shrink:0">${ic==='▲'?'📈':ic==='▼'?'📉':'↔'}</div>
         <div style="flex:1">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
             <span style="font-size:13px;font-weight:700;color:${sc}">${ic} ${st.sentiment}</span>
+            ${srcBadge}
             <span style="font-size:10px;color:var(--t4)">${ageStr}</span>
             <button class="btn btn-g btn-xs" style="margin-left:auto;font-size:9px" onclick="runSentimentSingle(${h.id}).then(()=>_sdSentimentContent(D.holdings.find(x=>x.id==${h.id})))">↻ Rescore</button>
           </div>
@@ -10713,12 +10729,12 @@ async function _sdSentimentContent(h) {
           ${st.risk?`<div style="font-size:11px;color:var(--red);margin-top:4px">⚠ Risk: ${st.risk}</div>`:''}
         </div>
       </div>
-      <!-- Headlines -->
+      <!-- Headlines (if available) -->
       ${hl.length ? `
-        <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Recent Headlines</div>
+        <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">📰 Headlines used for scoring</div>
         <div style="display:flex;flex-direction:column;gap:6px">
           ${hl.map(t=>`<div style="font-size:12px;color:var(--t2);padding:7px 10px;background:var(--s2);border-radius:6px;border:1px solid var(--b1);line-height:1.4">${t}</div>`).join('')}
-        </div>` : '<div style="color:var(--t4);font-size:12px">No headlines retrieved.</div>'}
+        </div>` : `<div style="font-size:11px;color:var(--t4);padding:10px;background:var(--s2);border-radius:6px;border:1px solid var(--b1)">🤖 Scored from AI training knowledge — live headlines unavailable via current proxies.</div>`}
     </div>`;
 }
 
