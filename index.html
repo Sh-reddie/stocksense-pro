@@ -761,6 +761,10 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('intel-report')" style="font-weight:600;color:var(--ac)">📑 Intel Report</div>
         <div class="tn-drop-item" onclick="go('watchlist-builder')">🔭 Watchlist Builder</div>
         <div class="tn-drop-item" onclick="go('exit-planner')">🚪 Exit Planner</div>
+        <div class="tn-drop-item" onclick="go('ai-rebalancer')">⚖️ AI Rebalancer</div>
+        <div class="tn-drop-item" onclick="go('earnings-preview')">📣 Earnings Preview</div>
+        <div class="tn-drop-item" onclick="go('dividend-opt')">💸 Dividend Optimizer</div>
+        <div class="tn-drop-item" onclick="go('goal-planner')">🏆 Goal Planner</div>
       </div>
     </div>
     <!-- Tools dropdown -->
@@ -2642,6 +2646,101 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
   </div>
 
+  <!-- ═══ AI REBALANCER ══════════════════════════════════ -->
+  <div class="sec" id="sec-ai-rebalancer">
+    <div class="sec-head">
+      <div>
+        <div class="sec-title">⚖️ AI Portfolio Rebalancer</div>
+        <div style="font-size:12px;color:var(--t4);margin-top:2px">Current vs target sector allocation · over/under-weight signals · AI rebalance action plan</div>
+      </div>
+      <button class="btn btn-p btn-sm" id="arb-ai-btn" onclick="runRebalanceAI()">🤖 Generate Rebalance Plan</button>
+    </div>
+    <div class="pn" style="margin-bottom:16px">
+      <div class="pn-h"><div class="pn-t">🎯 Target Allocation by Sector</div><div style="font-size:11px;color:var(--t4)">Edit % and click Recalculate</div></div>
+      <div class="pn-b">
+        <div id="arb-target-inputs" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center"></div>
+        <button class="btn btn-s btn-sm" style="margin-top:10px" onclick="renderAIRebalancer()">↻ Recalculate</button>
+      </div>
+    </div>
+    <div class="sg sg-4 gap" style="margin-bottom:16px">
+      <div class="sc c1">OVERWEIGHT SECTORS <div id="arb-over" style="font-size:22px;font-weight:700">—</div></div>
+      <div class="sc c5">UNDERWEIGHT SECTORS <div id="arb-under" style="font-size:22px;font-weight:700">—</div></div>
+      <div class="sc c4">PORTFOLIO VALUE <div id="arb-val" style="font-size:22px;font-weight:700">—</div></div>
+      <div class="sc c2">REBALANCE MOVES <div id="arb-moves" style="font-size:22px;font-weight:700">—</div></div>
+    </div>
+    <div id="arb-ai-plan" style="display:none;margin-bottom:16px"></div>
+    <div id="arb-table-wrap"></div>
+  </div>
+
+  <!-- ═══ EARNINGS PREVIEW ═════════════════════════════ -->
+  <div class="sec" id="sec-earnings-preview">
+    <div class="sec-head">
+      <div>
+        <div class="sec-title">📣 AI Earnings Preview</div>
+        <div style="font-size:12px;color:var(--t4);margin-top:2px">Pre-earnings hold/exit strategy for every holding · consensus outlook · risk rating</div>
+      </div>
+      <button class="btn btn-p btn-sm" id="ep2-ai-btn" onclick="runEarningsAI()">🤖 Analyse All Holdings</button>
+    </div>
+    <div class="sg sg-4 gap" style="margin-bottom:16px">
+      <div class="sc c2">HOLD THROUGH EARNINGS <div id="ep2-hold" style="font-size:22px;font-weight:700">0</div></div>
+      <div class="sc c1">EXIT BEFORE EARNINGS <div id="ep2-exit" style="font-size:22px;font-weight:700">0</div></div>
+      <div class="sc c5">HIGH RISK <div id="ep2-risky" style="font-size:22px;font-weight:700">0</div></div>
+      <div class="sc c4">ANALYSED <div id="ep2-total" style="font-size:22px;font-weight:700">0</div></div>
+    </div>
+    <div id="ep2-ai-plan" style="display:none;margin-bottom:16px"></div>
+    <div id="ep2-table-wrap"></div>
+  </div>
+
+  <!-- ═══ DIVIDEND OPTIMIZER ═══════════════════════════ -->
+  <div class="sec" id="sec-dividend-opt">
+    <div class="sec-head">
+      <div>
+        <div class="sec-title">💸 AI Dividend Optimizer</div>
+        <div style="font-size:12px;color:var(--t4);margin-top:2px">Yield · payout history · portfolio dividend income · AI plan to maximize passive returns</div>
+      </div>
+      <button class="btn btn-p btn-sm" id="dvo-ai-btn" onclick="runDividendAI()">🤖 Optimize Dividends</button>
+    </div>
+    <div class="sg sg-4 gap" style="margin-bottom:16px">
+      <div class="sc c2">EST. ANNUAL DIVIDENDS <div id="dvo-annual" style="font-size:22px;font-weight:700">—</div></div>
+      <div class="sc c4">AVG PORTFOLIO YIELD <div id="dvo-yield" style="font-size:22px;font-weight:700">—</div></div>
+      <div class="sc c2">TOP YIELDER <div id="dvo-top" style="font-size:22px;font-weight:700">—</div></div>
+      <div class="sc c1">ZERO DIVIDEND <div id="dvo-zero" style="font-size:22px;font-weight:700">—</div></div>
+    </div>
+    <div id="dvo-ai-plan" style="display:none;margin-bottom:16px"></div>
+    <div id="dvo-table-wrap"></div>
+  </div>
+
+  <!-- ═══ GOAL PLANNER ═══════════════════════════════ -->
+  <div class="sec" id="sec-goal-planner">
+    <div class="sec-head">
+      <div>
+        <div class="sec-title">🏆 AI Goal Planner</div>
+        <div style="font-size:12px;color:var(--t4);margin-top:2px">Set a financial goal · SIP calculator · gap analysis · AI path to get there</div>
+      </div>
+      <button class="btn btn-p btn-sm" id="gp-ai-btn" onclick="runGoalAI()">🤖 Build My Plan</button>
+    </div>
+    <div class="pn" style="margin-bottom:16px">
+      <div class="pn-h"><div class="pn-t">🎯 Your Goal</div></div>
+      <div class="pn-b">
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end">
+          <label style="font-size:12px;color:var(--t2)">Goal Amount (₹)<br><input type="number" id="gp-target" value="10000000" style="margin-top:4px;width:140px;background:var(--s2);border:1px solid var(--b2);border-radius:6px;padding:6px 10px;color:var(--t1);font-size:13px"></label>
+          <label style="font-size:12px;color:var(--t2)">Years to Goal<br><input type="number" id="gp-years" value="10" min="1" max="40" style="margin-top:4px;width:80px;background:var(--s2);border:1px solid var(--b2);border-radius:6px;padding:6px 10px;color:var(--t1);font-size:13px"></label>
+          <label style="font-size:12px;color:var(--t2)">Monthly SIP (₹)<br><input type="number" id="gp-sip" value="25000" style="margin-top:4px;width:120px;background:var(--s2);border:1px solid var(--b2);border-radius:6px;padding:6px 10px;color:var(--t1);font-size:13px"></label>
+          <label style="font-size:12px;color:var(--t2)">Expected Return (%/yr)<br><input type="number" id="gp-rate" value="12" min="1" max="30" style="margin-top:4px;width:100px;background:var(--s2);border:1px solid var(--b2);border-radius:6px;padding:6px 10px;color:var(--t1);font-size:13px"></label>
+          <button class="btn btn-s btn-sm" style="margin-bottom:1px" onclick="renderGoalPlanner()">↻ Calculate</button>
+        </div>
+      </div>
+    </div>
+    <div class="sg sg-4 gap" style="margin-bottom:16px">
+      <div class="sc c2">PROJECTED CORPUS <div id="gp-corpus" style="font-size:22px;font-weight:700">—</div></div>
+      <div class="sc c4">GOAL GAP <div id="gp-gap" style="font-size:22px;font-weight:700">—</div></div>
+      <div class="sc c2">REQUIRED SIP <div id="gp-req-sip" style="font-size:22px;font-weight:700">—</div></div>
+      <div class="sc c5">ON TRACK <div id="gp-ontrack" style="font-size:22px;font-weight:700">—</div></div>
+    </div>
+    <div id="gp-ai-plan" style="display:none;margin-bottom:16px"></div>
+    <div id="gp-chart-wrap" style="margin-bottom:16px"></div>
+  </div>
+
   <!-- ═══ SETTINGS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-settings">
     <div class="sec-head"><div class="sec-title">Settings</div></div>
@@ -3850,14 +3949,14 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ AI Stock Comparator','intel-report':'📑 Portfolio Intelligence Report','watchlist-builder':'🔭 AI Watchlist Builder','exit-planner':'🚪 AI Exit Strategy Planner'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ AI Stock Comparator','intel-report':'📑 Portfolio Intelligence Report','watchlist-builder':'🔭 AI Watchlist Builder','exit-planner':'🚪 AI Exit Strategy Planner','ai-rebalancer':'⚖️ AI Portfolio Rebalancer','earnings-preview':'📣 AI Earnings Preview','dividend-opt':'💸 AI Dividend Optimizer','goal-planner':'🏆 AI Goal Planner'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio', dividends:'portfolio', divcal:'portfolio',
   action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis', riskpro:'analysis',
   screener:'portfolio', journal:'portfolio',
-  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai', 'position-builder':'ai', 'stress-test':'ai', 'comparator':'ai', 'intel-report':'ai', 'watchlist-builder':'ai','exit-planner':'ai',
+  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai', 'position-builder':'ai', 'stress-test':'ai', 'comparator':'ai', 'intel-report':'ai', 'watchlist-builder':'ai','exit-planner':'ai','ai-rebalancer':'ai','earnings-preview':'ai','dividend-opt':'ai','goal-planner':'ai',
   alerts:'tools', notifications:'tools', calendar:'tools', deals:'tools', news:'tools', tax:'tools', import:'tools', macro:'tools',
   settings:'settings'
 };
@@ -3908,6 +4007,10 @@ function go(id) {
   if(id==='intel-report') renderIntelReport();
   if(id==='watchlist-builder') initWatchlistBuilder();
   if(id==='exit-planner') renderExitPlanner();
+  if(id==='ai-rebalancer') renderAIRebalancer();
+  if(id==='earnings-preview') renderEarningsPreview();
+  if(id==='dividend-opt') renderDividendOpt();
+  if(id==='goal-planner') renderGoalPlanner();
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -11620,6 +11723,515 @@ Reply ONLY with compact valid JSON no markdown:
     planEl.innerHTML = `<div class="pn"><div class="ai-txt" style="color:var(--red)">Error generating exit plan: ${e.message}</div></div>`;
   }
   btn.disabled = false; btn.textContent = '🔄 Refresh Exit Plan';
+}
+
+// ── PHASE 14A: AI PORTFOLIO REBALANCER ───────────────────────────────────────
+
+function renderAIRebalancer() {
+  if (!D.holdings.length) return;
+  const totalVal = D.holdings.reduce((s,h) => s + (h.ltp||h.avgPrice)*h.qty, 0);
+
+  // Group by sector
+  const sectorMap = {};
+  D.holdings.forEach(h => {
+    const sec = (h.sector||'Other').trim() || 'Other';
+    if (!sectorMap[sec]) sectorMap[sec] = { value:0, holdings:[] };
+    sectorMap[sec].value += (h.ltp||h.avgPrice)*h.qty;
+    sectorMap[sec].holdings.push(h.symbol);
+  });
+  const sectors = Object.keys(sectorMap).sort();
+
+  // Build target inputs if not already set
+  const inp = document.getElementById('arb-target-inputs');
+  if (inp && !inp.dataset.built) {
+    inp.dataset.built = '1';
+    const even = Math.floor(100 / sectors.length);
+    inp.innerHTML = sectors.map((s,i) => {
+      const def = i < sectors.length-1 ? even : 100 - even*(sectors.length-1);
+      return `<label style="font-size:11px;color:var(--t2)">${s}<br>
+        <input type="number" id="arb-t-${s.replace(/\W/g,'_')}" value="${def}" min="0" max="100"
+          style="width:60px;margin-top:3px;background:var(--s2);border:1px solid var(--b2);border-radius:5px;padding:3px 7px;color:var(--t1)"> %
+      </label>`;
+    }).join('');
+  }
+
+  // Read target %
+  const targets = {};
+  sectors.forEach(s => {
+    const el = document.getElementById('arb-t-'+s.replace(/\W/g,'_'));
+    targets[s] = el ? Number(el.value)||0 : Math.floor(100/sectors.length);
+  });
+  const tTotal = Object.values(targets).reduce((a,b)=>a+b,0);
+
+  // Compute deviation
+  let over=0, under=0, moves=0;
+  const rows = sectors.map(s => {
+    const curPct = totalVal > 0 ? (sectorMap[s].value/totalVal*100) : 0;
+    const tgtPct = tTotal > 0 ? (targets[s]/tTotal*100) : 0;
+    const dev = curPct - tgtPct;
+    if (dev > 2) over++;
+    if (dev < -2) under++;
+    if (Math.abs(dev) > 2) moves++;
+    const reqVal = tgtPct/100 * totalVal;
+    const adjVal = reqVal - sectorMap[s].value;
+    return { s, curPct, tgtPct, dev, curVal: sectorMap[s].value, adjVal, stocks: sectorMap[s].holdings };
+  });
+
+  document.getElementById('arb-over').textContent = over;
+  document.getElementById('arb-under').textContent = under;
+  document.getElementById('arb-val').textContent = fC(totalVal);
+  document.getElementById('arb-moves').textContent = moves;
+
+  const wrap = document.getElementById('arb-table-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = `<table class="tbl">
+    <thead><tr><th>Sector</th><th>Holdings</th><th>Current Value</th><th>Current %</th><th>Target %</th><th>Deviation</th><th>Action</th></tr></thead>
+    <tbody>${rows.map(r => {
+      const cls = r.dev > 2 ? 'var(--red)' : r.dev < -2 ? 'var(--grn)' : 'var(--t3)';
+      const tag = r.dev > 2
+        ? `<span style="font-size:10px;background:rgba(255,80,80,.15);color:var(--red);border-radius:4px;padding:2px 7px;font-weight:600">TRIM</span>`
+        : r.dev < -2
+        ? `<span style="font-size:10px;background:rgba(40,200,100,.1);color:var(--grn);border-radius:4px;padding:2px 7px;font-weight:600">ADD</span>`
+        : `<span style="font-size:10px;background:var(--s2);color:var(--t4);border-radius:4px;padding:2px 7px">OK</span>`;
+      return `<tr>
+        <td style="font-weight:600">${r.s}</td>
+        <td style="font-size:11px;color:var(--t4)">${r.stocks.join(', ')}</td>
+        <td>${fC(r.curVal)}</td>
+        <td>${r.curPct.toFixed(1)}%</td>
+        <td>${r.tgtPct.toFixed(1)}%</td>
+        <td style="color:${cls};font-weight:600">${r.dev>0?'+':''}${r.dev.toFixed(1)}%</td>
+        <td>${tag}${Math.abs(r.adjVal)>1000?'<div style="font-size:10px;color:var(--t4);margin-top:2px">'+(r.adjVal>0?'Sell':'Buy')+' '+fC(Math.abs(r.adjVal))+'</div>':''}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+async function runRebalanceAI() {
+  if (!D.holdings.length) { toast('No holdings found'); return; }
+  const btn = document.getElementById('arb-ai-btn');
+  const planEl = document.getElementById('arb-ai-plan');
+  if (!btn || !planEl) return;
+  btn.disabled = true; btn.textContent = '⏳ Analysing…';
+  planEl.style.display = 'block';
+  planEl.innerHTML = `<div class="pn"><div class="pn-b" style="display:flex;gap:10px;align-items:center;color:var(--t3);font-size:13px"><div class="spin"></div>AI is building your rebalance plan…</div></div>`;
+
+  const totalVal = D.holdings.reduce((s,h) => s + (h.ltp||h.avgPrice)*h.qty, 0);
+  const sectorMap = {};
+  D.holdings.forEach(h => {
+    const sec = (h.sector||'Other').trim();
+    if (!sectorMap[sec]) sectorMap[sec] = 0;
+    sectorMap[sec] += (h.ltp||h.avgPrice)*h.qty;
+  });
+  const alloc = Object.entries(sectorMap).map(([s,v]) => `${s}: ${(v/totalVal*100).toFixed(1)}%`).join(', ');
+  const topH = D.holdings.slice(0,8).map(h=>h.symbol).join(', ');
+  const prompt = `Indian equity portfolio manager. Portfolio: ${fC(totalVal)}, sectors: ${alloc}. Top holdings: ${topH}.
+Provide a rebalancing strategy for Indian retail investor (long-term horizon, tax-efficient).
+Reply ONLY with compact valid JSON:
+{"summary":"<2 sentences>","top_overweight":"<sector>","top_underweight":"<sector>","actions":[{"sector":"X","action":"trim/add/hold","rationale":"<8 words>","priority":"high/medium/low"}],"tax_note":"<1 sentence on STCG/LTCG>"}`;
+
+  try {
+    const raw = await claudeJSON(prompt);
+    const res = (() => {
+      if (raw && typeof raw === 'object') return raw;
+      let s = (raw||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim();
+      s = s.replace(/\}\}+\s*$/,'}');
+      try { return JSON.parse(s); } catch(e) {
+        const m = s.match(/\{[\s\S]*\}/); if (m) try { return JSON.parse(m[0]); } catch(e2) {}
+        return null;
+      }
+    })();
+    if (!res) {
+      planEl.innerHTML = `<div class="pn"><div class="ai-txt">${md2h(typeof raw==='string'?raw:'No response')}</div></div>`;
+    } else {
+      const priColor = {high:'var(--red)',medium:'var(--orn)',low:'var(--grn)'};
+      planEl.innerHTML = `<div class="pn" style="margin-bottom:14px">
+        <div class="pn-h"><div class="pn-t">🤖 AI Rebalance Plan</div></div>
+        <div class="pn-b">
+          <div style="font-size:13px;color:var(--t2);margin-bottom:12px">${res.summary||''}</div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+            ${res.top_overweight?`<div style="background:rgba(255,80,80,.08);border:1px solid rgba(255,80,80,.2);border-radius:8px;padding:8px 14px;font-size:12px"><span style="color:var(--t4)">Overweight:</span> <b style="color:var(--red)">${res.top_overweight}</b></div>`:''}
+            ${res.top_underweight?`<div style="background:rgba(40,200,100,.06);border:1px solid rgba(40,200,100,.2);border-radius:8px;padding:8px 14px;font-size:12px"><span style="color:var(--t4)">Underweight:</span> <b style="color:var(--grn)">${res.top_underweight}</b></div>`:''}
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px">
+            ${(res.actions||[]).map(a=>`<div style="flex:1;min-width:160px;background:var(--s2);border-radius:10px;padding:10px;border-left:3px solid ${priColor[a.priority]||'var(--b2)'}">
+              <div style="font-size:13px;font-weight:700;color:var(--t1)">${a.sector}</div>
+              <div style="font-size:11px;color:${priColor[a.priority]||'var(--t2)'};font-weight:700;margin:3px 0">${(a.action||'').toUpperCase()}</div>
+              <div style="font-size:11px;color:var(--t3)">${a.rationale||''}</div>
+            </div>`).join('')}
+          </div>
+          ${res.tax_note?`<div style="margin-top:12px;font-size:11px;color:var(--t4);background:var(--s2);border-radius:6px;padding:8px 12px">💡 ${res.tax_note}</div>`:''}
+        </div>
+      </div>`;
+    }
+  } catch(e) {
+    planEl.innerHTML = `<div class="pn"><div class="ai-txt" style="color:var(--red)">Error: ${e.message}</div></div>`;
+  }
+  btn.disabled = false; btn.textContent = '🤖 Generate Rebalance Plan';
+}
+
+// ── PHASE 14B: AI EARNINGS PREVIEW ───────────────────────────────────────────
+
+function renderEarningsPreview() {
+  if (!D.holdings.length) return;
+  // Rule-based earnings risk: recent losers, volatile sectors, and recently added stocks likely near earnings
+  const riskySectors = ['banking','finance','nbfc','it','technology','pharma','chemicals','metal','power'];
+  let holdCnt=0, exitCnt=0, riskyCnt=0;
+  const rows = D.holdings.map(h => {
+    const ltp = h.ltp||h.avgPrice;
+    const gainPct = (ltp - h.avgPrice)/h.avgPrice*100;
+    const days = hDays(h.buyDate)||0;
+    const sector = (h.sector||'').toLowerCase();
+    const isRisky = riskySectors.some(r => sector.includes(r));
+    // Earnings risk scoring (0-10)
+    let risk = 0;
+    if (gainPct < -10) risk += 3;        // Already in loss — earnings could hurt more
+    else if (gainPct > 20) risk += 2;    // Big gain — could sell on news
+    if (isRisky) risk += 2;              // Volatile sector
+    if (days < 90) risk += 2;           // Recent buy — watch closely
+    if (gainPct < -20) risk += 1;        // Deep loss
+    risk = Math.min(10, risk);
+    const verdict = risk >= 6 ? 'EXIT BEFORE' : risk >= 3 ? 'WATCH CLOSE' : 'HOLD THROUGH';
+    if (verdict === 'EXIT BEFORE') exitCnt++;
+    else holdCnt++;
+    if (risk >= 6) riskyCnt++;
+    return { h, ltp, gainPct, days, risk, verdict, sector: h.sector||'Other' };
+  }).sort((a,b) => b.risk - a.risk);
+
+  document.getElementById('ep2-hold').textContent = holdCnt;
+  document.getElementById('ep2-exit').textContent = exitCnt;
+  document.getElementById('ep2-risky').textContent = riskyCnt;
+  document.getElementById('ep2-total').textContent = D.holdings.length;
+
+  const wrap = document.getElementById('ep2-table-wrap');
+  if (!wrap) return;
+  const vColor = { 'EXIT BEFORE':'var(--red)', 'WATCH CLOSE':'var(--orn)', 'HOLD THROUGH':'var(--grn)' };
+  wrap.innerHTML = `<table class="tbl">
+    <thead><tr><th>Stock</th><th>Sector</th><th>LTP</th><th>P&L%</th><th>Days Held</th><th>Risk Score</th><th>Earnings Verdict</th></tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td><div style="font-weight:600">${r.h.symbol}</div><div style="font-size:10px;color:var(--t4)">${r.h.name||''}</div></td>
+      <td style="font-size:11px;color:var(--t4)">${r.sector}</td>
+      <td>${fC(r.ltp)}</td>
+      <td class="${r.gainPct>=0?'up':'dn'}">${r.gainPct>=0?'+':''}${r.gainPct.toFixed(1)}%</td>
+      <td>${r.days}d</td>
+      <td><span style="display:inline-block;background:var(--s2);border-radius:50%;width:26px;height:26px;line-height:26px;text-align:center;font-weight:700;font-size:12px;color:${r.risk>=6?'var(--red)':r.risk>=3?'var(--orn)':'var(--grn)'}">${r.risk}</span></td>
+      <td><span style="font-size:11px;font-weight:700;color:${vColor[r.verdict]}">${r.verdict}</span></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function runEarningsAI() {
+  if (!D.holdings.length) { toast('No holdings found'); return; }
+  const btn = document.getElementById('ep2-ai-btn');
+  const planEl = document.getElementById('ep2-ai-plan');
+  if (!btn || !planEl) return;
+  btn.disabled = true; btn.textContent = '⏳ Analysing…';
+  planEl.style.display = 'block';
+  planEl.innerHTML = `<div class="pn"><div class="pn-b" style="display:flex;gap:10px;align-items:center;color:var(--t3);font-size:13px"><div class="spin"></div>AI is generating earnings strategy…</div></div>`;
+
+  const top5 = D.holdings.slice(0,5).map(h => {
+    const g = ((h.ltp||h.avgPrice)-h.avgPrice)/h.avgPrice*100;
+    return `${h.symbol} (${h.sector||'?'}): ${g.toFixed(1)}% gain, ${hDays(h.buyDate)||0}d held`;
+  }).join('\n');
+
+  const prompt = `Indian equity analyst. Pre-earnings strategy for these 5 holdings:
+${top5}
+Indian markets context: Q1 results April-May, Q2 Jul-Aug, Q3 Oct-Nov, Q4 Jan-Feb.
+Reply ONLY with compact valid JSON:
+{"summary":"<2 sentences>","high_risk_sector":"<sector>","recommendations":[{"symbol":"X","verdict":"HOLD/EXIT/TRIM","rationale":"<8 words>","risk":"high/medium/low"}],"market_note":"<1 sentence on current market conditions>"}`;
+
+  try {
+    const raw = await claudeJSON(prompt);
+    const res = (() => {
+      if (raw && typeof raw === 'object') return raw;
+      let s = (raw||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim();
+      s = s.replace(/\}\][\},]\s*"(?:market_note|high_risk)/g, (m)=>m.replace(/\}\],/,'}'+',"').replace(/\}\}\s*,/,'}'+',"'));
+      s = s.replace(/\}\}+\s*$/,'}');
+      try { return JSON.parse(s); } catch(e) {
+        const m2 = s.match(/\{[\s\S]*\}/); if (m2) try { return JSON.parse(m2[0]); } catch(e2) {}
+        return null;
+      }
+    })();
+    if (!res) {
+      planEl.innerHTML = `<div class="pn"><div class="ai-txt">${md2h(typeof raw==='string'?raw:'No response')}</div></div>`;
+    } else {
+      const rColor = {high:'var(--red)',medium:'var(--orn)',low:'var(--grn)'};
+      planEl.innerHTML = `<div class="pn" style="margin-bottom:14px">
+        <div class="pn-h"><div class="pn-t">🤖 AI Earnings Strategy</div></div>
+        <div class="pn-b">
+          <div style="font-size:13px;color:var(--t2);margin-bottom:12px">${res.summary||''}</div>
+          ${res.high_risk_sector?`<div style="background:rgba(255,80,80,.08);border:1px solid rgba(255,80,80,.2);border-radius:8px;padding:8px 14px;font-size:12px;margin-bottom:12px">⚠️ <b style="color:var(--red)">High-risk this quarter:</b> ${res.high_risk_sector}</div>`:''}
+          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            ${(res.recommendations||[]).map(r=>`<div style="flex:1;min-width:160px;background:var(--s2);border-radius:10px;padding:10px;border-left:3px solid ${rColor[r.risk]||'var(--b2)'}">
+              <div style="font-size:13px;font-weight:700;color:var(--t1)">${r.symbol}</div>
+              <div style="font-size:11px;color:${rColor[r.risk]||'var(--t2)'};font-weight:700;margin:3px 0">${r.verdict||''}</div>
+              <div style="font-size:11px;color:var(--t3)">${r.rationale||''}</div>
+            </div>`).join('')}
+          </div>
+          ${res.market_note?`<div style="font-size:11px;color:var(--t4);background:var(--s2);border-radius:6px;padding:8px 12px">📊 ${res.market_note}</div>`:''}
+        </div>
+      </div>`;
+    }
+  } catch(e) {
+    planEl.innerHTML = `<div class="pn"><div class="ai-txt" style="color:var(--red)">Error: ${e.message}</div></div>`;
+  }
+  btn.disabled = false; btn.textContent = '🤖 Analyse All Holdings';
+}
+
+// ── PHASE 14C: AI DIVIDEND OPTIMIZER ─────────────────────────────────────────
+
+// Known Indian dividend yield data (indicative, updated periodically)
+const KNOWN_DIVYIELDS = {
+  COALINDIA:8.5, ONGC:5.0, POWERGRID:5.8, NTPC:5.2, RECLTD:4.5, PFC:5.0,
+  ITC:3.2, HINDUNILVR:1.8, TATASTEEL:1.5, BPCL:6.0, IOCL:7.0, HPCL:6.5,
+  BAJFINANCE:0.3, HDFCBANK:1.1, ICICIBANK:0.8, SBIN:2.5, AXISBANK:0.1,
+  INFY:2.8, TCS:1.4, WIPRO:0.2, HCLTECH:3.5, TECHM:2.8,
+  MARUTI:0.6, BAJAJ_AUTO:2.0, HEROMOTOCO:3.5, TATAMOTORS:0.0,
+  ADANIENT:0.0, ADANIPORTS:0.3, VEDL:5.5, HINDALCO:1.0,
+  PIDILITIND:0.5, ASIANPAINT:0.8, BERGEPAINT:0.6,
+  SUNPHARMA:0.6, DRREDDY:0.7, CIPLA:0.4, DIVISLAB:0.4,
+  TITAN:0.4, TRENT:0.1, DMART:0.0
+};
+
+function renderDividendOpt() {
+  if (!D.holdings.length) return;
+  let totalDivIncome = 0, topYield = 0, topName = '—', zeroCnt = 0;
+
+  const rows = D.holdings.map(h => {
+    const ltp = h.ltp||h.avgPrice;
+    const cv = ltp * h.qty;
+    // Look up yield — check known table, then fall back to h.dividendYield if stored
+    const sym = h.symbol?.toUpperCase().replace(/[^A-Z0-9]/g,'');
+    const yieldPct = KNOWN_DIVYIELDS[sym] || h.dividendYield || 0;
+    const annualDiv = cv * yieldPct / 100;
+    totalDivIncome += annualDiv;
+    if (yieldPct > topYield) { topYield = yieldPct; topName = h.symbol; }
+    if (yieldPct === 0) zeroCnt++;
+    return { h, ltp, cv, yieldPct, annualDiv };
+  }).sort((a,b) => b.yieldPct - a.yieldPct);
+
+  const totalPortVal = D.holdings.reduce((s,h)=>(s+(h.ltp||h.avgPrice)*h.qty),0);
+  const avgYield = totalPortVal > 0 ? totalDivIncome/totalPortVal*100 : 0;
+
+  document.getElementById('dvo-annual').textContent = fC(Math.round(totalDivIncome));
+  document.getElementById('dvo-yield').textContent = avgYield.toFixed(2)+'%';
+  document.getElementById('dvo-top').textContent = topName;
+  document.getElementById('dvo-zero').textContent = zeroCnt;
+
+  const wrap = document.getElementById('dvo-table-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = `<table class="tbl">
+    <thead><tr><th>Stock</th><th>Value</th><th>Div Yield</th><th>Est. Annual Div</th><th>Monthly Div</th><th>Rating</th></tr></thead>
+    <tbody>${rows.map(r => {
+      const rating = r.yieldPct >= 5 ? '⭐⭐⭐ High' : r.yieldPct >= 2 ? '⭐⭐ Moderate' : r.yieldPct > 0 ? '⭐ Low' : '— None';
+      const rColor = r.yieldPct >= 5 ? 'var(--grn)' : r.yieldPct >= 2 ? 'var(--yel)' : 'var(--t4)';
+      return `<tr>
+        <td><div style="font-weight:600">${r.h.symbol}</div><div style="font-size:10px;color:var(--t4)">${r.h.name||''}</div></td>
+        <td>${fC(r.cv)}</td>
+        <td style="color:${rColor};font-weight:600">${r.yieldPct > 0 ? r.yieldPct.toFixed(1)+'%' : '—'}</td>
+        <td style="color:var(--grn)">${r.annualDiv > 0 ? fC(Math.round(r.annualDiv)) : '—'}</td>
+        <td style="color:var(--t4)">${r.annualDiv > 0 ? fC(Math.round(r.annualDiv/12)) : '—'}</td>
+        <td style="font-size:11px">${rating}</td>
+      </tr>`;
+    }).join('')}
+    <tr style="background:var(--s2);font-weight:700">
+      <td>TOTAL</td><td>${fC(totalPortVal)}</td>
+      <td style="color:var(--grn)">${avgYield.toFixed(2)}%</td>
+      <td style="color:var(--grn)">${fC(Math.round(totalDivIncome))}</td>
+      <td style="color:var(--grn)">${fC(Math.round(totalDivIncome/12))}</td>
+      <td></td>
+    </tr>
+    </tbody>
+  </table>`;
+}
+
+async function runDividendAI() {
+  if (!D.holdings.length) { toast('No holdings found'); return; }
+  const btn = document.getElementById('dvo-ai-btn');
+  const planEl = document.getElementById('dvo-ai-plan');
+  if (!btn || !planEl) return;
+  btn.disabled = true; btn.textContent = '⏳ Analysing…';
+  planEl.style.display = 'block';
+  planEl.innerHTML = `<div class="pn"><div class="pn-b" style="display:flex;gap:10px;align-items:center;color:var(--t3);font-size:13px"><div class="spin"></div>AI is building dividend optimization plan…</div></div>`;
+
+  const totalVal = D.holdings.reduce((s,h)=>(s+(h.ltp||h.avgPrice)*h.qty),0);
+  let totalDiv = 0;
+  const top5 = D.holdings.slice(0,5).map(h => {
+    const sym = h.symbol?.toUpperCase().replace(/[^A-Z0-9]/g,'');
+    const y = KNOWN_DIVYIELDS[sym]||0;
+    const cv = (h.ltp||h.avgPrice)*h.qty;
+    totalDiv += cv*y/100;
+    return `${h.symbol}: yield=${y}%, value=${fC(cv)}`;
+  }).join('\n');
+
+  const prompt = `Indian dividend investing expert. Portfolio ₹${fC(totalVal)}, est. annual dividend ₹${fC(Math.round(totalDiv))}. Top 5 holdings:
+${top5}
+Indian tax: dividends taxed at slab rate. Suggest high-dividend Indian stocks from NSE to improve passive income.
+Reply ONLY with compact valid JSON:
+{"summary":"<2 sentences>","current_yield_assessment":"good/average/poor","suggestions":[{"action":"add/increase/reduce","symbol":"X","reason":"<8 words>","yield_pct":3.5}],"target_monthly_income":"<amount>","tax_note":"<1 sentence>"}`;
+
+  try {
+    const raw = await claudeJSON(prompt);
+    const res = (() => {
+      if (raw && typeof raw === 'object') return raw;
+      let s = (raw||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim();
+      s = s.replace(/\}\}+\s*$/,'}');
+      try { return JSON.parse(s); } catch(e) {
+        const m = s.match(/\{[\s\S]*\}/); if (m) try { return JSON.parse(m[0]); } catch(e2) {}
+        return null;
+      }
+    })();
+    if (!res) {
+      planEl.innerHTML = `<div class="pn"><div class="ai-txt">${md2h(typeof raw==='string'?raw:'No response')}</div></div>`;
+    } else {
+      const aColor = {add:'var(--grn)',increase:'var(--cyn)',reduce:'var(--orn)'};
+      const assessBg = res.current_yield_assessment==='good'?'rgba(40,200,100,.1)':res.current_yield_assessment==='poor'?'rgba(255,80,80,.1)':'rgba(255,160,40,.1)';
+      const assessColor = res.current_yield_assessment==='good'?'var(--grn)':res.current_yield_assessment==='poor'?'var(--red)':'var(--orn)';
+      planEl.innerHTML = `<div class="pn" style="margin-bottom:14px">
+        <div class="pn-h"><div class="pn-t">🤖 AI Dividend Strategy</div>${res.target_monthly_income?'<div style="font-size:11px;color:var(--grn)">Target: '+res.target_monthly_income+'/mo</div>':''}</div>
+        <div class="pn-b">
+          <div style="font-size:13px;color:var(--t2);margin-bottom:12px">${res.summary||''}</div>
+          ${res.current_yield_assessment?`<div style="background:${assessBg};border-radius:8px;padding:8px 14px;font-size:12px;margin-bottom:12px;display:inline-block">Yield Assessment: <b style="color:${assessColor}">${(res.current_yield_assessment||'').toUpperCase()}</b></div>`:''}
+          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            ${(res.suggestions||[]).map(sg=>`<div style="flex:1;min-width:160px;background:var(--s2);border-radius:10px;padding:10px;border-left:3px solid ${aColor[sg.action]||'var(--b2)'}">
+              <div style="font-size:13px;font-weight:700;color:var(--t1)">${sg.symbol}</div>
+              <div style="font-size:11px;color:${aColor[sg.action]||'var(--t2)'};font-weight:700;margin:3px 0">${(sg.action||'').toUpperCase()} ${sg.yield_pct?'· '+sg.yield_pct+'% yield':''}</div>
+              <div style="font-size:11px;color:var(--t3)">${sg.reason||''}</div>
+            </div>`).join('')}
+          </div>
+          ${res.tax_note?`<div style="font-size:11px;color:var(--t4);background:var(--s2);border-radius:6px;padding:8px 12px">🧾 ${res.tax_note}</div>`:''}
+        </div>
+      </div>`;
+    }
+  } catch(e) {
+    planEl.innerHTML = `<div class="pn"><div class="ai-txt" style="color:var(--red)">Error: ${e.message}</div></div>`;
+  }
+  btn.disabled = false; btn.textContent = '🤖 Optimize Dividends';
+}
+
+// ── PHASE 14D: AI GOAL PLANNER ────────────────────────────────────────────────
+
+function renderGoalPlanner() {
+  const target = Number(document.getElementById('gp-target')?.value)||10000000;
+  const years  = Number(document.getElementById('gp-years')?.value)||10;
+  const sip    = Number(document.getElementById('gp-sip')?.value)||25000;
+  const rate   = Number(document.getElementById('gp-rate')?.value)||12;
+
+  const curPortVal = D.holdings.reduce((s,h)=>(s+(h.ltp||h.avgPrice)*h.qty),0);
+  const r = rate/100/12;
+  const n = years*12;
+
+  // Future value of current portfolio (compound)
+  const fvPortfolio = curPortVal * Math.pow(1+rate/100, years);
+  // Future value of SIP (monthly compounding)
+  const fvSIP = sip * (Math.pow(1+r,n)-1) / r * (1+r);
+  const totalCorpus = fvPortfolio + fvSIP;
+  const gap = target - totalCorpus;
+
+  // Required SIP to meet goal (accounting for existing portfolio)
+  const remainingNeeded = target - fvPortfolio;
+  const reqSIP = remainingNeeded > 0 ? remainingNeeded * r / ((Math.pow(1+r,n)-1)*(1+r)) : 0;
+  const onTrack = gap <= 0;
+
+  document.getElementById('gp-corpus').textContent = fC(Math.round(totalCorpus));
+  document.getElementById('gp-gap').textContent = gap > 0 ? fC(Math.round(gap)) : '✅ Met';
+  document.getElementById('gp-req-sip').textContent = reqSIP > 0 ? fC(Math.round(reqSIP))+'/mo' : '✅ On track';
+  document.getElementById('gp-ontrack').textContent = onTrack ? '✅ YES' : '❌ NO';
+
+  // Render year-by-year projection chart (simple table)
+  const wrap = document.getElementById('gp-chart-wrap');
+  if (!wrap) return;
+  const milestones = [1,2,3,5,7,10,15,20].filter(y=>y<=years);
+  if (!milestones.includes(years)) milestones.push(years);
+  wrap.innerHTML = `<div class="pn"><div class="pn-h"><div class="pn-t">📈 Growth Projection</div><div style="font-size:11px;color:var(--t4)">Starting corpus: ${fC(Math.round(curPortVal))} · SIP: ${fC(sip)}/mo · Rate: ${rate}%</div></div>
+  <div class="pn-b">
+  <table class="tbl"><thead><tr><th>Year</th><th>Portfolio</th><th>SIP Corpus</th><th>Total</th><th>vs Goal</th></tr></thead>
+  <tbody>${milestones.map(y => {
+    const fvP = curPortVal * Math.pow(1+rate/100, y);
+    const ny = y*12; const ry = rate/100/12;
+    const fvS = sip * (Math.pow(1+ry,ny)-1) / ry * (1+ry);
+    const tot = fvP + fvS;
+    const pct = (tot/target*100).toFixed(0);
+    const barW = Math.min(100, Number(pct));
+    const barColor = barW >= 100 ? 'var(--grn)' : barW >= 60 ? 'var(--yel)' : 'var(--orn)';
+    return `<tr>
+      <td style="font-weight:600">Yr ${y}</td>
+      <td>${fC(Math.round(fvP))}</td>
+      <td>${fC(Math.round(fvS))}</td>
+      <td style="font-weight:600">${fC(Math.round(tot))}</td>
+      <td style="min-width:120px"><div style="background:var(--s2);border-radius:4px;height:8px;overflow:hidden"><div style="width:${barW}%;height:100%;background:${barColor};border-radius:4px"></div></div><div style="font-size:10px;color:var(--t4);margin-top:2px">${pct}% of goal</div></td>
+    </tr>`;
+  }).join('')}</tbody></table>
+  </div></div>`;
+}
+
+async function runGoalAI() {
+  const target = Number(document.getElementById('gp-target')?.value)||10000000;
+  const years  = Number(document.getElementById('gp-years')?.value)||10;
+  const sip    = Number(document.getElementById('gp-sip')?.value)||25000;
+  const rate   = Number(document.getElementById('gp-rate')?.value)||12;
+  const curPortVal = D.holdings.reduce((s,h)=>(s+(h.ltp||h.avgPrice)*h.qty),0);
+
+  const btn = document.getElementById('gp-ai-btn');
+  const planEl = document.getElementById('gp-ai-plan');
+  if (!btn || !planEl) return;
+  btn.disabled = true; btn.textContent = '⏳ Building plan…';
+  planEl.style.display = 'block';
+  planEl.innerHTML = `<div class="pn"><div class="pn-b" style="display:flex;gap:10px;align-items:center;color:var(--t3);font-size:13px"><div class="spin"></div>AI is crafting your personalised goal plan…</div></div>`;
+
+  const r = rate/100/12; const n = years*12;
+  const fvP = curPortVal * Math.pow(1+rate/100, years);
+  const fvS = sip * (Math.pow(1+r,n)-1) / r * (1+r);
+  const totalCorpus = Math.round(fvP + fvS);
+  const onTrack = totalCorpus >= target;
+
+  const topH = D.holdings.slice(0,5).map(h=>h.symbol).join(', ');
+  const prompt = `Indian financial planner. Goal: ₹${fC(target)} in ${years} years. Current portfolio: ₹${fC(Math.round(curPortVal))}. Monthly SIP: ₹${fC(sip)}. Expected return: ${rate}%/yr. Projected corpus: ₹${fC(totalCorpus)}. On track: ${onTrack}. Holdings include: ${topH}.
+Provide practical, actionable plan for Indian retail investor. Consider mutual funds, NPS, tax-saving (80C, ELSS).
+Reply ONLY with compact valid JSON:
+{"assessment":"on_track/needs_action/at_risk","summary":"<2 sentences>","key_actions":[{"action":"<specific step>","impact":"high/medium/low","category":"equity/mutual_fund/nps/insurance/other"}],"sip_advice":"<1 sentence>","tax_saving_tip":"<1 sentence>"}`;
+
+  try {
+    const raw = await claudeJSON(prompt);
+    const res = (() => {
+      if (raw && typeof raw === 'object') return raw;
+      let s = (raw||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim();
+      s = s.replace(/\}\}+\s*$/,'}');
+      try { return JSON.parse(s); } catch(e) {
+        const m = s.match(/\{[\s\S]*\}/); if (m) try { return JSON.parse(m[0]); } catch(e2) {}
+        return null;
+      }
+    })();
+    if (!res) {
+      planEl.innerHTML = `<div class="pn"><div class="ai-txt">${md2h(typeof raw==='string'?raw:'No response')}</div></div>`;
+    } else {
+      const assColor = res.assessment==='on_track'?'var(--grn)':res.assessment==='needs_action'?'var(--orn)':'var(--red)';
+      const impColor = {high:'var(--red)',medium:'var(--orn)',low:'var(--t4)'};
+      const catIcon  = {equity:'📈',mutual_fund:'🏦',nps:'🛡',insurance:'💼',other:'💡'};
+      planEl.innerHTML = `<div class="pn" style="margin-bottom:14px">
+        <div class="pn-h"><div class="pn-t">🤖 AI Goal Plan</div><div style="font-size:12px;font-weight:700;color:${assColor}">${(res.assessment||'').replace(/_/g,' ').toUpperCase()}</div></div>
+        <div class="pn-b">
+          <div style="font-size:13px;color:var(--t2);margin-bottom:12px">${res.summary||''}</div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+            ${(res.key_actions||[]).map(a=>`<div style="background:var(--s2);border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px">
+              <div style="display:flex;gap:10px;align-items:center">
+                <span style="font-size:18px">${catIcon[a.category]||'💡'}</span>
+                <div>
+                  <div style="font-size:12px;font-weight:600;color:var(--t1)">${a.action}</div>
+                  <div style="font-size:10px;color:var(--t4)">${a.category||''}</div>
+                </div>
+              </div>
+              <span style="font-size:10px;font-weight:700;color:${impColor[a.impact]||'var(--t4)'};white-space:nowrap">${(a.impact||'').toUpperCase()}</span>
+            </div>`).join('')}
+          </div>
+          ${res.sip_advice?`<div style="background:rgba(40,200,100,.07);border-radius:6px;padding:8px 12px;font-size:11px;color:var(--grn);margin-bottom:8px">📈 ${res.sip_advice}</div>`:''}
+          ${res.tax_saving_tip?`<div style="background:var(--s2);border-radius:6px;padding:8px 12px;font-size:11px;color:var(--t4)">🧾 ${res.tax_saving_tip}</div>`:''}
+        </div>
+      </div>`;
+    }
+  } catch(e) {
+    planEl.innerHTML = `<div class="pn"><div class="ai-txt" style="color:var(--red)">Error: ${e.message}</div></div>`;
+  }
+  btn.disabled = false; btn.textContent = '🤖 Build My Plan';
 }
 
 // ── PHASE 10: PORTFOLIO INTELLIGENCE REPORT ─────────────────────────────────
