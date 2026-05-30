@@ -751,6 +751,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('planner')">📐 Planner</div>
         <div class="tn-drop-item" onclick="go('strategies')">🧠 AI Strategies</div>
         <div class="tn-drop-item" onclick="go('fair-value')">💎 Fair Value Engine</div>
+        <div class="tn-drop-item" onclick="go('entry-triggers')">🎯 Entry Triggers</div>
       </div>
     </div>
     <!-- Tools dropdown -->
@@ -2011,6 +2012,70 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
   </div>
 
+  <!-- ═══ ENTRY TRIGGER ENGINE ══════════════════════════ -->
+  <div class="sec" id="sec-entry-triggers">
+    <div style="max-width:1000px;margin:0 auto;padding:20px 16px">
+
+      <!-- Header -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+        <div>
+          <div style="font-size:17px;font-weight:700;color:var(--t1)">🎯 Entry Trigger Engine</div>
+          <div style="font-size:11px;color:var(--t4);margin-top:2px">Rule-based entry gates for all watchlist stocks · AI one-liner per stock</div>
+        </div>
+        <button class="btn btn-p" onclick="renderEntryTriggers()">🔄 Refresh</button>
+      </div>
+
+      <!-- Summary bar -->
+      <div class="sg sg-4 gap" id="et-summary" style="margin-bottom:18px">
+        <div class="sc c3"><div class="sc-lbl">Ready to Buy</div><div class="sc-val up" id="et-ready">—</div><div class="sc-sub">All gates passed</div></div>
+        <div class="sc c2"><div class="sc-lbl">1 Gate Away</div><div class="sc-val" id="et-close" style="color:var(--yel)">—</div><div class="sc-sub">Almost there</div></div>
+        <div class="sc c1"><div class="sc-lbl">Watching</div><div class="sc-val" id="et-watching">—</div><div class="sc-sub">Multiple gates</div></div>
+        <div class="sc c4"><div class="sc-lbl">Avoid</div><div class="sc-val dn" id="et-avoid">—</div><div class="sc-sub">AI flagged</div></div>
+      </div>
+
+      <!-- Gate legend -->
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;padding:10px 14px;background:var(--s2);border-radius:8px;border:1px solid var(--b1)">
+        <div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;align-self:center">Gates:</div>
+        <div style="font-size:11px;color:var(--t3)">📍 <b>Price</b> — CMP ≤ Entry High</div>
+        <div style="font-size:11px;color:var(--t3)">📊 <b>52W</b> — Not at 52W high (&lt;75%)</div>
+        <div style="font-size:11px;color:var(--t3)">💰 <b>Value</b> — PE below sector avg</div>
+        <div style="font-size:11px;color:var(--t3)">🤖 <b>AI</b> — Not flagged AVOID</div>
+      </div>
+
+      <!-- Table -->
+      <div class="pn" style="overflow-x:auto">
+        <table class="tbl" style="min-width:800px">
+          <thead>
+            <tr>
+              <th style="text-align:left">Stock</th>
+              <th style="text-align:right">CMP</th>
+              <th style="text-align:right">Entry Range</th>
+              <th style="text-align:right">Gap to Entry</th>
+              <th style="text-align:center">Gates</th>
+              <th style="text-align:center">Score</th>
+              <th style="text-align:center">Pattern</th>
+              <th style="text-align:left">Blocking Reason</th>
+              <th style="text-align:center">AI Trigger</th>
+            </tr>
+          </thead>
+          <tbody id="et-tbody">
+            <tr><td colspan="8" style="padding:40px;text-align:center;color:var(--t4)">Add stocks to watchlist to see entry gates.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- AI Triggers panel -->
+      <div id="et-ai-panel" style="margin-top:18px;display:none">
+        <div class="pn-h" style="display:flex;justify-content:space-between;align-items:center">
+          <div class="pn-t">🤖 AI Entry Triggers</div>
+          <button class="btn btn-p btn-sm" onclick="runAllEntryTriggers()">Run All AI Triggers</button>
+        </div>
+        <div class="pn-b" id="et-ai-results" style="display:flex;flex-direction:column;gap:8px;padding:14px"></div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ═══ SETTINGS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-settings">
     <div class="sec-head"><div class="sec-title">Settings</div></div>
@@ -3212,14 +3277,14 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio', dividends:'portfolio', divcal:'portfolio',
   action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis', riskpro:'analysis',
   screener:'portfolio', journal:'portfolio',
-  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai',
+  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai',
   alerts:'tools', notifications:'tools', calendar:'tools', deals:'tools', news:'tools', tax:'tools', import:'tools', macro:'tools',
   settings:'settings'
 };
@@ -3260,6 +3325,7 @@ function go(id) {
   if(id==='macro') renderMacro();
   if(id==='daily-brief') renderDailyBrief();
   if(id==='fair-value') renderFairValueEngine();
+  if(id==='entry-triggers') renderEntryTriggers();
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -5666,6 +5732,10 @@ function renderWatchlist() {
 
     const lastAnal = w.lastAnalysed ? new Date(w.lastAnalysed).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : null;
 
+    // Pattern detection chip
+    const pat = detectPattern(ltp, w._h52, w._l52, w._pe, w.sector);
+    const patChip = pat ? `<span title="${pat.desc} · ${pat.hint}" style="cursor:help;font-size:9px;background:var(--s3);border:1px solid var(--b2);border-radius:3px;padding:1px 6px;color:${pat.color};font-weight:600">${pat.icon} ${pat.label}</span>` : '';
+
     return `<div class="wl-card" id="wlc-${w.id}" style="background:${ds.bg};border-color:${ds.border}">
 
       <!-- ── HEADER ROW ────────────────────────────────── -->
@@ -5678,8 +5748,10 @@ function renderWatchlist() {
             ${hasAI ? `<span style="font-size:12px;font-weight:700;color:${ds.color}">${ds.icon} ${ds.label}</span>` : `<span style="font-size:10px;color:var(--t4)">⏳ Run AI Analyze</span>`}
             ${w.wlConviction ? `<span style="font-size:9px;background:var(--s4);border:1px solid var(--b2);border-radius:3px;padding:1px 6px;color:var(--t3)">${w.wlConviction}</span>` : ''}
             ${inRange ? `<span style="font-size:9px;background:rgba(45,211,111,.15);border:1px solid rgba(45,211,111,.3);border-radius:3px;padding:1px 6px;color:var(--grn);font-weight:700">📍 IN RANGE</span>` : ''}
+            ${patChip}
           </div>
           <div class="snm" style="margin-top:3px">${w.name} · ${w.sector||'—'}</div>
+          ${(() => { const g=_entryGates(w); return g.total>0?`<div style="display:flex;gap:3px;align-items:center;margin-top:5px"><span style="font-size:9px;color:var(--t4);margin-right:2px">Gates:</span>${g.gates.map(gt=>`<span title="${gt.detail}" style="font-size:11px;cursor:help">${gt.pass===true?'✅':gt.pass===false?'❌':'⬜'}</span>`).join('')}<span style="font-size:9px;color:${g.pct>=100?'var(--grn)':g.pct>=75?'var(--yel)':'var(--red)'};font-weight:700;margin-left:2px">${g.passed}/${g.total}</span></div>`:''; })()}
           ${scoreBar}
           ${lastAnal ? `<div style="font-size:9px;color:var(--t4);margin-top:3px">AI: ${lastAnal}</div>` : ''}
         </div>
@@ -9981,6 +10053,46 @@ const SECTOR_PE = {IT:28,Banking:14,FMCG:48,Pharma:32,Auto:20,Energy:15,
   Infra:18,Metals:12,Defence:35,Chemicals:28,Telecom:22,'Real Estate':25,default:22};
 
 // ── SCORE ENGINE (Rule-based, instant, no API) ─────────────────────────
+// ── TECHNICAL PATTERN DETECTOR ────────────────────────────────────────
+// Uses only 52W High/Low + LTP (data always available). Returns a pattern
+// object with label, color, icon, desc, and actionHint.
+function detectPattern(ltp, h52, l52, pe, sector) {
+  if (!ltp || !h52 || !l52 || h52 <= l52) return null;
+  const pos52  = Math.round((ltp - l52) / (h52 - l52) * 100);
+  const avgPE  = SECTOR_PE[sector||'default'] || SECTOR_PE.default;
+  const dropPct = Math.round((h52 - ltp) / h52 * 100); // % below 52W high
+
+  // Ordered from most specific to least
+  if (pos52 >= 99)
+    return {icon:'🚀', label:'52W Breakout',    color:'var(--grn)',  pos52,
+            desc:`At 52W high — momentum breakout`, hint:'Confirm volume; trail SL tightly'};
+  if (pos52 >= 82)
+    return {icon:'⚡', label:'Near Breakout',   color:'var(--yel)',  pos52,
+            desc:`${100-pos52}% from 52W high`, hint:'Watch for breakout candle with volume'};
+  if (pos52 <= 8)
+    return {icon:'🎯', label:'52W Low Watch',   color:'var(--ac)',   pos52,
+            desc:`Only ${pos52}% above 52W low`, hint:'Wait for reversal confirmation before entry'};
+  if (pos52 <= 25 && pe && pe < avgPE * 0.85)
+    return {icon:'💎', label:'Value + Dip',     color:'var(--cyn)',  pos52,
+            desc:`Deep dip + PE ${pe} vs sector ${avgPE}`, hint:'Strong accumulation zone — stagger entry'};
+  if (pos52 <= 30)
+    return {icon:'📉', label:'Deep Correction', color:'var(--ac2)',  pos52,
+            desc:`${dropPct}% off 52W high`, hint:'Correction from peak — identify support levels'};
+  if (pe && pe > avgPE * 1.35 && pos52 > 72)
+    return {icon:'⚠', label:'Expensive+High',  color:'var(--red)',  pos52,
+            desc:`PE ${pe} vs sector ${avgPE} (${Math.round(pe/avgPE*100-100)}% premium)`, hint:'Avoid fresh buying; book profits on strength'};
+  if (pos52 >= 42 && pos52 <= 60)
+    return {icon:'↔', label:'Consolidating',   color:'var(--t3)',   pos52,
+            desc:`Mid-range: ${pos52}% of 52W band`, hint:'Wait for directional breakout above/below range'};
+  if (pos52 > 60 && pos52 < 82)
+    return {icon:'📈', label:'Uptrend',          color:'var(--grn)',  pos52,
+            desc:`${pos52}% of 52W range`, hint:'Healthy uptrend; buy on dips to support'};
+  if (pos52 > 30 && pos52 < 42)
+    return {icon:'🔄', label:'Recovery Zone',   color:'var(--yel)',  pos52,
+            desc:`Recovering from lows: ${pos52}%`, hint:'Watch for higher highs to confirm trend reversal'};
+  return null;
+}
+
 function computeStockScores(data) {
   const ltp   = data.ltp  || data.buyPrice || 0;
   const h52   = data.h52  || ltp * 1.35;
@@ -10098,10 +10210,23 @@ function renderScoreTab() {
         <div style="font-size:15px;font-weight:700;color:${fv.cheap?'var(--grn)':fv.expensive?'var(--red)':'var(--yel)'}">₹${f(fv.fair)}</div>
         <div style="font-size:11px;color:var(--t4)">${fv.method}</div>
         <div style="font-size:12px;font-weight:600;color:${fv.cheap?'var(--grn)':fv.expensive?'var(--red)':'var(--t3)'}">
-          ${fv.mos>0?'MoS '+fv.mos+'%':'Premium '+Math.abs(fv.mos)+'%'}
+          ${fv.mos==null?'—':fv.mos>0?'MoS '+fv.mos+'%':'Premium '+Math.abs(fv.mos)+'%'}
         </div>
       </div>
     </div>
+    <!-- Pattern Detection Card -->
+    ${(() => {
+      const pat = detectPattern(ltp, h52, l52, pe, h.sector);
+      if (!pat) return '';
+      return `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;background:var(--s2);border:1px solid var(--b1);border-left:3px solid ${pat.color};border-radius:8px;margin-bottom:16px">
+        <div style="font-size:22px;flex-shrink:0">${pat.icon}</div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:${pat.color};margin-bottom:2px">${pat.label} <span style="font-size:10px;color:var(--t4);font-weight:400">· 52W pos: ${pat.pos52}%</span></div>
+          <div style="font-size:11px;color:var(--t2);margin-bottom:3px">${pat.desc}</div>
+          <div style="font-size:11px;color:var(--t3);font-style:italic">💡 ${pat.hint}</div>
+        </div>
+      </div>`;
+    })()}
     <!-- 5 score bars -->
     <div style="margin-bottom:16px">
       ${_scoreBar('📊 Fundamental',scores.fundamental,`PE: ${scores.pe?.toFixed(0)||'—'}  ·  ROE: ${scores.roe?.toFixed(0)||'—'}%`)}
@@ -10366,6 +10491,181 @@ Reply JSON: {"opps":["","",""],"risks":["","",""],"actions":["","",""],"narrativ
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════
+// ██  ENTRY TRIGGER ENGINE  ██████████████████████████████████████████████
+// ════════════════════════════════════════════════════════════════════════
+
+// Returns gate results for a watchlist item
+function _entryGates(w) {
+  const ltp     = w.ltp || 0;
+  const avgPE   = SECTOR_PE[w.sector||'default'] || SECTOR_PE.default;
+  const pe      = w._pe || null;
+
+  // Gate 1: Price ≤ Entry High (or no entry range set)
+  const priceGate = w.wlEntryHigh
+    ? ltp <= w.wlEntryHigh * 1.02   // 2% tolerance
+    : null;                          // no data
+
+  // Gate 2: 52W position < 75% (not chasing near highs)
+  const pos52 = (w._h52 && w._l52 && ltp)
+    ? Math.round((ltp - w._l52) / (w._h52 - w._l52) * 100)
+    : null;
+  const posGate = pos52 != null ? pos52 < 75 : null;
+
+  // Gate 3: PE below sector average
+  const valGate = (pe && pe > 0) ? pe < avgPE : null;
+
+  // Gate 4: AI not AVOID
+  const aiGate = w.wlDecision ? w.wlDecision !== 'AVOID' : null;
+
+  const gates = [
+    {key:'price', icon:'📍', label:'Price', pass:priceGate,
+     detail: priceGate===false ? `₹${f(ltp)} > ₹${f(w.wlEntryHigh)} entry high` :
+             priceGate===true  ? `₹${f(ltp)} ≤ ₹${f(w.wlEntryHigh)} ✓` : 'No entry range set'},
+    {key:'pos52', icon:'📊', label:'52W',   pass:posGate,
+     detail: pos52!=null ? `${pos52}% of 52W range${posGate===false?' (near high)':' ✓'}` : 'No 52W data'},
+    {key:'val',   icon:'💰', label:'Value',  pass:valGate,
+     detail: pe    ? `PE ${pe} vs sector ${avgPE}${valGate===false?' (expensive)':' ✓'}` : 'No PE data'},
+    {key:'ai',    icon:'🤖', label:'AI',     pass:aiGate,
+     detail: w.wlDecision ? `AI: ${w.wlDecision}` : 'Not analysed'},
+  ];
+
+  const known    = gates.filter(g => g.pass !== null);
+  const passed   = known.filter(g => g.pass === true).length;
+  const failed   = known.filter(g => g.pass === false);
+  const total    = known.length;
+  const pct      = total ? Math.round(passed / total * 100) : 0;
+
+  // Gap to entry (% above entry high)
+  const gap = w.wlEntryHigh && ltp > w.wlEntryHigh
+    ? Math.round((ltp - w.wlEntryHigh) / w.wlEntryHigh * 100 * 10) / 10
+    : (w.wlEntryHigh && ltp <= w.wlEntryHigh ? 0 : null);
+
+  return {gates, passed, failed, total, pct, gap, pos52, pe, avgPE};
+}
+
+function renderEntryTriggers() {
+  const tbody = document.getElementById('et-tbody');
+  if (!tbody) return;
+
+  const wl = D.watchlist;
+  if (!wl.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--t4)">Add stocks to watchlist to see entry gates.</td></tr>';
+    return;
+  }
+
+  // Sort: most gates passed first, then by entry score
+  const scored = wl.map(w => ({w, g:_entryGates(w)}))
+    .sort((a,b) => {
+      if (b.g.pct !== a.g.pct) return b.g.pct - a.g.pct;
+      return (b.w.entryScore||0) - (a.w.entryScore||0);
+    });
+
+  // Summary counts
+  const ready    = scored.filter(({g}) => g.pct === 100).length;
+  const close    = scored.filter(({g}) => g.pct >= 75 && g.pct < 100).length;
+  const watching = scored.filter(({g}) => g.pct < 75 && g.w.wlDecision !== 'AVOID').length;
+  const avoid    = wl.filter(w => w.wlDecision === 'AVOID').length;
+
+  const eId = id => document.getElementById(id);
+  if(eId('et-ready'))    eId('et-ready').textContent    = ready;
+  if(eId('et-close'))    eId('et-close').textContent    = close;
+  if(eId('et-watching')) eId('et-watching').textContent = watching;
+  if(eId('et-avoid'))    eId('et-avoid').textContent    = avoid;
+
+  tbody.innerHTML = scored.map(({w, g}) => {
+    const ltp     = w.ltp || 0;
+    const gateHtml = g.gates.map(gt => {
+      const col = gt.pass === true ? 'var(--grn)' : gt.pass === false ? 'var(--red)' : 'var(--t4)';
+      const sym = gt.pass === true ? '✅' : gt.pass === false ? '❌' : '⬜';
+      return `<span title="${gt.detail}" style="cursor:help;font-size:14px">${sym}</span>`;
+    }).join('');
+
+    const pctCol  = g.pct >= 100 ? 'var(--grn)' : g.pct >= 75 ? 'var(--yel)' : 'var(--red)';
+    const decCol  = w.wlDecision==='ENTER NOW'?'var(--grn)':w.wlDecision==='AVOID'?'var(--red)':'var(--yel)';
+
+    const blockingText = g.failed.length
+      ? g.failed.map(gt=>`${gt.icon} ${gt.detail}`).join(' · ')
+      : (g.passed===g.total && g.total>0 ? '🟢 All gates clear!' : '—');
+
+    const gapText = g.gap === null ? '—'
+      : g.gap === 0 ? `<span style="color:var(--grn);font-weight:600">✓ In range</span>`
+      : `<span style="color:var(--red)">+${g.gap}% above</span>`;
+
+    const score = w.entryScore;
+    const scoreHtml = score != null
+      ? `<span style="font-weight:700;color:${score>=7?'var(--grn)':score>=4?'var(--yel)':'var(--red)'}">${score}/10</span>`
+      : `<span style="color:var(--t4)">—</span>`;
+
+    const p = detectPattern(ltp, w._h52, w._l52, w._pe, w.sector);
+    const patCell = p
+      ? `<div style="font-size:10px;font-weight:600;color:${p.color}">${p.icon} ${p.label}</div><div style="font-size:9px;color:var(--t4);margin-top:2px">${p.desc}</div><div style="font-size:9px;color:var(--t3);margin-top:1px;font-style:italic">${p.hint}</div>`
+      : '<span style="color:var(--t4)">—</span>';
+
+    return `<tr style="border-bottom:1px solid var(--b2)" id="etr-${w.id}">
+      <td style="padding:11px 12px">
+        <div style="font-weight:600;font-size:13px">${w.symbol}</div>
+        <div style="font-size:10px;color:var(--t4)">${w.sector||'—'}</div>
+        ${w.wlDecision?`<div style="font-size:9px;font-weight:700;color:${decCol};margin-top:2px">${w.wlDecision}</div>`:''}
+      </td>
+      <td style="text-align:right;padding:11px 12px;font-family:var(--mono);font-weight:600">₹${f(ltp)}</td>
+      <td style="text-align:right;padding:11px 12px;font-family:var(--mono);font-size:12px;color:var(--t3)">
+        ${w.wlEntryLow ? `₹${f(w.wlEntryLow)}–${f(w.wlEntryHigh)}` : '—'}
+      </td>
+      <td style="text-align:right;padding:11px 12px;font-size:12px">${gapText}</td>
+      <td style="text-align:center;padding:11px 12px">
+        <div style="display:flex;gap:3px;justify-content:center;margin-bottom:4px">${gateHtml}</div>
+        <div style="font-size:10px;font-weight:700;color:${pctCol}">${g.passed}/${g.total} gates</div>
+      </td>
+      <td style="text-align:center;padding:11px 12px">${scoreHtml}</td>
+      <td style="padding:11px 12px;max-width:180px;line-height:1.4">${patCell}</td>
+      <td style="padding:11px 12px;font-size:11px;color:var(--t3);max-width:200px;line-height:1.5">${blockingText}</td>
+      <td style="text-align:center;padding:11px 12px">
+        <button class="btn btn-p btn-xs" onclick="runEntryTriggerAI(${w.id},'${w.symbol}')">🤖 Trigger</button>
+        <div id="et-ai-${w.id}" style="font-size:10px;color:var(--t3);margin-top:5px;max-width:120px;line-height:1.4"></div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Show AI panel
+  const panel = document.getElementById('et-ai-panel');
+  if (panel) panel.style.display = 'block';
+}
+
+// AI one-liner: What ONE condition makes this a buy?
+async function runEntryTriggerAI(wId, sym) {
+  const el = document.getElementById(`et-ai-${wId}`);
+  if (!el) return;
+  el.textContent = '⏳…';
+
+  const w = D.watchlist.find(x => x.id === wId);
+  if (!w) { el.textContent = '—'; return; }
+
+  const g = _entryGates(w);
+  const failList = g.failed.map(gt=>gt.detail).join(', ') || 'none';
+  const prompt = `Indian stock analyst. ${sym} watchlist stock. Current gates blocking entry: ${failList}. AI decision: ${w.wlDecision||'unknown'}. Entry range: ₹${w.wlEntryLow||'?'}–${w.wlEntryHigh||'?'}.
+Reply with ONE sentence: the single most important condition that, if met, would make this stock a BUY today. Be specific with price levels or catalysts.`;
+
+  try {
+    const result = await claudeJSON(prompt + '\nReply JSON: {"trigger":"<one sentence>"}');
+    const txt = (result?.trigger || await claude(prompt)).slice(0,150);
+    el.innerHTML = `<div style="background:rgba(79,142,247,.08);border:1px solid rgba(79,142,247,.2);border-radius:6px;padding:6px 8px;font-size:10px;color:var(--t2);margin-top:3px;line-height:1.4">${txt}</div>`;
+  } catch(e) {
+    el.textContent = 'Error';
+  }
+}
+
+async function runAllEntryTriggers() {
+  const btn = document.querySelector('[onclick="runAllEntryTriggers()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Running…'; }
+  const wl = D.watchlist.filter(w => w.wlDecision !== 'AVOID');
+  for (const w of wl) {
+    await runEntryTriggerAI(w.id, w.symbol);
+    await new Promise(r => setTimeout(r, 400)); // small stagger
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Run All AI Triggers'; }
+}
+
 let _rebTargets = {};
 
 function renderRebalancer() {
