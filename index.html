@@ -10563,8 +10563,10 @@ function renderEntryTriggers() {
     });
 
   // Summary counts
-  const ready    = scored.filter(({g}) => g.pct === 100).length;
-  const close    = scored.filter(({g}) => g.pct >= 75 && g.pct < 100).length;
+  // Require at least 2 evaluated gates to count as "ready" (prevents stocks
+  // with no entry data showing 100% from only the AI gate passing)
+  const ready    = scored.filter(({g}) => g.pct === 100 && g.total >= 2).length;
+  const close    = scored.filter(({g}) => g.pct >= 75 && g.pct < 100 && g.total >= 2).length;
   const watching = scored.filter(({g}) => g.pct < 75 && g.w.wlDecision !== 'AVOID').length;
   const avoid    = wl.filter(w => w.wlDecision === 'AVOID').length;
 
@@ -10587,7 +10589,7 @@ function renderEntryTriggers() {
 
     const blockingText = g.failed.length
       ? g.failed.map(gt=>`${gt.icon} ${gt.detail}`).join(' · ')
-      : (g.passed===g.total && g.total>0 ? '🟢 All gates clear!' : '—');
+      : (g.total >= 2 ? '🟢 All gates clear!' : '⚠ Run AI Analyse to get entry range & 52W data');
 
     const gapText = g.gap === null ? '—'
       : g.gap === 0 ? `<span style="color:var(--grn);font-weight:600">✓ In range</span>`
