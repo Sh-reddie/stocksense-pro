@@ -7769,9 +7769,9 @@ async function claudeJSON(prompt, sys) {
       }
       const content = d.choices?.[0]?.message?.content;
       const finishReason = d.choices?.[0]?.finish_reason;
-      // Skip if empty content or reasoning-model token overflow
-      if (!content || content.length === 0 || (finishReason === 'length' && content.length < 20)) {
-        ilog && ilog('⚠ claudeJSON: "'+model+'" returned empty/truncated, trying next...', 'warn');
+      // Skip if empty, truncated (any length-limited finish), or clearly too short to be valid JSON
+      if (!content || content.length < 50 || finishReason === 'length') {
+        ilog && ilog('⚠ claudeJSON: "'+model+'" returned empty/truncated (len='+content?.length+', finish='+finishReason+'), trying next...', 'warn');
         continue;
       }
       ilog && ilog('✅ claudeJSON used model: ' + model, 'info');
@@ -11302,12 +11302,15 @@ async function runWatchlistBuilder() {
     // AI call per sector
     try {
       const held = D.holdings.filter(h=>(h.sector||'Others')===g.sec).map(h=>h.symbol).join(', ') || 'none';
-      const prompt = `You are an Indian equity analyst. Recommend exactly 3 quality NSE-listed stocks in the ${g.sec} sector for a long-term portfolio. Already held by investor: ${held}. Avoid recommending stocks already held. Focus on fundamentally strong, liquid mid/large caps.
+      const prompt = `You are an Indian equity analyst. Recommend exactly 3 quality NSE-listed stocks specifically from the ${g.sec} sector for a long-term portfolio. Already held by investor: ${held}. Do not recommend any stocks already held. Focus on fundamentally strong, liquid mid/large caps listed on NSE.
 
-CRITICAL: Use real NSE ticker symbols (e.g. TATAMOTORS, HDFCBANK, INFY, SUNPHARMA, LT). Do NOT use placeholder text like NSE_SYMBOL.
+Rules:
+- All 3 stocks MUST be from the ${g.sec} sector only
+- Use real NSE ticker symbols (e.g. HDFCBANK for Banking, INFY for IT, SUNPHARMA for Pharma, LT for Infra, TATAMOTORS for Auto)
+- Keep thesis under 12 words, risk under 8 words
 
-Reply ONLY with valid JSON, no extra text:
-{"stocks":[{"symbol":"TATAMOTORS","name":"Tata Motors Ltd","thesis":"one-line reason under 12 words","risk":"key risk under 8 words","pe":"27"},{"symbol":"SECOND_REAL_TICKER","name":"...","thesis":"...","risk":"...","pe":"..."},{"symbol":"THIRD_REAL_TICKER","name":"...","thesis":"...","risk":"...","pe":"..."}]}`;
+Reply ONLY with compact valid JSON (no markdown, no explanation):
+{"stocks":[{"symbol":"<TICKER1>","name":"<Company Name>","thesis":"<why buy>","risk":"<main risk>","pe":"<number>"},{"symbol":"<TICKER2>","name":"<name>","thesis":"<thesis>","risk":"<risk>","pe":"<pe>"},{"symbol":"<TICKER3>","name":"<name>","thesis":"<thesis>","risk":"<risk>","pe":"<pe>"}]}`;
 
       const _raw = await claudeJSON(prompt);
       const res = (() => {
