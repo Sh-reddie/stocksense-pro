@@ -11246,7 +11246,7 @@ function renderIntelReport() {
   }).join('');
 
   // ── Signal overview ──
-  const allSigs = D.holdings.map(h => _weeklySignals(h));
+  const allSigs = D.holdings.map(h => ({...(_weeklySignals(h)), stock: h}));
   const buys = allSigs.filter(s=>s.actionGroup==='buy').length;
   const holds = allSigs.filter(s=>s.actionGroup==='hold').length;
   const sells = allSigs.filter(s=>s.actionGroup==='sell').length;
@@ -11366,7 +11366,7 @@ async function runIntelAI() {
   const totalVal = D.holdings.reduce((s,h) => s + (h.ltp||h.avgPrice||0)*h.qty, 0);
   const totalCost = D.holdings.reduce((s,h) => s + (h.avgPrice||0)*h.qty, 0);
   const pnlPct = totalCost > 0 ? ((totalVal-totalCost)/totalCost*100).toFixed(1) : 0;
-  const allSigs = D.holdings.map(h => _weeklySignals(h));
+  const allSigs = D.holdings.map(h => ({...(_weeklySignals(h)), stock: h}));
   const buys = allSigs.filter(s=>s.actionGroup==='buy').length;
   const sells = allSigs.filter(s=>s.actionGroup==='sell').length;
   const scored = D.holdings.filter(h=>h._scores);
