@@ -755,6 +755,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('portfolio-doctor')" style="font-weight:600;color:var(--ac2)">🩺 Portfolio Doctor</div>
         <div class="tn-drop-item" onclick="go('opportunity')">🏆 Opp. Ranker</div>
         <div class="tn-drop-item" onclick="go('action-plan')" style="font-weight:600;color:var(--grn)">📋 Action Plan</div>
+        <div class="tn-drop-item" onclick="go('position-builder')">🎯 Position Builder</div>
       </div>
     </div>
     <!-- Tools dropdown -->
@@ -2267,6 +2268,91 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
   </div>
 
+  <!-- ═══ POSITION BUILDER ══════════════════════════════ -->
+  <div class="sec" id="sec-position-builder">
+    <div class="sec-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div class="sec-title">🎯 AI Position Builder</div>
+        <div style="font-size:11px;color:var(--t4);margin-top:2px">Pick a stock → get a complete 3-tranche entry plan with stop-loss, targets and R:R</div>
+      </div>
+    </div>
+
+    <!-- Input bar -->
+    <div class="pn" style="margin-bottom:16px;padding:14px 18px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:160px">
+          <div style="font-size:10px;color:var(--t4);margin-bottom:4px">STOCK</div>
+          <select id="pb-stock-sel" class="inp" style="width:100%" onchange="pbStockChanged()">
+            <option value="">— Select stock —</option>
+          </select>
+        </div>
+        <div style="min-width:120px">
+          <div style="font-size:10px;color:var(--t4);margin-bottom:4px">CAPITAL (₹)</div>
+          <input id="pb-capital" class="inp" type="number" placeholder="50000" value="50000" style="width:100%">
+        </div>
+        <div style="min-width:130px">
+          <div style="font-size:10px;color:var(--t4);margin-bottom:4px">RISK PROFILE</div>
+          <select id="pb-risk" class="inp" style="width:100%">
+            <option value="conservative">🛡 Conservative</option>
+            <option value="moderate" selected>⚖ Moderate</option>
+            <option value="aggressive">🔥 Aggressive</option>
+          </select>
+        </div>
+        <button class="btn btn-p btn-sm" onclick="buildPosition()" style="white-space:nowrap">📐 Build Plan</button>
+        <button class="btn btn-g btn-sm" id="pb-ai-btn" onclick="runPositionAI()" style="white-space:nowrap">🤖 AI Rationale</button>
+      </div>
+    </div>
+
+    <!-- Output: Stock snapshot + Tranche table + Targets -->
+    <div id="pb-output" style="display:none">
+      <!-- Snapshot row -->
+      <div id="pb-snapshot" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+
+      <div style="display:flex;gap:14px;flex-wrap:wrap">
+        <!-- Entry tranches -->
+        <div class="pn" style="flex:1;min-width:280px">
+          <div class="pn-h"><div class="pn-t">📥 Entry Tranches</div></div>
+          <div class="pn-b" style="padding:0">
+            <table class="htbl" style="width:100%">
+              <thead><tr>
+                <th>Tranche</th><th>Price Target</th><th>Allocation</th><th>Qty</th><th>Condition</th>
+              </tr></thead>
+              <tbody id="pb-tranche-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Targets & SL -->
+        <div style="display:flex;flex-direction:column;gap:10px;min-width:220px">
+          <div class="pn" style="padding:14px 16px">
+            <div style="font-size:10px;color:var(--t4);margin-bottom:8px">STOP LOSS</div>
+            <div id="pb-sl" style="font-size:18px;font-weight:700;color:var(--red)">—</div>
+            <div id="pb-sl-pct" style="font-size:10px;color:var(--t4)"></div>
+          </div>
+          <div class="pn" style="padding:14px 16px">
+            <div style="font-size:10px;color:var(--t4);margin-bottom:6px">TARGETS</div>
+            <div id="pb-targets" style="display:flex;flex-direction:column;gap:5px"></div>
+          </div>
+          <div class="pn" style="padding:14px 16px;text-align:center">
+            <div style="font-size:10px;color:var(--t4);margin-bottom:4px">RISK : REWARD</div>
+            <div id="pb-rr" style="font-size:22px;font-weight:700;color:var(--ac)">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Rationale panel -->
+      <div class="pn" id="pb-ai-panel" style="margin-top:14px;display:none">
+        <div class="pn-h"><div class="pn-t">🤖 AI Entry Rationale</div></div>
+        <div class="pn-b" id="pb-ai-content" style="font-size:13px;color:var(--t2);line-height:1.6"></div>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div id="pb-empty" style="padding:20px;text-align:center;color:var(--t4);font-size:12px">
+      Select a stock and click "Build Plan" to generate your entry strategy.
+    </div>
+  </div>
+
   <!-- ═══ SETTINGS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-settings">
     <div class="sec-head"><div class="sec-title">Settings</div></div>
@@ -3475,14 +3561,14 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio', dividends:'portfolio', divcal:'portfolio',
   action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis', riskpro:'analysis',
   screener:'portfolio', journal:'portfolio',
-  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai',
+  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai', 'position-builder':'ai',
   alerts:'tools', notifications:'tools', calendar:'tools', deals:'tools', news:'tools', tax:'tools', import:'tools', macro:'tools',
   settings:'settings'
 };
@@ -3527,6 +3613,7 @@ function go(id) {
   if(id==='portfolio-doctor') renderPortfolioDoctor2();
   if(id==='opportunity') renderOpportunityRanker();
   if(id==='action-plan') renderActionPlan();
+  if(id==='position-builder') initPositionBuilder();
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -10924,6 +11011,197 @@ async function _sdSentimentContent(h) {
 // ════════════════════════════════════════════════════════════════════════
 // ██  WATCHLIST OPPORTUNITY RANKER  ██████████████████████████████████████
 // ════════════════════════════════════════════════════════════════════════
+
+// ── PHASE 7: AI POSITION BUILDER ────────────────────────────────────────────
+
+function initPositionBuilder() {
+  const sel = document.getElementById('pb-stock-sel');
+  if (!sel) return;
+  // Populate dropdown: holdings + watchlist, deduplicated
+  const seen = new Set();
+  const opts = ['<option value="">— Select stock —</option>'];
+  const allStocks = [
+    ...D.holdings.map(h => ({sym: h.symbol, src:'holdings', id: h.id, ltp: h.ltp||h.avgPrice||0, sector: h.sector||''})),
+    ...D.watchlist.map(w => ({sym: w.symbol, src:'watchlist', id: w.id, ltp: w.ltp||0, sector: w.sector||''}))
+  ];
+  opts.push('<optgroup label="Holdings">');
+  D.holdings.forEach(h => {
+    if (!seen.has(h.symbol)) {
+      seen.add(h.symbol);
+      opts.push(`<option value="${h.symbol}|holdings|${h.id}">📊 ${h.symbol} — ₹${f(h.ltp||h.avgPrice||0)}</option>`);
+    }
+  });
+  opts.push('</optgroup><optgroup label="Watchlist">');
+  D.watchlist.forEach(w => {
+    if (!seen.has(w.symbol)) {
+      seen.add(w.symbol);
+      opts.push(`<option value="${w.symbol}|watchlist|${w.id}">👁 ${w.symbol} — ₹${f(w.ltp||0)}</option>`);
+    }
+  });
+  opts.push('</optgroup>');
+  sel.innerHTML = opts.join('');
+  document.getElementById('pb-output').style.display = 'none';
+  document.getElementById('pb-empty').style.display = '';
+}
+
+function pbStockChanged() {
+  document.getElementById('pb-output').style.display = 'none';
+  document.getElementById('pb-empty').style.display = '';
+  document.getElementById('pb-ai-panel') && (document.getElementById('pb-ai-panel').style.display = 'none');
+}
+
+function _pbGetStock() {
+  const val = document.getElementById('pb-stock-sel')?.value;
+  if (!val) return null;
+  const [sym, src, id] = val.split('|');
+  const numId = parseInt(id);
+  if (src === 'holdings') return D.holdings.find(h => h.id === numId) || D.holdings.find(h => h.symbol === sym);
+  return D.watchlist.find(w => w.id === numId) || D.watchlist.find(w => w.symbol === sym);
+}
+
+function buildPosition() {
+  const stock = _pbGetStock();
+  if (!stock) { toast('Select a stock first'); return; }
+
+  const capital = parseFloat(document.getElementById('pb-capital')?.value) || 50000;
+  const riskProfile = document.getElementById('pb-risk')?.value || 'moderate';
+  const ltp = stock.ltp || stock.avgPrice || 0;
+  if (!ltp) { toast('No price data for this stock'); return; }
+
+  // Risk parameters by profile
+  const riskParams = {
+    conservative: { slPct: 0.06, t1Pct: 0.10, t2Pct: 0.18, t3Pct: 0.28, tranches: [0.50, 0.30, 0.20] },
+    moderate:     { slPct: 0.08, t1Pct: 0.15, t2Pct: 0.25, t3Pct: 0.40, tranches: [0.40, 0.35, 0.25] },
+    aggressive:   { slPct: 0.12, t1Pct: 0.20, t2Pct: 0.35, t3Pct: 0.55, tranches: [0.35, 0.35, 0.30] }
+  };
+  const p = riskParams[riskProfile];
+
+  // Use 52W low as SL anchor if available, otherwise % from LTP
+  const l52 = stock._l52 || stock.l52 || null;
+  const h52 = stock._h52 || stock.h52 || null;
+  const fv = (() => {
+    try { return computeFairValue(ltp, stock._pe||stock.pe||null, stock._eps||null, stock._bvps||null, stock.sector); } catch(e) { return null; }
+  })();
+
+  // Stop Loss: 52W low with a 2% buffer, or profile % below LTP
+  let slPrice = l52 ? Math.max(l52 * 0.98, ltp * (1 - p.slPct)) : ltp * (1 - p.slPct);
+  slPrice = Math.round(slPrice * 20) / 20; // round to nearest 0.05
+
+  // Targets: T1 = profile %, T2 = profile %, T3 = fair value or profile %
+  const fvTarget = fv?.fair && fv.fair > ltp * 1.05 ? fv.fair : null;
+  const t1 = Math.round(ltp * (1 + p.t1Pct) * 20) / 20;
+  const t2 = Math.round(ltp * (1 + p.t2Pct) * 20) / 20;
+  const t3 = fvTarget ? Math.round(fvTarget * 20) / 20 : Math.round(ltp * (1 + p.t3Pct) * 20) / 20;
+
+  // Tranche entry prices: T1 at LTP, T2 at 4% below, T3 at 8% below
+  const discounts = [0, 0.04, 0.08];
+  const trancheConditions = ['Enter now at market', 'On a 4% dip from CMP', 'On an 8% dip / near support'];
+  const tranches = p.tranches.map((alloc, i) => {
+    const entryPx = Math.round(ltp * (1 - discounts[i]) * 20) / 20;
+    const amount  = Math.round(capital * alloc);
+    const qty     = Math.max(1, Math.floor(amount / entryPx));
+    return { label: `Tranche ${i+1}`, entryPx, amount, qty, condition: trancheConditions[i], alloc };
+  });
+
+  // R:R based on average entry → T2 vs SL
+  const avgEntry = tranches.reduce((s,t) => s + t.entryPx * t.alloc, 0);
+  const risk   = avgEntry - slPrice;
+  const reward = t2 - avgEntry;
+  const rr     = risk > 0 ? (reward / risk).toFixed(1) : '—';
+
+  // Render snapshot
+  const pos52 = h52 && l52 ? Math.round((ltp - l52) / (h52 - l52) * 100) : null;
+  const snapshotEl = document.getElementById('pb-snapshot');
+  snapshotEl.innerHTML = [
+    {l:'CMP', v:`₹${f(ltp)}`, c:'var(--t1)'},
+    {l:'52W Range', v: pos52!=null?`${pos52}% of range`:'—', c:'var(--t2)'},
+    {l:'Fair Value', v: fv?.fair?`₹${f(fv.fair)}`:'—', c: fv?.cheap?'var(--grn)':fv?.expensive?'var(--red)':'var(--t2)'},
+    {l:'Capital', v:`₹${capital>=100000?(capital/100000).toFixed(1)+'L':(capital/1000).toFixed(0)+'K'}`, c:'var(--ac)'},
+    {l:'Profile', v:{conservative:'🛡 Conservative',moderate:'⚖ Moderate',aggressive:'🔥 Aggressive'}[riskProfile], c:'var(--t2)'}
+  ].map(c=>`<div class="pn" style="flex:1;min-width:110px;padding:10px 14px">
+    <div style="font-size:10px;color:var(--t4);margin-bottom:3px">${c.l}</div>
+    <div style="font-size:13px;font-weight:700;color:${c.c}">${c.v}</div>
+  </div>`).join('');
+
+  // Render tranche table
+  document.getElementById('pb-tranche-tbody').innerHTML = tranches.map((t,i) => {
+    const colr = i===0?'var(--grn)':i===1?'var(--cyn)':'var(--ac)';
+    return `<tr>
+      <td><span style="font-weight:700;color:${colr}">${t.label}</span></td>
+      <td style="font-weight:600">₹${f(t.entryPx)}</td>
+      <td>₹${t.amount>=100000?(t.amount/100000).toFixed(1)+'L':(t.amount/1000).toFixed(0)+'K'} <span style="color:var(--t4);font-size:10px">(${Math.round(t.alloc*100)}%)</span></td>
+      <td style="font-weight:600">${t.qty}</td>
+      <td style="font-size:11px;color:var(--t3)">${t.condition}</td>
+    </tr>`;
+  }).join('');
+
+  // SL
+  const slPctDown = ((ltp - slPrice) / ltp * 100).toFixed(1);
+  document.getElementById('pb-sl').textContent = `₹${f(slPrice)}`;
+  document.getElementById('pb-sl-pct').textContent = `−${slPctDown}% from CMP${l52?' · anchored to 52W low':''}`;
+
+  // Targets
+  document.getElementById('pb-targets').innerHTML = [
+    {l:'Target 1', v:t1, pct:p.t1Pct*100, c:'var(--yel)'},
+    {l:'Target 2', v:t2, pct:p.t2Pct*100, c:'var(--grn)'},
+    {l:'Target 3', v:t3, pct: fvTarget?Math.round((fvTarget/ltp-1)*100):p.t3Pct*100, c:'var(--ac)', note: fvTarget?' (Fair Value)':''}
+  ].map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--b2)">
+    <span style="font-size:11px;color:var(--t4)">${t.l}${t.note||''}</span>
+    <span style="font-weight:700;color:${t.c}">₹${f(t.v)} <span style="font-size:10px;opacity:0.8">+${Math.round(t.pct)}%</span></span>
+  </div>`).join('');
+
+  // R:R
+  document.getElementById('pb-rr').textContent = rr === '—' ? '—' : `1 : ${rr}`;
+  const rrEl = document.getElementById('pb-rr');
+  const rrNum = parseFloat(rr);
+  rrEl.style.color = rrNum >= 2.5 ? 'var(--grn)' : rrNum >= 1.5 ? 'var(--yel)' : 'var(--red)';
+
+  document.getElementById('pb-output').style.display = '';
+  document.getElementById('pb-empty').style.display  = 'none';
+  document.getElementById('pb-ai-panel').style.display = 'none';
+
+  // Store plan for AI call
+  window._pbPlan = { sym: stock.symbol, sector: stock.sector||'—', ltp, slPrice, t1, t2, t3, rr, riskProfile, tranches, fv };
+}
+
+async function runPositionAI() {
+  if (!window._pbPlan) { toast('Build a plan first'); return; }
+  const btn = document.getElementById('pb-ai-btn');
+  const panel = document.getElementById('pb-ai-panel');
+  const content = document.getElementById('pb-ai-content');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Thinking…'; }
+  if (panel) panel.style.display = '';
+  if (content) content.innerHTML = '<div style="color:var(--t4);font-size:12px">Generating entry rationale…</div>';
+
+  const {sym, sector, ltp, slPrice, t1, t2, t3, rr, riskProfile, fv} = window._pbPlan;
+  const mosStr = fv?.mos ? `${fv.mos}% margin of safety` : 'fair value not computed';
+  const prompt = `Indian equity trader. Stock: ${sym} (${sector}), CMP ₹${Math.round(ltp)}, SL ₹${Math.round(slPrice)}, T1 ₹${Math.round(t1)}, T2 ₹${Math.round(t2)}, T3 ₹${Math.round(t3)}, R:R 1:${rr}, ${mosStr}, profile: ${riskProfile}.
+Explain why this entry plan makes sense and key risks. Reply JSON: {"rationale":"<30 words>","bullCase":"<15 words>","keyRisk":"<15 words>","timing":"<10 words>"}`;
+
+  try {
+    const res = await claudeJSON(prompt);
+    if (!res || !res.rationale) throw new Error('bad response');
+    content.innerHTML = `
+      <div style="font-size:13px;color:var(--t2);margin-bottom:12px">${res.rationale}</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:160px;background:var(--grn)11;border:1px solid var(--grn)33;border-radius:8px;padding:10px 14px">
+          <div style="font-size:10px;color:var(--t4);margin-bottom:3px">BULL CASE</div>
+          <div style="font-size:12px;color:var(--grn)">${res.bullCase||'—'}</div>
+        </div>
+        <div style="flex:1;min-width:160px;background:var(--red)11;border:1px solid var(--red)33;border-radius:8px;padding:10px 14px">
+          <div style="font-size:10px;color:var(--t4);margin-bottom:3px">KEY RISK</div>
+          <div style="font-size:12px;color:var(--red)">${res.keyRisk||'—'}</div>
+        </div>
+        <div style="flex:1;min-width:160px;background:var(--yel)11;border:1px solid var(--yel)33;border-radius:8px;padding:10px 14px">
+          <div style="font-size:10px;color:var(--t4);margin-bottom:3px">TIMING NOTE</div>
+          <div style="font-size:12px;color:var(--yel)">${res.timing||'—'}</div>
+        </div>
+      </div>`;
+  } catch(e) {
+    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed — check your OpenRouter key in Settings.</div>';
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Rationale'; }
+}
 
 // ── PHASE 6: AI WEEKLY ACTION PLAN ──────────────────────────────────────────
 
