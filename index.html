@@ -10877,7 +10877,7 @@ async function _sdSentimentContent(h) {
 function _oppScore(w) {
   const ltp = w.ltp || 0;
   const avgPE = SECTOR_PE[w.sector||'default'] || SECTOR_PE.default;
-  const pe = w._pe || null;
+  const pe = w._pe || w.pe || null;
   const pos52 = (w._h52 && w._l52 && ltp && w._h52 > w._l52)
     ? Math.round((ltp - w._l52) / (w._h52 - w._l52) * 100) : null;
 
@@ -11268,7 +11268,7 @@ Reply JSON: {"diagnosis":"<2 sentence overall>","rx":["<prescription 1>","<presc
 function _entryGates(w) {
   const ltp     = w.ltp || 0;
   const avgPE   = SECTOR_PE[w.sector||'default'] || SECTOR_PE.default;
-  const pe      = w._pe || null;
+  const pe      = w._pe || w.pe || null;
 
   // Gate 1: Price ≤ Entry High (or no entry range set)
   const priceGate = w.wlEntryHigh
