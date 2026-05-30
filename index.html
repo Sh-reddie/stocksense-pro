@@ -1121,7 +1121,7 @@ textarea.fi{resize:vertical;min-height:70px;}
   <!-- ═══ TAX ═══════════════════════════════════════ -->
   <div class="sec" id="sec-tax">
     <div class="sec-head"><div class="sec-title">Tax P&L Report</div><div style="display:flex;gap:8px"><select class="fi" id="tax-fy" style="width:150px" onchange="renderTax()"><option value="2025-26">FY 2025-26</option><option value="2024-25">FY 2024-25</option></select><button class="btn btn-g" onclick="exportTaxCSV()">⬇ Export</button><button class="btn btn-p" onclick="genTaxAI()">🤖 Tax Advisory</button></div></div>
-    <div class="tabs"><div class="tab on" onclick="stab('tx','tax-main')">📊 P&amp;L Report</div><div class="tab" onclick="stab('tx','tax-harvest');renderTaxHarvesting()">🌾 Harvesting</div></div>
+    <div class="tabs"><div class="tab on" onclick="stab('tx','tax-main')">📊 P&amp;L Report</div><div class="tab" onclick="stab('tx','tax-harvest');renderTaxHarvesting()">🌾 Harvesting</div><div class="tab" onclick="stab('tx','tax-optimizer');renderTaxOptimizer()" style="font-weight:600;color:var(--ac)">🧮 AI Optimizer</div></div>
     <div id="tax-main" class="tp on">
       <div class="sg sg-4 gap">
         <div class="sc c4"><div class="sc-lbl">STCG (&lt;12m)</div><div class="sc-val" id="tax-stcg" style="color:var(--orn)">₹0</div><div class="sc-sub" style="color:var(--orn)">Tax @ 20%</div></div>
@@ -1134,6 +1134,34 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
     <div id="tax-harvest" class="tp">
       <div id="tax-harvest-content"><div style="padding:40px;text-align:center;color:var(--t4)">Loading...</div></div>
+    </div>
+    <div id="tax-optimizer" class="tp">
+      <!-- Summary cards row -->
+      <div class="sg sg-4 gap" id="tax-opt-cards">
+        <div class="sc c4"><div class="sc-lbl">Unrealised STCG Gains</div><div class="sc-val" id="topt-stcg-val" style="color:var(--orn)">₹0</div><div class="sc-sub" style="color:var(--orn)">Tax @ 20% if sold now</div></div>
+        <div class="sc c2"><div class="sc-lbl">Unrealised LTCG Gains</div><div class="sc-val" id="topt-ltcg-val" style="color:var(--cyn)">₹0</div><div class="sc-sub" style="color:var(--cyn)">Tax @ 12.5% above ₹1.25L</div></div>
+        <div class="sc c1"><div class="sc-lbl">Total Tax if All Sold</div><div class="sc-val" id="topt-total-tax">₹0</div><div class="sc-sub" style="color:var(--t4)">Estimated tax outgo</div></div>
+        <div class="sc c5"><div class="sc-lbl">Potential LTCG Savings</div><div class="sc-val" id="topt-ltcg-save" style="color:var(--grn)">₹0</div><div class="sc-sub" style="color:var(--grn)">Wait for STCG → LTCG conversion</div></div>
+      </div>
+      <!-- AI Optimizer button + plan panel -->
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+        <button class="btn btn-p" id="topt-ai-btn" onclick="aiTaxOptimizer()">🤖 Generate AI Tax Plan</button>
+      </div>
+      <div id="topt-ai-plan" style="display:none;margin-bottom:16px"></div>
+      <!-- Near-LTCG alerts -->
+      <div id="topt-ltcg-alert" style="margin-bottom:14px"></div>
+      <!-- Main holdings table -->
+      <div class="pn">
+        <div class="pn-h"><div class="pn-t">📋 Unrealised Tax Exposure — All Holdings</div></div>
+        <div class="pn-b" style="padding:0">
+          <div style="overflow-x:auto">
+            <table class="tbl">
+              <thead><tr><th>Stock</th><th>Qty</th><th>Avg Cost</th><th>LTP</th><th>Unrealised P&L</th><th>Days Held</th><th>Type</th><th>Days to LTCG</th><th>Est. Tax Now</th><th>Tax Saving if Wait</th></tr></thead>
+              <tbody id="topt-tbody"><tr><td colspan="10" style="text-align:center;padding:40px;color:var(--t4)">Loading holdings…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -13214,6 +13242,187 @@ ${losses.join('\n')||'None'}
 Provide: 1) Priority order for harvesting, 2) STCG vs LTCG considerations, 3) Wash-sale caution (30-day rule), 4) Net benefit after tax on gains. Be specific.`;
   const result = await claude(prompt);
   el.innerHTML = md2h(result);
+}
+
+// ═══════════════════════════════════════════════════
+// TAX OPTIMIZER (Phase 12)
+// ═══════════════════════════════════════════════════
+function renderTaxOptimizer() {
+  const today = new Date();
+  const fy_end = new Date(today.getMonth() >= 3 ? today.getFullYear()+1 : today.getFullYear(), 2, 31);
+  const daysLeftFY = Math.ceil((fy_end - today) / 864e5);
+
+  const positions = D.holdings.map(h => {
+    const ltp = h.ltp || h.avgPrice;
+    const days = hDays(h.buyDate) || 0;
+    const isLTCG = days >= 365;
+    const unrealisedPL = (ltp - h.avgPrice) * h.qty;
+    const daysToLTCG = isLTCG ? 0 : 365 - days;
+    // LTCG exemption split is approximate (full ₹1.25L assigned to pool, not per-stock)
+    const estTax = unrealisedPL <= 0 ? 0
+      : isLTCG ? Math.max(0, unrealisedPL - 125000) * 0.125
+      : unrealisedPL * 0.20;
+    // How much tax would be saved if this STCG position became LTCG
+    const taxSavingIfWait = (!isLTCG && unrealisedPL > 0)
+      ? unrealisedPL * 0.20 - Math.max(0, unrealisedPL - 125000) * 0.125
+      : 0;
+    return { h, ltp, days, isLTCG, unrealisedPL, daysToLTCG, estTax, taxSavingIfWait };
+  }).sort((a, b) => b.estTax - a.estTax);
+
+  // Summary metrics
+  const stcgGains = positions.filter(p => !p.isLTCG && p.unrealisedPL > 0).reduce((s,p) => s+p.unrealisedPL, 0);
+  const ltcgGains = positions.filter(p => p.isLTCG  && p.unrealisedPL > 0).reduce((s,p) => s+p.unrealisedPL, 0);
+  const totalEstTax = positions.reduce((s,p) => s+p.estTax, 0);
+  const ltcgSavings = positions.filter(p => !p.isLTCG && p.daysToLTCG <= 60 && p.unrealisedPL > 0).reduce((s,p) => s+p.taxSavingIfWait, 0);
+
+  // Update summary cards
+  const $= id => document.getElementById(id);
+  $('topt-stcg-val') && ($('topt-stcg-val').textContent = '₹'+fI(stcgGains));
+  $('topt-ltcg-val') && ($('topt-ltcg-val').textContent = '₹'+fI(ltcgGains));
+  $('topt-total-tax') && ($('topt-total-tax').textContent = '₹'+fI(totalEstTax));
+  $('topt-ltcg-save') && ($('topt-ltcg-save').textContent = '₹'+fI(ltcgSavings));
+
+  // Near-LTCG alert banner
+  const nearLTCG = positions.filter(p => !p.isLTCG && p.daysToLTCG > 0 && p.daysToLTCG <= 45 && p.unrealisedPL > 0);
+  const alertEl = $('topt-ltcg-alert');
+  if (alertEl) {
+    if (nearLTCG.length) {
+      alertEl.innerHTML = `<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:10px;padding:12px 16px;margin-bottom:4px">
+        <div style="font-size:12px;font-weight:600;color:var(--yel);margin-bottom:8px">⏳ ${nearLTCG.length} holding${nearLTCG.length>1?'s':''} about to cross the 1-year LTCG threshold — consider waiting</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          ${nearLTCG.map(p => `<div style="background:var(--s2);border-radius:6px;padding:6px 10px;font-size:11px">
+            <span class="sym" style="font-size:12px">${p.h.symbol}</span>
+            <span style="color:var(--t3);margin:0 4px">·</span>
+            <span style="color:var(--yel)">${p.daysToLTCG}d left</span>
+            <span style="color:var(--t3);margin:0 4px">·</span>
+            <span style="color:var(--grn)">Save ₹${fI(p.taxSavingIfWait)}</span>
+          </div>`).join('')}
+        </div>
+      </div>`;
+    } else {
+      alertEl.innerHTML = '';
+    }
+  }
+
+  // Main table
+  const tbody = $('topt-tbody');
+  if (!tbody) return;
+  if (!positions.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--t4)">Add holdings to see tax exposure.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = positions.map(p => {
+    const plClass = p.unrealisedPL >= 0 ? 'up' : 'dn';
+    const typeTag = p.isLTCG
+      ? `<span class="tag t-ltcg">LTCG</span>`
+      : `<span class="tag t-stcg">STCG</span>`;
+    const daysToLTCGCell = p.isLTCG
+      ? `<span style="color:var(--grn);font-size:11px">✓ LTCG</span>`
+      : p.daysToLTCG <= 45
+        ? `<span style="color:var(--yel);font-weight:600">${p.daysToLTCG}d ⏳</span>`
+        : `<span style="color:var(--t3)">${p.daysToLTCG}d</span>`;
+    const savingCell = p.taxSavingIfWait > 0
+      ? `<span style="color:var(--grn)">₹${fI(p.taxSavingIfWait)}</span>`
+      : `<span style="color:var(--t4)">—</span>`;
+    return `<tr>
+      <td><div class="sym">${p.h.symbol}</div><div class="snm">${p.h.name||''}</div></td>
+      <td class="mn">${p.h.qty}</td>
+      <td class="mn">₹${f(p.h.avgPrice)}</td>
+      <td class="mn">₹${f(p.ltp)}</td>
+      <td class="mn ${plClass}">${p.unrealisedPL>=0?'+':''}₹${fI(Math.abs(p.unrealisedPL))}</td>
+      <td class="mn">${p.days}d</td>
+      <td>${typeTag}</td>
+      <td class="mn">${daysToLTCGCell}</td>
+      <td class="mn" style="color:${p.estTax>0?'var(--red)':'var(--t4)'}">${p.estTax>0?'₹'+fI(p.estTax):'—'}</td>
+      <td class="mn">${savingCell}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function aiTaxOptimizer() {
+  const btn = document.getElementById('topt-ai-btn');
+  const planEl = document.getElementById('topt-ai-plan');
+  if (!btn || !planEl) return;
+  btn.disabled = true; btn.textContent = '⏳ Analysing…';
+  planEl.style.display = 'block';
+  planEl.innerHTML = '<div class="pn" style="padding:20px;color:var(--t4);text-align:center"><div class="spin" style="margin:0 auto 10px"></div>AI is building your personalised tax plan…</div>';
+
+  const today = new Date();
+  const fy_end = new Date(today.getMonth()>=3?today.getFullYear()+1:today.getFullYear(), 2, 31);
+  const daysLeft = Math.ceil((fy_end - today) / 864e5);
+
+  const positions = D.holdings.map(h => {
+    const ltp = h.ltp || h.avgPrice;
+    const days = hDays(h.buyDate) || 0;
+    const isLTCG = days >= 365;
+    const upl = (ltp - h.avgPrice) * h.qty;
+    const daysToLTCG = isLTCG ? 0 : 365 - days;
+    const tax = upl <= 0 ? 0 : isLTCG ? Math.max(0, upl-125000)*0.125 : upl*0.20;
+    const saving = !isLTCG && upl>0 ? upl*0.20 - Math.max(0,upl-125000)*0.125 : 0;
+    return { sym: h.symbol, days, isLTCG, upl: Math.round(upl), daysToLTCG, tax: Math.round(tax), saving: Math.round(saving) };
+  });
+
+  const gains = positions.filter(p=>p.upl>0);
+  const losses = positions.filter(p=>p.upl<0);
+  const nearLTCG = positions.filter(p=>!p.isLTCG&&p.daysToLTCG<=60&&p.upl>0);
+  const totalTax = positions.reduce((s,p)=>s+p.tax,0);
+
+  const prompt = `You are an expert Indian equity tax advisor. Analyse this investor's portfolio and provide a structured tax optimisation plan.
+
+FY ends in ${daysLeft} days. Indian tax rules: STCG (<12m) = 20%, LTCG (≥12m) = 12.5% above ₹1.25L annual exemption.
+
+Profitable holdings:
+${gains.map(p=>`${p.sym}: ₹${fI(p.upl)} gain, held ${p.days}d (${p.isLTCG?'LTCG':'STCG'}), est. tax ₹${fI(p.tax)}${p.daysToLTCG>0&&p.daysToLTCG<=60?' — LTCG in '+p.daysToLTCG+'d, saves ₹'+fI(p.saving):''}`) .join('\n')||'None'}
+
+Loss-making holdings (harvesting candidates):
+${losses.map(p=>`${p.sym}: ₹${fI(Math.abs(p.upl))} loss, held ${p.days}d (${p.isLTCG?'LTCG':'STCG'})`).join('\n')||'None'}
+
+Total estimated tax if all sold today: ₹${fI(totalTax)}
+
+Reply ONLY with compact valid JSON:
+{"summary":"2-line tax situation summary","actions":[{"type":"wait_ltcg","symbol":"TICKER","days":N,"saving":N,"reason":"why wait"},{"type":"harvest_loss","symbol":"TICKER","loss":N,"offsets":"which gain it offsets","reason":"why harvest"},{"type":"sell_now","symbol":"TICKER","gain":N,"tax":N,"reason":"why sell despite tax"}],"total_saving":N,"priority_action":"single most impactful action to take this week"}`;
+
+  try {
+    const raw = await claudeJSON(prompt);
+    const res = (() => {
+      if (raw && typeof raw === 'object') return raw;
+      try { return JSON.parse((raw||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+    })();
+
+    if (!res) {
+      planEl.innerHTML = `<div class="pn"><div class="ai-txt">${md2h(typeof raw==='string'?raw:'AI returned an unexpected response.')}</div></div>`;
+    } else {
+      const typeIcon = { wait_ltcg:'⏳', harvest_loss:'🌾', sell_now:'💰' };
+      const typeColor = { wait_ltcg:'var(--yel)', harvest_loss:'var(--grn)', sell_now:'var(--cyn)' };
+      const typeLabel = { wait_ltcg:'Wait for LTCG', harvest_loss:'Harvest Loss', sell_now:'Sell & Realise' };
+      planEl.innerHTML = `
+        <div class="pn" style="margin-bottom:14px">
+          <div class="pn-h"><div class="pn-t">🤖 AI Tax Optimisation Plan</div><div style="font-size:11px;color:var(--grn)">Est. savings: ₹${fI(res.total_saving||0)}</div></div>
+          <div class="pn-b">
+            <div style="font-size:13px;color:var(--t2);margin-bottom:12px">${res.summary||''}</div>
+            ${res.priority_action ? `<div style="background:rgba(79,142,247,.1);border:1px solid rgba(79,142,247,.3);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px">
+              <span style="font-weight:600;color:var(--acc)">⚡ Priority this week:</span> ${res.priority_action}
+            </div>` : ''}
+            <div style="display:flex;flex-wrap:wrap;gap:10px">
+              ${(res.actions||[]).map(a => `
+                <div style="flex:1;min-width:220px;background:var(--s2);border-radius:10px;padding:14px;border-left:3px solid ${typeColor[a.type]||'var(--b2)'}">
+                  <div style="font-size:10px;font-weight:700;color:${typeColor[a.type]||'var(--t3)'};text-transform:uppercase;margin-bottom:4px">${typeIcon[a.type]||'•'} ${typeLabel[a.type]||a.type}</div>
+                  <div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:4px">${a.symbol||''}</div>
+                  ${a.days ? `<div style="font-size:11px;color:var(--yel)">Wait ${a.days} more days</div>` : ''}
+                  ${a.saving ? `<div style="font-size:11px;color:var(--grn)">Save ₹${fI(a.saving)} in tax</div>` : ''}
+                  ${a.loss ? `<div style="font-size:11px;color:var(--orn)">Harvest ₹${fI(Math.abs(a.loss))} loss</div>` : ''}
+                  ${a.offsets ? `<div style="font-size:11px;color:var(--t3)">Offsets: ${a.offsets}</div>` : ''}
+                  ${a.gain ? `<div style="font-size:11px;color:var(--cyn)">Gain ₹${fI(a.gain)} · Tax ₹${fI(a.tax||0)}</div>` : ''}
+                  <div style="font-size:11px;color:var(--t3);margin-top:4px">${a.reason||''}</div>
+                </div>`).join('')}
+            </div>
+          </div>
+        </div>`;
+    }
+  } catch(e) {
+    planEl.innerHTML = `<div class="pn"><div class="ai-txt" style="color:var(--red)">Error generating tax plan: ${e.message}</div></div>`;
+  }
+  btn.disabled = false; btn.textContent = '🔄 Refresh Tax Plan';
 }
 
 // ═══════════════════════════════════════════════════
