@@ -753,6 +753,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('fair-value')">💎 Fair Value Engine</div>
         <div class="tn-drop-item" onclick="go('entry-triggers')">🎯 Entry Triggers</div>
         <div class="tn-drop-item" onclick="go('portfolio-doctor')" style="font-weight:600;color:var(--ac2)">🩺 Portfolio Doctor</div>
+        <div class="tn-drop-item" onclick="go('opportunity')">🏆 Opp. Ranker</div>
       </div>
     </div>
     <!-- Tools dropdown -->
@@ -2159,6 +2160,61 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
   </div>
 
+  <!-- ═══ OPPORTUNITY RANKER ════════════════════════════════ -->
+  <div class="sec" id="sec-opportunity">
+    <div style="max-width:1000px;margin:0 auto;padding:20px 16px">
+
+      <!-- Header -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+        <div>
+          <div style="font-size:17px;font-weight:700;color:var(--t1)">🏆 Watchlist Opportunity Ranker</div>
+          <div style="font-size:11px;color:var(--t4);margin-top:2px">5-dimension score: Entry Gates · Pattern · PE · 52W Position · AI Decision → ranked buy opportunity</div>
+        </div>
+        <button class="btn btn-p btn-sm" onclick="renderOpportunityRanker()">🔄 Rank Now</button>
+      </div>
+
+      <!-- Top Pick banner -->
+      <div id="opp-top-pick" style="display:none;padding:14px 18px;background:linear-gradient(135deg,var(--ac)22,var(--grn)11);border:1px solid var(--ac)55;border-radius:10px;margin-bottom:16px">
+        <div style="font-size:10px;font-weight:700;color:var(--ac);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">🏆 Top Pick Right Now</div>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div id="opp-top-sym" style="font-size:20px;font-weight:800;color:var(--t1);font-family:var(--mono)">—</div>
+          <div id="opp-top-score" style="font-size:13px;font-weight:700;color:var(--grn)"></div>
+          <div id="opp-top-reason" style="font-size:12px;color:var(--t2);flex:1"></div>
+        </div>
+      </div>
+
+      <!-- Score legend -->
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;padding:10px 14px;background:var(--s2);border-radius:8px;border:1px solid var(--b1)">
+        <div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;align-self:center">Score:</div>
+        <div style="font-size:11px;color:var(--t3)">🎯 <b>Gates</b> — Entry price/52W/PE/AI (30pts)</div>
+        <div style="font-size:11px;color:var(--t3)">🔮 <b>Pattern</b> — Bullish pattern type (20pts)</div>
+        <div style="font-size:11px;color:var(--t3)">💰 <b>Value</b> — PE vs sector avg (20pts)</div>
+        <div style="font-size:11px;color:var(--t3)">📊 <b>52W Pos</b> — Lower = more upside (20pts)</div>
+        <div style="font-size:11px;color:var(--t3)">🤖 <b>AI</b> — ENTER/WAIT/AVOID (10pts)</div>
+      </div>
+
+      <!-- Ranked table -->
+      <div class="pn" style="padding:0;overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;min-width:650px">
+          <thead>
+            <tr style="border-bottom:2px solid var(--b1)">
+              <th style="text-align:center;padding:9px 8px;font-size:11px;color:var(--t4);font-weight:600;width:36px">#</th>
+              <th style="text-align:left;padding:9px 12px;font-size:11px;color:var(--t4);font-weight:600">Stock</th>
+              <th style="text-align:center;padding:9px 8px;font-size:11px;color:var(--t4);font-weight:600">Opp Score</th>
+              <th style="text-align:center;padding:9px 8px;font-size:11px;color:var(--t4);font-weight:600">Score Breakdown</th>
+              <th style="text-align:center;padding:9px 8px;font-size:11px;color:var(--t4);font-weight:600">CMP</th>
+              <th style="text-align:center;padding:9px 8px;font-size:11px;color:var(--t4);font-weight:600">Entry Range</th>
+              <th style="text-align:center;padding:9px 8px;font-size:11px;color:var(--t4);font-weight:600">Pattern</th>
+              <th style="text-align:center;padding:9px 12px;font-size:11px;color:var(--t4);font-weight:600">AI</th>
+            </tr>
+          </thead>
+          <tbody id="opp-tbody"><tr><td colspan="8" style="padding:20px;text-align:center;color:var(--t4);font-size:12px">Click "Rank Now" to score all watchlist stocks.</td></tr></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ═══ SETTINGS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-settings">
     <div class="sec-head"><div class="sec-title">Settings</div></div>
@@ -3367,14 +3423,14 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio', dividends:'portfolio', divcal:'portfolio',
   action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis', riskpro:'analysis',
   screener:'portfolio', journal:'portfolio',
-  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai',
+  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai',
   alerts:'tools', notifications:'tools', calendar:'tools', deals:'tools', news:'tools', tax:'tools', import:'tools', macro:'tools',
   settings:'settings'
 };
@@ -3417,6 +3473,7 @@ function go(id) {
   if(id==='fair-value') renderFairValueEngine();
   if(id==='entry-triggers') renderEntryTriggers();
   if(id==='portfolio-doctor') renderPortfolioDoctor2();
+  if(id==='opportunity') renderOpportunityRanker();
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -10809,6 +10866,162 @@ async function _sdSentimentContent(h) {
           ${hl.map(t=>`<div style="font-size:12px;color:var(--t2);padding:7px 10px;background:var(--s2);border-radius:6px;border:1px solid var(--b1);line-height:1.4">${t}</div>`).join('')}
         </div>` : `<div style="font-size:11px;color:var(--t4);padding:10px;background:var(--s2);border-radius:6px;border:1px solid var(--b1)">🤖 Scored from AI training knowledge — live headlines unavailable via current proxies.</div>`}
     </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// ██  WATCHLIST OPPORTUNITY RANKER  ██████████████████████████████████████
+// ════════════════════════════════════════════════════════════════════════
+
+// Compute 0-100 opportunity score for a watchlist item across 5 dimensions:
+// Gates (30) + Pattern (20) + Value/PE (20) + 52W Position (20) + AI (10)
+function _oppScore(w) {
+  const ltp = w.ltp || 0;
+  const avgPE = SECTOR_PE[w.sector||'default'] || SECTOR_PE.default;
+  const pe = w._pe || null;
+  const pos52 = (w._h52 && w._l52 && ltp && w._h52 > w._l52)
+    ? Math.round((ltp - w._l52) / (w._h52 - w._l52) * 100) : null;
+
+  // 1. Gates (30 pts): from existing _entryGates
+  const g = _entryGates(w);
+  const gateScore = g.total > 0 ? Math.round((g.passed / g.total) * 30) : 0;
+
+  // 2. Pattern (20 pts): bullish patterns score higher
+  const pat = detectPattern(ltp, w._h52, w._l52, pe, w.sector);
+  let patScore = 0;
+  if (pat) {
+    if (pat.label.includes('Breakout')) patScore = 20;
+    else if (pat.label.includes('Value + Dip') || pat.label.includes('Near Breakout')) patScore = 17;
+    else if (pat.label.includes('52W Low Watch') || pat.label.includes('Recovery')) patScore = 15;
+    else if (pat.label.includes('Uptrend')) patScore = 13;
+    else if (pat.label.includes('Consolidating')) patScore = 10;
+    else if (pat.label.includes('Deep Correction')) patScore = 8;
+    else if (pat.label.includes('Expensive')) patScore = 2;
+    else patScore = 8;
+  }
+
+  // 3. Value / PE (20 pts): lower PE vs sector = more points
+  let valScore = 10; // neutral when no data
+  if (pe && pe > 0) {
+    const ratio = pe / avgPE;
+    if (ratio < 0.6) valScore = 20;
+    else if (ratio < 0.8) valScore = 16;
+    else if (ratio < 1.0) valScore = 12;
+    else if (ratio < 1.2) valScore = 8;
+    else if (ratio < 1.5) valScore = 4;
+    else valScore = 0;
+  }
+
+  // 4. 52W Position (20 pts): lower = more upside room
+  let posScore = 10; // neutral when no data
+  if (pos52 != null) {
+    if (pos52 <= 15) posScore = 20;
+    else if (pos52 <= 30) posScore = 17;
+    else if (pos52 <= 45) posScore = 13;
+    else if (pos52 <= 60) posScore = 9;
+    else if (pos52 <= 75) posScore = 5;
+    else posScore = 1;
+  }
+
+  // 5. AI Decision (10 pts)
+  const aiScore = w.wlDecision === 'ENTER NOW' ? 10 : w.wlDecision === 'WAIT' ? 5 : w.wlDecision === 'AVOID' ? 0 : 5;
+
+  const total = gateScore + patScore + valScore + posScore + aiScore;
+  return {total, gateScore, patScore, valScore, posScore, aiScore, pos52, pe, avgPE, pat, g};
+}
+
+function renderOpportunityRanker() {
+  const tbody = document.getElementById('opp-tbody');
+  const topPick = document.getElementById('opp-top-pick');
+  if (!tbody) return;
+
+  if (!D.watchlist?.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--t4)">Add stocks to your watchlist first.</td></tr>';
+    if (topPick) topPick.style.display = 'none';
+    return;
+  }
+
+  // Score + rank all
+  const ranked = D.watchlist
+    .map(w => ({w, sc: _oppScore(w)}))
+    .sort((a,b) => b.sc.total - a.sc.total);
+
+  // Top Pick banner
+  if (ranked.length && topPick) {
+    const top = ranked[0];
+    topPick.style.display = 'block';
+    const symEl = document.getElementById('opp-top-sym');
+    const scoreEl = document.getElementById('opp-top-score');
+    const reasonEl = document.getElementById('opp-top-reason');
+    if (symEl) symEl.textContent = top.w.symbol;
+    if (scoreEl) scoreEl.textContent = `Score ${top.sc.total}/100`;
+    if (reasonEl) {
+      const parts = [];
+      if (top.sc.pat) parts.push(top.sc.pat.icon + ' ' + top.sc.pat.label);
+      if (top.w.wlDecision) parts.push('AI: ' + top.w.wlDecision);
+      if (top.sc.pos52 != null) parts.push(`52W pos: ${top.sc.pos52}%`);
+      if (top.sc.pe) parts.push(`PE ${top.sc.pe} vs sector ${top.sc.avgPE}`);
+      reasonEl.textContent = parts.join(' · ') || top.w.name || '';
+    }
+  }
+
+  // Score bar helper: 5 segments coloured by sub-score
+  const sparkBar = (sc) => {
+    const segs = [
+      {v:sc.gateScore, max:30, col:'var(--ac)'},
+      {v:sc.patScore,  max:20, col:'var(--cyn)'},
+      {v:sc.valScore,  max:20, col:'var(--grn)'},
+      {v:sc.posScore,  max:20, col:'var(--yel)'},
+      {v:sc.aiScore,   max:10, col:'var(--ac2)'},
+    ];
+    return `<div style="display:flex;gap:2px;align-items:center;justify-content:center">
+      ${segs.map(s=>{
+        const pct = Math.round(s.v/s.max*100);
+        return `<div title="${s.v}/${s.max}" style="width:${12+Math.round(s.max/5)}px;height:14px;border-radius:2px;background:${s.v>0?s.col:'var(--b2)22'};opacity:${0.3+0.7*(s.v/s.max)};border:1px solid ${s.col}44"></div>`;
+      }).join('')}
+    </div>
+    <div style="font-size:9px;color:var(--t4);text-align:center;margin-top:1px">G·P·V·52·AI</div>`;
+  };
+
+  // Grade from score
+  const grade = t => t>=80?{l:'🔥 Hot',c:'var(--grn)'}:t>=60?{l:'✅ Good',c:'var(--ac)'}:t>=40?{l:'👀 Watch',c:'var(--yel)'}:{l:'🕐 Wait',c:'var(--t4)'};
+
+  tbody.innerHTML = ranked.map(({w, sc}, i) => {
+    const ltp = w.ltp || 0;
+    const gr = grade(sc.total);
+    const scoreCol = sc.total>=80?'var(--grn)':sc.total>=60?'var(--cyn)':sc.total>=40?'var(--yel)':'var(--t4)';
+    const entryTxt = w.wlEntryLow && w.wlEntryHigh
+      ? `₹${f(w.wlEntryLow)}–${f(w.wlEntryHigh)}`
+      : '—';
+    const inRange = w.wlEntryHigh && ltp && ltp <= w.wlEntryHigh*1.02 && w.wlEntryLow && ltp >= w.wlEntryLow*0.98;
+    const patTxt = sc.pat ? `${sc.pat.icon} ${sc.pat.label}` : '—';
+    const decCol = w.wlDecision==='ENTER NOW'?'var(--grn)':w.wlDecision==='AVOID'?'var(--red)':'var(--t4)';
+
+    return `<tr style="border-bottom:1px solid var(--b2)">
+      <td style="text-align:center;padding:9px 8px;font-size:12px;font-weight:700;color:var(--t4)">${i+1}</td>
+      <td style="padding:9px 12px">
+        <div style="font-weight:700;font-size:13px;color:var(--t1)">${w.symbol}</div>
+        <div style="font-size:10px;color:var(--t4)">${w.sector||'—'}</div>
+      </td>
+      <td style="text-align:center;padding:9px 8px">
+        <div style="font-size:16px;font-weight:800;color:${scoreCol};font-family:var(--mono)">${sc.total}</div>
+        <div style="font-size:9px;color:${gr.c};font-weight:600">${gr.l}</div>
+      </td>
+      <td style="text-align:center;padding:9px 8px">${sparkBar(sc)}</td>
+      <td style="text-align:center;padding:9px 8px;font-family:var(--mono);font-size:12px;color:var(--t1)">
+        ${ltp?'₹'+f(ltp):'—'}
+        ${inRange?'<div style="font-size:9px;color:var(--grn);font-weight:700">✓ In Range</div>':''}
+      </td>
+      <td style="text-align:center;padding:9px 8px;font-size:11px;color:${inRange?'var(--grn)':'var(--t3)'}">
+        ${entryTxt}
+      </td>
+      <td style="text-align:center;padding:9px 8px;font-size:10px;color:var(--t3)">
+        ${sc.pat?`<span title="${sc.pat.desc}" style="cursor:help">${sc.pat.icon} ${sc.pat.label}</span>`:'—'}
+      </td>
+      <td style="text-align:center;padding:9px 12px">
+        <span style="font-size:10px;font-weight:700;color:${decCol}">${w.wlDecision||'—'}</span>
+      </td>
+    </tr>`;
+  }).join('');
 }
 
 // ════════════════════════════════════════════════════════════════════════
