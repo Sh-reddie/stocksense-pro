@@ -11302,8 +11302,12 @@ async function runWatchlistBuilder() {
     // AI call per sector
     try {
       const held = D.holdings.filter(h=>(h.sector||'Others')===g.sec).map(h=>h.symbol).join(', ') || 'none';
-      const prompt = `Indian equity analyst. Recommend 3 quality NSE-listed stocks in the ${g.sec} sector for a long-term portfolio. Already held: ${held}. Focus on fundamentally strong, liquid mid/large caps.
-Reply JSON: {"stocks":[{"symbol":"NSE_SYMBOL","name":"Company Name","thesis":"<12 words>","risk":"<8 words>","pe":"<number or ??>"},{"symbol":"...","name":"...","thesis":"...","risk":"...","pe":"..."},{"symbol":"...","name":"...","thesis":"...","risk":"...","pe":"..."}]}`;
+      const prompt = `You are an Indian equity analyst. Recommend exactly 3 quality NSE-listed stocks in the ${g.sec} sector for a long-term portfolio. Already held by investor: ${held}. Avoid recommending stocks already held. Focus on fundamentally strong, liquid mid/large caps.
+
+CRITICAL: Use real NSE ticker symbols (e.g. TATAMOTORS, HDFCBANK, INFY, SUNPHARMA, LT). Do NOT use placeholder text like NSE_SYMBOL.
+
+Reply ONLY with valid JSON, no extra text:
+{"stocks":[{"symbol":"TATAMOTORS","name":"Tata Motors Ltd","thesis":"one-line reason under 12 words","risk":"key risk under 8 words","pe":"27"},{"symbol":"SECOND_REAL_TICKER","name":"...","thesis":"...","risk":"...","pe":"..."},{"symbol":"THIRD_REAL_TICKER","name":"...","thesis":"...","risk":"...","pe":"..."}]}`;
 
       const _raw = await claudeJSON(prompt);
       const res = (() => {
