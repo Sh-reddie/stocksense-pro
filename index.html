@@ -760,6 +760,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('comparator')">⚔ Stock Comparator</div>
         <div class="tn-drop-item" onclick="go('intel-report')" style="font-weight:600;color:var(--ac)">📑 Intel Report</div>
         <div class="tn-drop-item" onclick="go('watchlist-builder')">🔭 Watchlist Builder</div>
+        <div class="tn-drop-item" onclick="go('exit-planner')">🚪 Exit Planner</div>
       </div>
     </div>
     <!-- Tools dropdown -->
@@ -2588,6 +2589,59 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
   </div>
 
+  <!-- ═══ EXIT STRATEGY PLANNER ═══════════════════════════ -->
+  <div class="sec" id="sec-exit-planner">
+    <div class="sec-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div class="sec-title">🚪 AI Exit Strategy Planner</div>
+        <div style="font-size:11px;color:var(--t4);margin-top:2px">Rule-based exit scores + AI-generated sell/hold/trim recommendations for every holding</div>
+      </div>
+      <button class="btn btn-p btn-sm" id="ep-ai-btn" onclick="runExitAI()">🤖 Generate AI Exit Plan</button>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="sg sg-4 gap" id="ep-cards" style="margin-bottom:16px">
+      <div class="sc c5"><div class="sc-lbl">At / Above Target</div><div class="sc-val" id="ep-at-target" style="color:var(--grn)">0</div><div class="sc-sub" style="color:var(--grn)">Holdings hit T1 or T2</div></div>
+      <div class="sc c1"><div class="sc-lbl">Near Stop-Loss</div><div class="sc-val" id="ep-near-sl" style="color:var(--red)">0</div><div class="sc-sub" style="color:var(--red)">Within 5% of SL</div></div>
+      <div class="sc c4"><div class="sc-lbl">Near LTCG Threshold</div><div class="sc-val" id="ep-near-ltcg" style="color:var(--yel)">0</div><div class="sc-sub" style="color:var(--yel)">Within 45 days of 1-year</div></div>
+      <div class="sc c2"><div class="sc-lbl">Avg Exit Score</div><div class="sc-val" id="ep-avg-score" style="color:var(--cyn)">—</div><div class="sc-sub" style="color:var(--t4)">0 = Strong Hold · 10 = Exit Now</div></div>
+    </div>
+
+    <!-- AI Exit Plan output -->
+    <div id="ep-ai-plan" style="display:none;margin-bottom:16px"></div>
+
+    <!-- Risk tolerance filter -->
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--t4)">Trailing stop style:</span>
+      <label style="font-size:11px;display:flex;align-items:center;gap:5px;cursor:pointer">
+        <input type="radio" name="ep-trail" value="7" onchange="renderExitPlanner()"> Conservative (7%)
+      </label>
+      <label style="font-size:11px;display:flex;align-items:center;gap:5px;cursor:pointer">
+        <input type="radio" name="ep-trail" value="10" checked onchange="renderExitPlanner()"> Moderate (10%)
+      </label>
+      <label style="font-size:11px;display:flex;align-items:center;gap:5px;cursor:pointer">
+        <input type="radio" name="ep-trail" value="15" onchange="renderExitPlanner()"> Aggressive (15%)
+      </label>
+    </div>
+
+    <!-- Holdings exit table -->
+    <div class="pn">
+      <div class="pn-h"><div class="pn-t">📋 Exit Signal Table — All Holdings</div></div>
+      <div class="pn-b" style="padding:0">
+        <div style="overflow-x:auto">
+          <table class="tbl">
+            <thead><tr>
+              <th>Stock</th><th>LTP</th><th>Avg Cost</th><th>P&L%</th>
+              <th>Target 1</th><th>Target 2</th><th>Stop-Loss</th>
+              <th>Days Held</th><th>Exit Score</th><th>Action</th><th>Trailing Stop</th>
+            </tr></thead>
+            <tbody id="ep-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ SETTINGS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-settings">
     <div class="sec-head"><div class="sec-title">Settings</div></div>
@@ -3796,14 +3850,14 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ AI Stock Comparator','intel-report':'📑 Portfolio Intelligence Report','watchlist-builder':'🔭 AI Watchlist Builder'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ AI Stock Comparator','intel-report':'📑 Portfolio Intelligence Report','watchlist-builder':'🔭 AI Watchlist Builder','exit-planner':'🚪 AI Exit Strategy Planner'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio', dividends:'portfolio', divcal:'portfolio',
   action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis', riskpro:'analysis',
   screener:'portfolio', journal:'portfolio',
-  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai', 'position-builder':'ai', 'stress-test':'ai', 'comparator':'ai', 'intel-report':'ai', 'watchlist-builder':'ai',
+  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai', 'position-builder':'ai', 'stress-test':'ai', 'comparator':'ai', 'intel-report':'ai', 'watchlist-builder':'ai','exit-planner':'ai',
   alerts:'tools', notifications:'tools', calendar:'tools', deals:'tools', news:'tools', tax:'tools', import:'tools', macro:'tools',
   settings:'settings'
 };
@@ -3853,6 +3907,7 @@ function go(id) {
   if(id==='comparator') initComparator();
   if(id==='intel-report') renderIntelReport();
   if(id==='watchlist-builder') initWatchlistBuilder();
+  if(id==='exit-planner') renderExitPlanner();
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -11403,6 +11458,160 @@ function wbAddToWatchlist(symbol, name, sector) {
     btn.disabled = true;
     btn.style.color = 'var(--grn)';
   });
+}
+
+// ── PHASE 13: AI EXIT STRATEGY PLANNER ──────────────────────────────────────
+
+function epExitScore(h, ltp) {
+  // Returns 0–10 exit score and action label
+  const gain = ltp > 0 && h.avgPrice > 0 ? (ltp - h.avgPrice) / h.avgPrice : 0;
+  const t1 = h.target1 || 0, t2 = h.target2 || 0, sl = h.stopLoss || 0;
+  const days = hDays(h.buyDate) || 0;
+  let score = 0;
+  let action = 'HOLD';
+  let reason = 'No clear exit trigger';
+
+  // Target-based scoring
+  if (t2 > 0 && ltp >= t2) { score = 10; action = 'EXIT FULL'; reason = 'Target 2 reached — book full profits'; }
+  else if (t1 > 0 && ltp >= t1) { score = 7; action = 'BOOK PARTIAL'; reason = 'Target 1 hit — trim 50%, let rest run'; }
+  else if (t1 > 0 && ltp >= t1 * 0.92) { score = 5; action = 'WATCH'; reason = 'Approaching T1 — set trailing stop'; }
+  // Stop-loss scoring
+  else if (sl > 0 && ltp <= sl) { score = 9; action = 'CUT LOSS'; reason = 'Stop-loss breached — exit to limit losses'; }
+  else if (sl > 0 && ltp <= sl * 1.05) { score = 6; action = 'WATCH SL'; reason = 'Within 5% of stop-loss — stay alert'; }
+  // Gain-based without targets
+  else if (!t1 && gain >= 0.5) { score = 7; action = 'BOOK PARTIAL'; reason = '+50% gain — consider partial booking'; }
+  else if (!t1 && gain >= 0.3) { score = 5; action = 'WATCH'; reason = '+30% gain — consider trailing stop'; }
+  // Loss with no SL
+  else if (gain < -0.15) { score = 6; action = 'REVIEW'; reason = '>15% loss — review thesis'; }
+  else { score = 2; action = 'HOLD'; reason = 'Within normal range — no exit signal'; }
+
+  // LTCG penalty: penalise exiting if within 45 days of 1-year
+  const daysToLTCG = days < 365 ? 365 - days : 0;
+  const nearLTCG = daysToLTCG > 0 && daysToLTCG <= 45;
+  if (nearLTCG && score >= 5 && score < 9) { score = Math.max(score - 2, 2); reason += ` (wait ${daysToLTCG}d for LTCG)`; action = 'WAIT LTCG'; }
+
+  return { score, action, reason, nearLTCG, daysToLTCG };
+}
+
+function renderExitPlanner() {
+  if (!D.holdings.length) return;
+  const trailPct = Number(document.querySelector('input[name="ep-trail"]:checked')?.value || 10) / 100;
+
+  let atTarget = 0, nearSL = 0, nearLTCG = 0;
+  const rows = D.holdings.map(h => {
+    const ltp = h.ltp || h.avgPrice;
+    const { score, action, reason, nearLTCG: nl, daysToLTCG } = epExitScore(h, ltp);
+    const gainPct = h.avgPrice > 0 ? (ltp - h.avgPrice) / h.avgPrice * 100 : 0;
+    const trailStop = +(ltp * (1 - trailPct)).toFixed(2);
+    const sl = h.stopLoss || 0;
+    if (score >= 7 && (action === 'BOOK PARTIAL' || action === 'EXIT FULL')) atTarget++;
+    if (sl > 0 && ltp <= sl * 1.05) nearSL++;
+    if (nl) nearLTCG++;
+    return { h, ltp, gainPct, score, action, reason, trailStop, daysToLTCG };
+  }).sort((a, b) => b.score - a.score);
+
+  document.getElementById('ep-at-target').textContent = atTarget;
+  document.getElementById('ep-near-sl').textContent = nearSL;
+  document.getElementById('ep-near-ltcg').textContent = nearLTCG;
+  const avgScore = rows.length ? (rows.reduce((s,r) => s+r.score, 0) / rows.length).toFixed(1) : '—';
+  document.getElementById('ep-avg-score').textContent = avgScore;
+
+  const actionColor = { 'EXIT FULL':'var(--red)', 'BOOK PARTIAL':'var(--orn)', 'CUT LOSS':'var(--red)',
+    'WATCH SL':'var(--orn)', 'WATCH':'var(--yel)', 'WAIT LTCG':'var(--cyn)', 'REVIEW':'var(--orn)', 'HOLD':'var(--grn)' };
+  const scoreColor = s => s >= 8 ? 'var(--red)' : s >= 5 ? 'var(--orn)' : 'var(--grn)';
+
+  document.getElementById('ep-tbody').innerHTML = rows.map(r => `
+    <tr>
+      <td><div style="font-weight:600">${r.h.symbol}</div><div style="font-size:10px;color:var(--t4)">${r.h.name||''}</div></td>
+      <td>₹${f(r.ltp)}</td>
+      <td>₹${f(r.h.avgPrice)}</td>
+      <td class="${r.gainPct>=0?'up':'dn'}">${fP(r.gainPct)}</td>
+      <td style="color:var(--grn)">${r.h.target1?'₹'+f(r.h.target1):'—'}</td>
+      <td style="color:var(--cyn)">${r.h.target2?'₹'+f(r.h.target2):'—'}</td>
+      <td style="color:var(--red)">${r.h.stopLoss?'₹'+f(r.h.stopLoss):'—'}</td>
+      <td>${hDays(r.h.buyDate)||0}d</td>
+      <td><span style="display:inline-block;background:var(--s2);border-radius:50%;width:26px;height:26px;line-height:26px;text-align:center;font-weight:700;font-size:12px;color:${scoreColor(r.score)}">${r.score}</span></td>
+      <td><span style="font-size:11px;font-weight:700;color:${actionColor[r.action]||'var(--t2)'}">${r.action}</span><div style="font-size:9px;color:var(--t4);max-width:140px">${r.reason}</div></td>
+      <td style="color:var(--yel)">₹${f(r.trailStop)}</td>
+    </tr>`).join('');
+}
+
+async function runExitAI() {
+  if (!D.holdings.length) { toast('No holdings found'); return; }
+  const btn = document.getElementById('ep-ai-btn');
+  const planEl = document.getElementById('ep-ai-plan');
+  if (!btn || !planEl) return;
+  btn.disabled = true; btn.textContent = '⏳ Analysing…';
+  planEl.style.display = 'block';
+  planEl.innerHTML = `<div class="pn"><div class="pn-b" style="display:flex;gap:10px;align-items:center;color:var(--t3);font-size:13px"><div class="spin"></div>AI is generating your personalised exit plan…</div></div>`;
+
+  const trailPct = Number(document.querySelector('input[name="ep-trail"]:checked')?.value || 10) / 100;
+  const rows = D.holdings.map(h => {
+    const ltp = h.ltp || h.avgPrice;
+    const { score, action } = epExitScore(h, ltp);
+    const gainPct = ((ltp - h.avgPrice) / h.avgPrice * 100).toFixed(1);
+    return { symbol: h.symbol, name: h.name, ltp, avgCost: h.avgPrice, gainPct, days: hDays(h.buyDate)||0,
+             t1: h.target1||0, t2: h.target2||0, sl: h.stopLoss||0, exitScore: score, action };
+  }).sort((a,b) => b.exitScore - a.exitScore);
+
+  const topHoldings = rows.slice(0, 8).map(r =>
+    `${r.symbol}: LTP ₹${r.ltp}, Cost ₹${r.avgCost}, ${r.gainPct}% gain, ${r.days}d held, T1:${r.t1||'—'} T2:${r.t2||'—'} SL:${r.sl||'—'}, Score:${r.exitScore}, Action:${r.action}`
+  ).join('\n');
+
+  const prompt = `You are an Indian equity portfolio manager. Analyse these holdings and generate a precise exit strategy.
+
+Portfolio holdings (sorted by exit urgency):
+${topHoldings}
+
+Context: Indian equity market. STCG tax 20% (<12 months), LTCG 12.5% (>12 months above ₹1.25L exemption).
+
+For each holding, give ONE of: EXIT_FULL, BOOK_PARTIAL, ADD_MORE, HOLD, CUT_LOSS.
+Consider: targets hit, SL proximity, tax efficiency, concentration, momentum.
+
+Reply ONLY with compact valid JSON:
+{"summary":"<2-line portfolio exit situation>","recommendations":[{"symbol":"<TICKER>","action":"<EXIT_FULL|BOOK_PARTIAL|ADD_MORE|HOLD|CUT_LOSS>","qty_pct":<0-100>,"rationale":"<under 15 words>","urgency":"<high|medium|low>"}],"priority_exit":"<single most urgent action this week>","total_realizable_gain":"<estimated total if all exit actions taken>"}`;
+
+  try {
+    const raw = await claudeJSON(prompt);
+    const res = (() => {
+      if (raw && typeof raw === 'object') return raw;
+      try { return JSON.parse((raw||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+    })();
+
+    if (!res) {
+      planEl.innerHTML = `<div class="pn"><div class="ai-txt">${md2h(typeof raw==='string'?raw:'AI returned an unexpected response.')}</div></div>`;
+    } else {
+      const actionIcon = { EXIT_FULL:'🔴', BOOK_PARTIAL:'🟠', ADD_MORE:'🟢', HOLD:'🔵', CUT_LOSS:'⛔' };
+      const actionColor = { EXIT_FULL:'var(--red)', BOOK_PARTIAL:'var(--orn)', ADD_MORE:'var(--grn)', HOLD:'var(--cyn)', CUT_LOSS:'var(--red)' };
+      const urgencyBadge = u => u==='high'?`<span style="font-size:9px;background:rgba(255,80,80,.15);color:var(--red);border-radius:3px;padding:1px 5px">HIGH</span>`
+        : u==='medium'?`<span style="font-size:9px;background:rgba(255,160,40,.15);color:var(--orn);border-radius:3px;padding:1px 5px">MEDIUM</span>`
+        : `<span style="font-size:9px;background:rgba(40,200,100,.1);color:var(--grn);border-radius:3px;padding:1px 5px">LOW</span>`;
+      planEl.innerHTML = `
+        <div class="pn" style="margin-bottom:14px">
+          <div class="pn-h"><div class="pn-t">🤖 AI Exit Strategy</div><div style="font-size:11px;color:var(--grn)">${res.total_realizable_gain?'Realisable: '+res.total_realizable_gain:''}</div></div>
+          <div class="pn-b">
+            <div style="font-size:13px;color:var(--t2);margin-bottom:12px">${res.summary||''}</div>
+            ${res.priority_exit?`<div style="background:rgba(255,80,80,.08);border:1px solid rgba(255,80,80,.25);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px">
+              <span style="font-weight:600;color:var(--red)">🚨 Priority this week:</span> ${res.priority_exit}
+            </div>`:''}
+            <div style="display:flex;flex-wrap:wrap;gap:10px">
+              ${(res.recommendations||[]).map(r=>`
+                <div style="flex:1;min-width:190px;background:var(--s2);border-radius:10px;padding:12px;border-left:3px solid ${actionColor[r.action]||'var(--b2)'}">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+                    <div style="font-size:14px;font-weight:600;color:var(--t1)">${r.symbol}</div>
+                    ${urgencyBadge(r.urgency)}
+                  </div>
+                  <div style="font-size:11px;font-weight:700;color:${actionColor[r.action]||'var(--t2)'};margin-bottom:4px">${actionIcon[r.action]||'•'} ${r.action?.replace('_',' ')||''} ${r.qty_pct>0&&r.action!=='HOLD'?'('+r.qty_pct+'%)':''}</div>
+                  <div style="font-size:11px;color:var(--t3)">${r.rationale||''}</div>
+                </div>`).join('')}
+            </div>
+          </div>
+        </div>`;
+    }
+  } catch(e) {
+    planEl.innerHTML = `<div class="pn"><div class="ai-txt" style="color:var(--red)">Error generating exit plan: ${e.message}</div></div>`;
+  }
+  btn.disabled = false; btn.textContent = '🔄 Refresh Exit Plan';
 }
 
 // ── PHASE 10: PORTFOLIO INTELLIGENCE REPORT ─────────────────────────────────
