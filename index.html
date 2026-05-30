@@ -11161,9 +11161,10 @@ function initComparator() {
 function _cmpResolve(selId) {
   const val = document.getElementById(selId)?.value;
   if (!val) return null;
-  const [src, id] = val.split('|');
-  const numId = parseInt(id);
-  return src === 'h' ? D.holdings.find(x => x.id === numId) : D.watchlist.find(x => x.id === numId);
+  const pipeIdx = val.indexOf('|');
+  const src = val.slice(0, pipeIdx);
+  const id  = parseFloat(val.slice(pipeIdx + 1));
+  return src === 'h' ? D.holdings.find(x => x.id === id) : D.watchlist.find(x => x.id === id);
 }
 
 function _cmpProfile(stock) {
