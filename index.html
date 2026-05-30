@@ -754,6 +754,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('entry-triggers')">🎯 Entry Triggers</div>
         <div class="tn-drop-item" onclick="go('portfolio-doctor')" style="font-weight:600;color:var(--ac2)">🩺 Portfolio Doctor</div>
         <div class="tn-drop-item" onclick="go('opportunity')">🏆 Opp. Ranker</div>
+        <div class="tn-drop-item" onclick="go('action-plan')" style="font-weight:600;color:var(--grn)">📋 Action Plan</div>
       </div>
     </div>
     <!-- Tools dropdown -->
@@ -2215,6 +2216,57 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
   </div>
 
+  <!-- ═══ ACTION PLAN ═══════════════════════════════════ -->
+  <div class="sec" id="sec-action-plan">
+    <div class="sec-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div class="sec-title">📋 AI Weekly Action Plan</div>
+        <div style="font-size:11px;color:var(--t4);margin-top:2px">Cross-signal synthesis → concrete buy/trim/hold decisions for this week</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-g btn-sm" id="ap-ai-btn" onclick="runActionPlanAI()">🤖 AI Weekly Call</button>
+        <button class="btn btn-p btn-sm" onclick="renderActionPlan()">🔄 Refresh</button>
+      </div>
+    </div>
+
+    <!-- Weekly Pulse -->
+    <div id="ap-pulse" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="color:var(--t4);font-size:12px;padding:8px 0">Click Refresh to generate your weekly action plan.</div>
+    </div>
+
+    <!-- Filter tabs -->
+    <div style="display:flex;gap:6px;margin-bottom:10px;border-bottom:1px solid var(--b2);padding-bottom:8px">
+      <button class="btn btn-g btn-xs ap-tab-btn" id="ap-tab-all" onclick="apFilterTab('all')" style="font-weight:700">All</button>
+      <button class="btn btn-g btn-xs ap-tab-btn" id="ap-tab-buy" onclick="apFilterTab('buy')">🟢 Buy / Accumulate</button>
+      <button class="btn btn-g btn-xs ap-tab-btn" id="ap-tab-hold" onclick="apFilterTab('hold')">🟡 Hold / Watch</button>
+      <button class="btn btn-g btn-xs ap-tab-btn" id="ap-tab-sell" onclick="apFilterTab('sell')">🔴 Trim / Review</button>
+    </div>
+
+    <!-- Action table -->
+    <div style="overflow-x:auto">
+      <table class="htbl" style="width:100%;min-width:680px">
+        <thead><tr>
+          <th style="width:36px">#</th>
+          <th>Stock</th>
+          <th>Action</th>
+          <th>Conviction</th>
+          <th>Signals</th>
+          <th>Suggested ₹</th>
+          <th>Key Reason</th>
+        </tr></thead>
+        <tbody id="ap-tbody">
+          <tr><td colspan="7" style="padding:20px;text-align:center;color:var(--t4);font-size:12px">Click "Refresh" to generate this week's action plan.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- AI Weekly Call panel -->
+    <div class="pn" id="ap-ai-panel" style="margin-top:16px;display:none">
+      <div class="pn-h"><div class="pn-t">🤖 AI Weekly Market Call</div></div>
+      <div class="pn-b" id="ap-ai-content" style="font-size:13px;color:var(--t2);line-height:1.6"></div>
+    </div>
+  </div>
+
   <!-- ═══ SETTINGS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-settings">
     <div class="sec-head"><div class="sec-title">Settings</div></div>
@@ -3423,14 +3475,14 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio', dividends:'portfolio', divcal:'portfolio',
   action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis', riskpro:'analysis',
   screener:'portfolio', journal:'portfolio',
-  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai',
+  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai',
   alerts:'tools', notifications:'tools', calendar:'tools', deals:'tools', news:'tools', tax:'tools', import:'tools', macro:'tools',
   settings:'settings'
 };
@@ -3474,6 +3526,7 @@ function go(id) {
   if(id==='entry-triggers') renderEntryTriggers();
   if(id==='portfolio-doctor') renderPortfolioDoctor2();
   if(id==='opportunity') renderOpportunityRanker();
+  if(id==='action-plan') renderActionPlan();
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -10870,6 +10923,252 @@ async function _sdSentimentContent(h) {
 
 // ════════════════════════════════════════════════════════════════════════
 // ██  WATCHLIST OPPORTUNITY RANKER  ██████████████████████████████████████
+// ════════════════════════════════════════════════════════════════════════
+
+// ── PHASE 6: AI WEEKLY ACTION PLAN ──────────────────────────────────────────
+
+// Cross-signal synthesis for a single holding
+// Returns {action, actionCol, actionGroup, conviction, bullCount, bearCount,
+//          suggestedRs, reasons, signals[]}
+function _weeklySignals(h) {
+  const ltp = h.ltp || h.avgPrice || 0;
+  const portfolioVal = D.holdings.reduce((s,x)=>{
+    const v = (x.ltp||x.avgPrice||0)*x.qty; return s+v;
+  },0);
+  const mktVal = ltp * (h.qty||0);
+  const wtPct  = portfolioVal > 0 ? (mktVal / portfolioVal * 100) : 0;
+
+  const sc  = h._scores || null;
+  const st  = h._sentiment || null;
+  const fv  = (() => {
+    try {
+      const ret = ltp > 0 && h.avgPrice > 0 ? ((ltp - h.avgPrice) / h.avgPrice * 100) : 0;
+      return computeFairValue(ltp, h._pe||h.pe||null, h._eps||null, h._bvps||null, h.sector);
+    } catch(e) { return null; }
+  })();
+
+  const signals = [];
+  let bull = 0, bear = 0;
+
+  // Signal 1: Stock Score
+  if (sc) {
+    if (sc.overall >= 65) { bull++; signals.push({icon:'📊', label:`Score ${sc.overall} (${sc.grade})`, side:'bull'}); }
+    else if (sc.overall < 40) { bear++; signals.push({icon:'📊', label:`Score ${sc.overall} (${sc.grade})`, side:'bear'}); }
+    else { signals.push({icon:'📊', label:`Score ${sc.overall} (${sc.grade})`, side:'neutral'}); }
+  }
+
+  // Signal 2: Sentiment
+  if (st) {
+    if (st.sentiment === 'Bullish') { bull++; signals.push({icon:'🗞', label:'Bullish sentiment', side:'bull'}); }
+    else if (st.sentiment === 'Bearish') { bear++; signals.push({icon:'🗞', label:'Bearish sentiment', side:'bear'}); }
+    else { signals.push({icon:'🗞', label:'Neutral sentiment', side:'neutral'}); }
+  }
+
+  // Signal 3: Fair Value
+  if (fv) {
+    if (fv.cheap === true) { bull++; signals.push({icon:'💎', label:`${fv.mos>0?fv.mos+'% MoS':'Cheap vs FV'}`, side:'bull'}); }
+    else if (fv.expensive === true) { bear++; signals.push({icon:'💎', label:`Expensive vs FV`, side:'bear'}); }
+    else { signals.push({icon:'💎', label:'Fair priced', side:'neutral'}); }
+  }
+
+  // Signal 4: Portfolio Doctor action
+  const docAction = _pdAction(sc||{overall:50,rec:'HOLD'}, st, fv, wtPct);
+  if (['➕ Add More','💎 Accumulate'].includes(docAction.label)) { bull++; signals.push({icon:'🩺', label:docAction.label, side:'bull'}); }
+  else if (['✂ Trim','✂ Reduce','⚠ Review'].includes(docAction.label)) { bear++; signals.push({icon:'🩺', label:docAction.label, side:'bear'}); }
+  else { signals.push({icon:'🩺', label:docAction.label, side:'neutral'}); }
+
+  // Signal 5: Overweight penalty
+  if (wtPct > 18) { bear++; signals.push({icon:'⚖', label:`Overweight ${f(wtPct)}%`, side:'bear'}); }
+  else if (wtPct < 4 && bull > bear) { bull++; signals.push({icon:'⚖', label:`Underweight — room to add`, side:'bull'}); }
+
+  const total = bull + bear;
+  const conviction = total > 0 ? Math.round((bull / total) * 100) : 50;
+
+  // Determine action
+  let action, actionCol, actionGroup;
+  if (bull >= 3 && bear === 0) { action = '➕ Strong Buy'; actionCol = 'var(--grn)'; actionGroup = 'buy'; }
+  else if (bull >= 2 && bull > bear) { action = '💎 Accumulate'; actionCol = 'var(--cyn)'; actionGroup = 'buy'; }
+  else if (bear >= 3) { action = '⚠ Review'; actionCol = 'var(--red)'; actionGroup = 'sell'; }
+  else if (bear >= 2 && bear > bull) { action = '✂ Trim'; actionCol = 'var(--orn)'; actionGroup = 'sell'; }
+  else if (bull === bear && bull >= 2) { action = '👀 Watch'; actionCol = 'var(--yel)'; actionGroup = 'hold'; }
+  else { action = '✅ Hold'; actionCol = 'var(--t3)'; actionGroup = 'hold'; }
+
+  // Suggested ₹ amount
+  let suggestedRs = null;
+  if (actionGroup === 'buy') {
+    const targetAddPct = conviction >= 80 ? 0.06 : conviction >= 65 ? 0.04 : 0.02;
+    suggestedRs = Math.round(portfolioVal * targetAddPct / 1000) * 1000;
+  } else if (actionGroup === 'sell') {
+    const trimPct = bear >= 3 ? 0.30 : 0.20;
+    suggestedRs = Math.round(mktVal * trimPct / 1000) * 1000;
+  }
+
+  // Key reason (first signal description)
+  const topBull = signals.find(s=>s.side==='bull');
+  const topBear = signals.find(s=>s.side==='bear');
+  const keyReason = actionGroup === 'buy' ? (topBull?.label||'—') :
+                    actionGroup === 'sell' ? (topBear?.label||'—') :
+                    (topBull?.label || topBear?.label || '—');
+
+  return {action, actionCol, actionGroup, conviction, bull, bear, suggestedRs, signals, keyReason, fv, docAction, wtPct, mktVal};
+}
+
+let _apCurrentFilter = 'all';
+function apFilterTab(f) {
+  _apCurrentFilter = f;
+  document.querySelectorAll('.ap-tab-btn').forEach(b=>{
+    b.style.background = b.id === 'ap-tab-'+f ? 'var(--ac)' : '';
+    b.style.color = b.id === 'ap-tab-'+f ? '#fff' : '';
+  });
+  const rows = document.querySelectorAll('#ap-tbody tr[data-group]');
+  rows.forEach(r => {
+    r.style.display = (f === 'all' || r.dataset.group === f) ? '' : 'none';
+  });
+}
+
+function renderActionPlan() {
+  const tbody = document.getElementById('ap-tbody');
+  const pulse = document.getElementById('ap-pulse');
+  if (!tbody || !D.holdings.length) {
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--t4);font-size:12px">No holdings to analyse.</td></tr>';
+    return;
+  }
+
+  // Compute signals for all holdings
+  const rows = D.holdings.map(h => ({h, sig: _weeklySignals(h)}));
+
+  // Sort: sells first (most bearish), then holds, then buys (most bullish)
+  const groupOrder = {sell:0, hold:1, buy:2};
+  rows.sort((a,b) => {
+    const gDiff = groupOrder[a.sig.actionGroup] - groupOrder[b.sig.actionGroup];
+    if (gDiff !== 0) return gDiff;
+    if (a.sig.actionGroup === 'sell') return b.sig.bear - a.sig.bear;
+    return b.sig.bull - a.sig.bull;
+  });
+
+  // Weekly Pulse
+  const buys = rows.filter(r=>r.sig.actionGroup==='buy').length;
+  const holds = rows.filter(r=>r.sig.actionGroup==='hold').length;
+  const sells = rows.filter(r=>r.sig.actionGroup==='sell').length;
+  const avgConv = Math.round(rows.reduce((s,r)=>s+r.sig.conviction,0)/rows.length);
+  const sentScored = D.holdings.filter(h=>h._sentiment).length;
+  const bullSent = D.holdings.filter(h=>h._sentiment?.sentiment==='Bullish').length;
+  const portfolioMood = sentScored > 0 ? (bullSent/sentScored >= 0.6 ? {l:'Bullish',c:'var(--grn)'} : bullSent/sentScored <= 0.3 ? {l:'Bearish',c:'var(--red)'} : {l:'Mixed',c:'var(--yel)'}) : {l:'—',c:'var(--t4)'};
+
+  pulse.innerHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;width:100%">
+      <div class="pn" style="flex:1;min-width:140px;padding:12px 16px">
+        <div style="font-size:10px;color:var(--t4);margin-bottom:4px">PORTFOLIO MOOD</div>
+        <div style="font-size:16px;font-weight:700;color:${portfolioMood.c}">${portfolioMood.l}</div>
+        <div style="font-size:10px;color:var(--t4)">${sentScored}/${D.holdings.length} holdings scored</div>
+      </div>
+      <div class="pn" style="flex:1;min-width:140px;padding:12px 16px">
+        <div style="font-size:10px;color:var(--t4);margin-bottom:4px">SIGNAL MIX</div>
+        <div style="display:flex;gap:8px;font-size:13px;font-weight:700;margin-top:2px">
+          <span style="color:var(--grn)">🟢 ${buys}</span>
+          <span style="color:var(--yel)">🟡 ${holds}</span>
+          <span style="color:var(--red)">🔴 ${sells}</span>
+        </div>
+        <div style="font-size:10px;color:var(--t4)">buy / hold / trim</div>
+      </div>
+      <div class="pn" style="flex:1;min-width:140px;padding:12px 16px">
+        <div style="font-size:10px;color:var(--t4);margin-bottom:4px">AVG CONVICTION</div>
+        <div style="font-size:16px;font-weight:700;color:${avgConv>=65?'var(--grn)':avgConv>=45?'var(--yel)':'var(--red)'}">${avgConv}%</div>
+        <div style="font-size:10px;color:var(--t4)">across all signals</div>
+      </div>
+      <div class="pn" style="flex:1;min-width:140px;padding:12px 16px">
+        <div style="font-size:10px;color:var(--t4);margin-bottom:4px">THIS WEEK</div>
+        <div style="font-size:11px;color:var(--t2);font-weight:600;line-height:1.4">
+          ${buys>0?`Add to ${rows.filter(r=>r.sig.actionGroup==='buy').slice(0,2).map(r=>r.h.symbol).join(', ')}`:sells>0?`Review ${rows.filter(r=>r.sig.actionGroup==='sell').map(r=>r.h.symbol)[0]}`:'Hold steady'}
+        </div>
+        <div style="font-size:10px;color:var(--t4)">top priority</div>
+      </div>
+    </div>`;
+
+  // Render table
+  let html = '';
+  rows.forEach((row, i) => {
+    const {h, sig} = row;
+    const ltp = h.ltp || h.avgPrice || 0;
+    const bullSignals = sig.signals.filter(s=>s.side==='bull');
+    const bearSignals = sig.signals.filter(s=>s.side==='bear');
+    const convBar = `<div style="display:inline-block;width:60px;height:5px;border-radius:3px;background:var(--b3);vertical-align:middle;margin-right:4px;overflow:hidden"><div style="height:100%;width:${sig.conviction}%;background:${sig.actionCol}"></div></div>`;
+    const signalDots = sig.signals.map(s=>`<span title="${s.label}" style="font-size:10px;cursor:help">${s.side==='bull'?'🟢':s.side==='bear'?'🔴':'⚪'}</span>`).join('');
+    const sugAmt = sig.suggestedRs ? `₹${sig.suggestedRs>=100000?(sig.suggestedRs/100000).toFixed(1)+'L':(sig.suggestedRs/1000).toFixed(0)+'K'}` : '—';
+
+    html += `<tr data-group="${sig.actionGroup}" style="cursor:pointer" onclick="openDetail(${h.id})">
+      <td style="text-align:center;color:var(--t4);font-size:11px">${i+1}</td>
+      <td>
+        <div style="font-weight:600;font-size:13px">${h.symbol}</div>
+        <div style="font-size:10px;color:var(--t4)">${h.sector||'—'} · ₹${f(ltp)}</div>
+      </td>
+      <td><span style="font-size:11px;font-weight:700;color:${sig.actionCol};background:${sig.actionCol}18;border:1px solid ${sig.actionCol}44;border-radius:8px;padding:2px 8px;white-space:nowrap">${sig.action}</span></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:4px">
+          ${convBar}<span style="font-size:11px;font-weight:700;color:${sig.actionCol}">${sig.conviction}%</span>
+        </div>
+        <div style="font-size:9px;color:var(--t4);margin-top:1px">${sig.bull}🟢 ${sig.bear}🔴</div>
+      </td>
+      <td style="font-size:12px">${signalDots}</td>
+      <td style="font-size:12px;font-weight:600;color:${sig.actionGroup==='buy'?'var(--grn)':sig.actionGroup==='sell'?'var(--red)':'var(--t3)'}">${sugAmt}</td>
+      <td style="font-size:11px;color:var(--t3);max-width:160px">${sig.keyReason}</td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+  apFilterTab(_apCurrentFilter);
+}
+
+async function runActionPlanAI() {
+  if (!D.holdings.length) { toast('No holdings to analyse'); return; }
+  const btn = document.getElementById('ap-ai-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Thinking…'; }
+
+  const panel = document.getElementById('ap-ai-panel');
+  const content = document.getElementById('ap-ai-content');
+  if (panel) panel.style.display = '';
+  if (content) content.innerHTML = '<div style="color:var(--t4);font-size:12px">Synthesising all signals…</div>';
+
+  // Build concise summary of top 5 most actionable holdings
+  const rows = D.holdings.map(h => ({h, sig:_weeklySignals(h)}));
+  rows.sort((a,b) => Math.abs(b.sig.bull-b.sig.bear) - Math.abs(a.sig.bull-a.sig.bear));
+  const top = rows.slice(0,6).map(r=>`${r.h.symbol}(${r.sig.action.replace(/[➕💎✂⚠✅👀]/g,'').trim()},${r.sig.conviction}%,${r.h.sector||'?'})`).join(', ');
+  const moodStr = rows.filter(r=>r.sig.actionGroup==='buy').length > rows.filter(r=>r.sig.actionGroup==='sell').length ? 'bullish' : 'cautious';
+
+  const prompt = `Indian equity portfolio manager. Portfolio signal summary: ${top}. Overall stance: ${moodStr}.
+Give a weekly action plan: top 2 buys, top 1 trim, and 1-sentence market commentary.
+Reply JSON: {"commentary":"<20 words>","buys":[{"sym":"X","rationale":"<12 words>"},{"sym":"Y","rationale":"<12 words>"}],"trim":{"sym":"Z","rationale":"<12 words>"},"verdict":"Aggressive|Balanced|Defensive"}`;
+
+  try {
+    const res = await claudeJSON(prompt);
+    if (!res || !res.verdict) throw new Error('bad response');
+
+    const vCol = res.verdict==='Aggressive'?'var(--grn)':res.verdict==='Defensive'?'var(--red)':'var(--yel)';
+    const buyCards = (res.buys||[]).map(b=>`<div style="background:var(--grn)11;border:1px solid var(--grn)33;border-radius:8px;padding:10px 14px;min-width:160px;flex:1">
+      <div style="font-size:10px;color:var(--t4);margin-bottom:3px">BUY / ACCUMULATE</div>
+      <div style="font-weight:700;font-size:14px;color:var(--grn)">${b.sym||'—'}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:3px">${b.rationale||''}</div>
+    </div>`).join('');
+    const trimCard = res.trim ? `<div style="background:var(--red)11;border:1px solid var(--red)33;border-radius:8px;padding:10px 14px;min-width:160px;flex:1">
+      <div style="font-size:10px;color:var(--t4);margin-bottom:3px">TRIM / REVIEW</div>
+      <div style="font-weight:700;font-size:14px;color:var(--red)">${res.trim.sym||'—'}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:3px">${res.trim.rationale||''}</div>
+    </div>` : '';
+
+    content.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700;color:${vCol};background:${vCol}18;border:1px solid ${vCol}44;border-radius:10px;padding:3px 12px">${res.verdict} Stance</span>
+        <span style="font-size:13px;color:var(--t2);font-style:italic">"${res.commentary||''}"</span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${buyCards}${trimCard}
+      </div>`;
+  } catch(e) {
+    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed — check your OpenRouter key in Settings.</div>';
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Weekly Call'; }
+}
+
 // ════════════════════════════════════════════════════════════════════════
 
 // Compute 0-100 opportunity score for a watchlist item across 5 dimensions:
