@@ -906,6 +906,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <select class="fi" id="h-filter-sector" style="width:140px" onchange="renderHoldings()"><option value="">All Sectors</option></select>
         <select class="fi" id="h-filter-sig" style="width:120px" onchange="renderHoldings()"><option value="">All Signals</option><option>BUY</option><option>STRONG BUY</option><option>HOLD</option><option>SELL</option></select>
         <button class="btn btn-g" onclick="refreshAll()">↻ Refresh</button>
+        <button class="btn btn-g btn-sm" id="sent-run-all-btn" onclick="runSentimentAll()" title="AI-score news sentiment for all holdings">🗞 Sentiment</button>
         <button class="btn btn-g" onclick="go('import')">⬆ Import CSV</button>
         <button class="btn btn-red btn-sm" onclick="clearSection('holdings')">🗑 Clear</button>
         <button class="btn btn-p" onclick="openSpotlight('holdings')">+ Add Stock</button>
@@ -1960,6 +1961,16 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="pn-h"><div class="pn-t">🤖 AI Commentary</div></div>
         <div class="pn-b" id="brief-narrative"><div style="color:var(--t4);font-size:12px">–</div></div>
       </div>
+      <!-- Sentiment Summary -->
+      <div class="pn" style="margin-bottom:14px">
+        <div class="pn-h" style="display:flex;justify-content:space-between;align-items:center">
+          <div class="pn-t">🗞 Portfolio Sentiment</div>
+          <button class="btn btn-g btn-xs" id="brief-sent-btn" onclick="runSentimentAll()">Score All</button>
+        </div>
+        <div class="pn-b" id="brief-sentiment">
+          <div style="color:var(--t4);font-size:12px">Click "Score All" to analyse news sentiment for all holdings.</div>
+        </div>
+      </div>
       <!-- Holdings Intelligence table -->
       <div class="pn">
         <div class="pn-h"><div class="pn-t">📊 Holdings Intelligence Scores</div></div>
@@ -2366,6 +2377,7 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="sd-tab" id="sdt-hold" onclick="sdTab('hold',this)">💼 My Holdings</div>
       <div class="sd-tab" id="sdt-ai" onclick="sdTab('ai',this);_sdAutoRunAI()">🤖 AI Analysis</div>
       <div class="sd-tab" id="sdt-edit" onclick="sdTab('edit',this);_sdEditContent(D.holdings.find(x=>x.id==_sdHid))">✏ Edit</div>
+      <div class="sd-tab" id="sdt-sent" onclick="sdTab('sent',this);_sdSentimentContent(D.holdings.find(x=>x.id==_sdHid))">🗞 Sentiment</div>
     </div>
     <!-- Scrollable body -->
     <div class="sd-body">
@@ -2487,6 +2499,12 @@ textarea.fi{resize:vertical;min-height:70px;}
             <button class="btn btn-g btn-sm" onclick="sdTab('hold',document.getElementById('sdt-hold'))">Cancel</button>
             <button class="btn btn-p btn-sm" onclick="_sdSaveEdit()">💾 Save Changes</button>
           </div>
+        </div>
+      </div>
+      <!-- SENTIMENT TAB -->
+      <div class="sd-tp" id="sd-tab-sent">
+        <div id="sd-sent-content" style="padding:16px 20px">
+          <div style="color:var(--t4);font-size:12px">Click the Sentiment tab to score news sentiment for this stock.</div>
         </div>
       </div>
     </div>
@@ -4765,7 +4783,7 @@ async function confirmWlAdd(wid, sym, exch, sector, name) {
 // COLUMN GROUPS
 // ═══════════════════════════════════════════════════
 const COL_DEFS = {
-  basic:  [{k:'stock',l:'Stock'},{k:'qty',l:'Qty'},{k:'avg',l:'Avg Cost'},{k:'ltp',l:'LTP'},{k:'cv',l:'Curr Value'},{k:'chg',l:'Day Chg%'},{k:'pl',l:'P&L'},{k:'plp',l:'P&L%'},{k:'xirr',l:'XIRR'},{k:'sig',l:'Signal'},{k:'forecast',l:'Forecast'}],
+  basic:  [{k:'stock',l:'Stock'},{k:'qty',l:'Qty'},{k:'avg',l:'Avg Cost'},{k:'ltp',l:'LTP'},{k:'cv',l:'Curr Value'},{k:'chg',l:'Day Chg%'},{k:'pl',l:'P&L'},{k:'plp',l:'P&L%'},{k:'xirr',l:'XIRR'},{k:'sig',l:'Signal'},{k:'forecast',l:'Forecast'},{k:'sent',l:'Sentiment'}],
   tech:   [{k:'rsi',l:'RSI'},{k:'52h',l:'52W Range'},{k:'atr',l:'ATR'},{k:'vol',l:'Volume'}],
   fund:   [{k:'pe',l:'P/E'},{k:'pb',l:'P/B'},{k:'roe',l:'ROE%'},{k:'de',l:'D/E'},{k:'eps',l:'EPS'}],
   risk:   [{k:'sl',l:'Stop Loss'},{k:'t1',l:'Target 1'},{k:'t2',l:'Target 2'},{k:'days',l:'Days'},{k:'tax',l:'Tax Type'}],
@@ -4878,6 +4896,20 @@ function renderHoldings() {
           const clr = upPct>20?'var(--grn)':upPct>10?'var(--cyn)':upPct>0?'var(--yel)':'var(--red)';
           const src = h.target1?'🤖':'📐';
           return`<td style="cursor:pointer;white-space:nowrap" onclick="openDetail(${h.id})"><div style="font-family:var(--mono);font-size:11.5px;font-weight:700;color:${clr}">₹${f(tgt)}</div><div style="font-size:9.5px;color:var(--t4);margin-top:1px">${src} ${fP(upPct)} · ${tl}</div></td>`;
+        }
+        case 'sent': {
+          const st = h._sentiment;
+          if (!st) return `<td class="sent-cell" style="text-align:center"><button class="btn btn-g btn-xs" onclick="runSentimentSingle(${h.id})" style="font-size:9px;padding:2px 6px">🗞</button></td>`;
+          const sc = st.sentiment==='Bullish'?'var(--grn)':st.sentiment==='Bearish'?'var(--red)':'var(--t3)';
+          const ic = st.sentiment==='Bullish'?'▲':st.sentiment==='Bearish'?'▼':'—';
+          const age = h._sentimentAt ? Math.round((Date.now()-h._sentimentAt)/3600000) : null;
+          const ageStr = age!=null ? (age<1?'now':age+'h ago') : '';
+          return `<td class="sent-cell" style="text-align:center;cursor:pointer" onclick="openDetail(${h.id})" title="${st.reason||''}">
+            <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1px">
+              <span style="font-size:10px;font-weight:700;color:${sc};background:${sc}18;border:1px solid ${sc}44;border-radius:10px;padding:1px 7px;white-space:nowrap">${ic} ${st.sentiment}</span>
+              <span style="font-size:9px;color:var(--t4)">${ageStr}</span>
+            </div>
+          </td>`;
         }
         case 'act':return`<td style="white-space:nowrap"><button class="btn btn-g btn-xs" onclick="openDetail(${h.id})" style="margin-right:4px">Detail</button><button class="btn btn-red btn-xs" onclick="rmHolding(${h.id})">✕</button></td>`;
         default:return'<td>—</td>';
@@ -10347,6 +10379,8 @@ Give 3 specific actions (one sentence each): most undervalued pick, most overval
 async function renderDailyBrief() {
   // Render holdings score table immediately (no API needed)
   _renderBriefScores();
+  // Render sentiment summary if any scored
+  _renderBriefSentiment();
 }
 
 function _renderBriefScores() {
@@ -10489,6 +10523,203 @@ Reply JSON: {"opps":["","",""],"risks":["","",""],"actions":["","",""],"narrativ
   if (narrativeEl) narrativeEl.innerHTML = `<div class="ai-txt">${md2h(bd?.narrative||'Portfolio analysis complete. Review scores above.')}</div>`;
 
   if (ts) ts.textContent = 'Generated: ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// ██  AI NEWS SENTIMENT  █████████████████████████████████████████████████
+// ════════════════════════════════════════════════════════════════════════
+
+// Fetch Google News RSS headlines for a stock via allorigins.win proxy
+async function fetchStockHeadlines(sym) {
+  try {
+    const q = encodeURIComponent(`${sym} NSE stock India`);
+    const rssUrl = `https://news.google.com/rss/search?q=${q}&hl=en-IN&gl=IN&ceid=IN:en`;
+    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`;
+    const r = await fetch(proxy, {signal: AbortSignal.timeout(9000)});
+    const j = await r.json();
+    const xml = j.contents || '';
+    // Try CDATA titles first, then plain titles
+    let titles = [...xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/gs)].slice(1,9).map(m=>m[1].trim());
+    if (!titles.length) titles = [...xml.matchAll(/<title>(.*?)<\/title>/gs)].slice(1,9).map(m=>m[1].replace(/<[^>]+>/g,'').trim());
+    return titles.filter(t=>t.length>5);
+  } catch(e) { return []; }
+}
+
+// Score headlines with claudeJSON → {sentiment, score, reason, catalyst, risk}
+async function scoreSentiment(sym, headlines) {
+  if (!headlines || !headlines.length) return null;
+  const hl = headlines.slice(0,6).join(' | ');
+  const prompt = `Indian stock ${sym}. Recent news: "${hl}". Rate overall market sentiment as Bullish, Neutral, or Bearish with a brief reason, key catalyst and main risk.
+Reply JSON: {"sentiment":"Bullish","score":7,"reason":"<15 words>","catalyst":"<10 words>","risk":"<10 words>"}`;
+  return await claudeJSON(prompt);
+}
+
+// Score all holdings 3 at a time
+async function runSentimentAll() {
+  if (!D.holdings.length) { toast('No holdings to score'); return; }
+  const btn = document.getElementById('sent-run-all-btn');
+  const briefBtn = document.getElementById('brief-sent-btn');
+  const setLabel = t => { if(btn) btn.textContent = t; if(briefBtn) briefBtn.textContent = t; };
+  setLabel('⏳ Scoring…');
+  if(btn) btn.disabled = true; if(briefBtn) briefBtn.disabled = true;
+
+  // Score all (not just unscored) so refresh gives fresh data
+  const holdings = D.holdings.slice();
+  let done = 0;
+  for (let i = 0; i < holdings.length; i += 3) {
+    const batch = holdings.slice(i, i+3);
+    await Promise.all(batch.map(async h => {
+      try {
+        const headlines = await fetchStockHeadlines(h.symbol);
+        const result = await scoreSentiment(h.symbol, headlines);
+        if (result && result.sentiment) {
+          h._sentiment = result;
+          h._sentimentHeadlines = headlines;
+          h._sentimentAt = Date.now();
+        }
+      } catch(e) {}
+      done++;
+    }));
+    save('holdings');
+    renderHoldings();
+    _renderBriefSentiment();
+    setLabel(`⏳ ${done}/${holdings.length}…`);
+  }
+  if(btn) { btn.disabled = false; } if(briefBtn) { briefBtn.disabled = false; }
+  setLabel('🗞 Sentiment');
+  if(briefBtn) briefBtn.textContent = 'Refresh';
+  toast(`✅ Sentiment scored for ${done} holdings`);
+}
+
+// Score a single holding (inline update)
+async function runSentimentSingle(hid) {
+  const h = D.holdings.find(x => x.id == hid);
+  if (!h) return;
+  // Show loading state in cell
+  const row = document.querySelector(`tr[data-hid="${hid}"]`);
+  const sentCell = row ? row.querySelector('.sent-cell') : null;
+  if (sentCell) sentCell.innerHTML = '<span style="color:var(--t4);font-size:10px">⏳</span>';
+  try {
+    const headlines = await fetchStockHeadlines(h.symbol);
+    const result = await scoreSentiment(h.symbol, headlines);
+    if (result && result.sentiment) {
+      h._sentiment = result;
+      h._sentimentHeadlines = headlines;
+      h._sentimentAt = Date.now();
+      save('holdings');
+      renderHoldings();
+      _renderBriefSentiment();
+      toast(`${h.symbol}: ${result.sentiment}`);
+    } else {
+      if (sentCell) sentCell.innerHTML = '<span style="color:var(--red);font-size:9px">✗</span>';
+    }
+  } catch(e) {
+    if (sentCell) sentCell.innerHTML = '<span style="color:var(--red);font-size:9px">✗</span>';
+  }
+}
+
+// Render portfolio sentiment summary bar in Daily Brief
+function _renderBriefSentiment() {
+  const el = document.getElementById('brief-sentiment');
+  if (!el) return;
+  const scored = D.holdings.filter(h => h._sentiment?.sentiment);
+  if (!scored.length) {
+    el.innerHTML = '<div style="color:var(--t4);font-size:12px">Click "Score All" to analyse news sentiment for all holdings.</div>';
+    return;
+  }
+  const bull = scored.filter(h => h._sentiment.sentiment === 'Bullish');
+  const bear = scored.filter(h => h._sentiment.sentiment === 'Bearish');
+  const neut = scored.filter(h => h._sentiment.sentiment === 'Neutral');
+  const total = scored.length;
+  const bullPct = Math.round(bull.length/total*100);
+  const bearPct = Math.round(bear.length/total*100);
+  const neutPct = 100 - bullPct - bearPct;
+  const overallLabel = bull.length > bear.length ? '📈 Mostly Bullish' : bear.length > bull.length ? '📉 Mostly Bearish' : '↔ Mixed';
+  const overallColor = bull.length > bear.length ? 'var(--grn)' : bear.length > bull.length ? 'var(--red)' : 'var(--t3)';
+
+  const chips = (arr, col, ic) => arr.map(h =>
+    `<span style="font-size:10px;font-weight:600;color:${col};background:${col}18;border:1px solid ${col}44;border-radius:10px;padding:1px 7px;cursor:pointer" onclick="openDetail(${h.id})">${ic} ${h.symbol}</span>`
+  ).join(' ');
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <div style="font-size:15px;font-weight:700;color:${overallColor}">${overallLabel}</div>
+      <div style="font-size:11px;color:var(--t4)">${scored.length}/${D.holdings.length} scored</div>
+    </div>
+    <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-bottom:8px;background:var(--b2)">
+      ${bullPct?`<div style="width:${bullPct}%;background:var(--grn)"></div>`:''}
+      ${neutPct?`<div style="width:${neutPct}%;background:var(--t4)"></div>`:''}
+      ${bearPct?`<div style="width:${bearPct}%;background:var(--red)"></div>`:''}
+    </div>
+    <div style="display:flex;gap:14px;font-size:11px;color:var(--t3);margin-bottom:12px">
+      <span style="color:var(--grn)">▲ Bullish ${bull.length}</span>
+      <span style="color:var(--t4)">— Neutral ${neut.length}</span>
+      <span style="color:var(--red)">▼ Bearish ${bear.length}</span>
+    </div>
+    ${bull.length ? `<div style="margin-bottom:6px">${chips(bull,'var(--grn)','▲')}</div>` : ''}
+    ${bear.length ? `<div>${chips(bear,'var(--red)','▼')}</div>` : ''}`;
+}
+
+// Populate the Sentiment tab in stock detail modal
+async function _sdSentimentContent(h) {
+  const el = document.getElementById('sd-sent-content');
+  if (!el || !h) return;
+  el.innerHTML = '<div style="color:var(--t4);font-size:12px;padding:20px">⏳ Loading sentiment…</div>';
+
+  // Use cached data if fresh (< 6 hours)
+  const isFresh = h._sentimentAt && (Date.now() - h._sentimentAt < 6*60*60*1000);
+  if (!isFresh) {
+    const headlines = await fetchStockHeadlines(h.symbol).catch(()=>[]);
+    const result = await scoreSentiment(h.symbol, headlines).catch(()=>null);
+    if (result && result.sentiment) {
+      h._sentiment = result;
+      h._sentimentHeadlines = headlines;
+      h._sentimentAt = Date.now();
+      save('holdings');
+      renderHoldings();
+    }
+  }
+
+  const st = h._sentiment;
+  const hl = h._sentimentHeadlines || [];
+  if (!st) {
+    el.innerHTML = `<div style="padding:20px">
+      <div style="color:var(--t4);font-size:12px;margin-bottom:12px">No sentiment data yet.</div>
+      <button class="btn btn-p btn-sm" onclick="runSentimentSingle(${h.id});_sdSentimentContent(D.holdings.find(x=>x.id==${h.id}))">🗞 Score Now</button>
+    </div>`;
+    return;
+  }
+
+  const sc = st.sentiment==='Bullish'?'var(--grn)':st.sentiment==='Bearish'?'var(--red)':'var(--t3)';
+  const ic = st.sentiment==='Bullish'?'▲':st.sentiment==='Bearish'?'▼':'—';
+  const age = h._sentimentAt ? Math.round((Date.now()-h._sentimentAt)/3600000) : null;
+  const ageStr = age!=null?(age<1?'just now':age+'h ago'):'';
+  const scoreBar = st.score ? `<div style="margin:8px 0 0 0;background:var(--b2);border-radius:4px;height:6px;overflow:hidden"><div style="width:${Math.round(st.score/10*100)}%;height:100%;background:${sc};border-radius:4px"></div></div><div style="font-size:10px;color:var(--t4);margin-top:3px">Score: ${st.score}/10</div>` : '';
+
+  el.innerHTML = `
+    <div style="padding:16px 20px">
+      <!-- Sentiment Score Card -->
+      <div style="display:flex;align-items:flex-start;gap:14px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-left:3px solid ${sc};border-radius:8px;margin-bottom:16px">
+        <div style="font-size:28px;flex-shrink:0">${ic==='▲'?'📈':ic==='▼'?'📉':'↔'}</div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="font-size:13px;font-weight:700;color:${sc}">${ic} ${st.sentiment}</span>
+            <span style="font-size:10px;color:var(--t4)">${ageStr}</span>
+            <button class="btn btn-g btn-xs" style="margin-left:auto;font-size:9px" onclick="runSentimentSingle(${h.id}).then(()=>_sdSentimentContent(D.holdings.find(x=>x.id==${h.id})))">↻ Rescore</button>
+          </div>
+          ${scoreBar}
+          <div style="font-size:12px;color:var(--t2);margin-top:8px;line-height:1.5">${st.reason||''}</div>
+          ${st.catalyst?`<div style="font-size:11px;color:var(--grn);margin-top:6px">⚡ Catalyst: ${st.catalyst}</div>`:''}
+          ${st.risk?`<div style="font-size:11px;color:var(--red);margin-top:4px">⚠ Risk: ${st.risk}</div>`:''}
+        </div>
+      </div>
+      <!-- Headlines -->
+      ${hl.length ? `
+        <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Recent Headlines</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${hl.map(t=>`<div style="font-size:12px;color:var(--t2);padding:7px 10px;background:var(--s2);border-radius:6px;border:1px solid var(--b1);line-height:1.4">${t}</div>`).join('')}
+        </div>` : '<div style="color:var(--t4);font-size:12px">No headlines retrieved.</div>'}
+    </div>`;
 }
 
 // ════════════════════════════════════════════════════════════════════════
