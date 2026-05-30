@@ -11571,11 +11571,13 @@ Reply ONLY with compact valid JSON no markdown:
     const res = (() => {
       if (raw && typeof raw === 'object') return raw;
       let s = (raw||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim();
-      // Repair common LLM error: recommendations array closed early, extra items placed outside
-      // Pattern: }], {"symbol" should be }, {"symbol"
+      // Repair common LLM errors in JSON output:
+      // 1) recommendations array closed early, extra items placed outside: }], {"symbol" → }, {"symbol"
       s = s.replace(/\}\],\s*\{"symbol"/g, '}, {"symbol"');
-      // Strip any stray ] or ]} before trailing key names (model closes outer obj early)
+      // 2) outer object closed prematurely after array: ]}, "priority_exit" → ],"priority_exit"
       s = s.replace(/\]\s*\}?\s*,\s*"(priority_exit|total_realizable_gain)"/g, '],"$1"');
+      // 3) trailing duplicate }} at end of object
+      s = s.replace(/\}\}+\s*$/, '}');
       // Try direct parse, then extract first {...} block
       try { return JSON.parse(s); } catch(e) {
         const m = s.match(/\{[\s\S]*\}/);
