@@ -752,6 +752,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('strategies')">🧠 AI Strategies</div>
         <div class="tn-drop-item" onclick="go('fair-value')">💎 Fair Value Engine</div>
         <div class="tn-drop-item" onclick="go('entry-triggers')">🎯 Entry Triggers</div>
+        <div class="tn-drop-item" onclick="go('portfolio-doctor')" style="font-weight:600;color:var(--ac2)">🩺 Portfolio Doctor</div>
       </div>
     </div>
     <!-- Tools dropdown -->
@@ -2087,6 +2088,77 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
   </div>
 
+  <!-- ═══ PORTFOLIO DOCTOR ════════════════════════════════ -->
+  <div class="sec" id="sec-portfolio-doctor">
+    <div style="max-width:1000px;margin:0 auto;padding:20px 16px">
+
+      <!-- Header -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+        <div>
+          <div style="font-size:17px;font-weight:700;color:var(--t1)">🩺 AI Portfolio Doctor</div>
+          <div style="font-size:11px;color:var(--t4);margin-top:2px">Allocation · Concentration · Score + Sentiment + Fair Value → prescriptive rebalance</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-g btn-sm" onclick="renderPortfolioDoctor2()">🔄 Refresh</button>
+          <button class="btn btn-p btn-sm" id="pd-ai-btn" onclick="runPortfolioDoctorAI()">🤖 AI Diagnosis</button>
+        </div>
+      </div>
+
+      <!-- Row 1: Health score + Allocation canvas -->
+      <div style="display:grid;grid-template-columns:200px 1fr;gap:14px;margin-bottom:14px">
+        <!-- Health Score card -->
+        <div class="pn" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center">
+          <canvas id="pd-gauge-canvas" width="140" height="140"></canvas>
+          <div style="font-size:13px;font-weight:700;color:var(--t1);margin-top:8px" id="pd-health-label">—</div>
+          <div style="font-size:11px;color:var(--t4)" id="pd-health-sub">Click Refresh</div>
+        </div>
+        <!-- Sector allocation bar chart -->
+        <div class="pn" style="padding:14px 16px">
+          <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Sector Allocation</div>
+          <canvas id="pd-alloc-canvas" width="700" height="130" style="width:100%;height:130px"></canvas>
+          <div id="pd-alloc-legend" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+        </div>
+      </div>
+
+      <!-- Row 2: Concentration risk flags -->
+      <div class="pn" style="margin-bottom:14px;padding:14px 16px">
+        <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">⚠ Concentration Risk</div>
+        <div id="pd-concentration" style="display:flex;flex-wrap:wrap;gap:8px"><div style="color:var(--t4);font-size:12px">Click Refresh to compute.</div></div>
+      </div>
+
+      <!-- Row 3: Synthesis table -->
+      <div class="pn" style="margin-bottom:14px;padding:0;overflow-x:auto">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--b1)">
+          <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.8px">Synthesis Table — Score · Sentiment · Fair Value → Action</div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;min-width:700px">
+          <thead>
+            <tr style="border-bottom:2px solid var(--b1)">
+              <th style="text-align:left;padding:9px 12px;font-size:11px;color:var(--t4);font-weight:600">Stock</th>
+              <th style="text-align:center;padding:9px 8px;font-size:11px;color:var(--t4);font-weight:600">Weight</th>
+              <th style="text-align:center;padding:9px 8px;font-size:11px;color:var(--t4);font-weight:600">Score</th>
+              <th style="text-align:center;padding:9px 8px;font-size:11px;color:var(--t4);font-weight:600">Sentiment</th>
+              <th style="text-align:center;padding:9px 8px;font-size:11px;color:var(--t4);font-weight:600">Fair Value</th>
+              <th style="text-align:center;padding:9px 8px;font-size:11px;color:var(--t4);font-weight:600">P&L</th>
+              <th style="text-align:center;padding:9px 12px;font-size:11px;color:var(--t4);font-weight:600">Action</th>
+            </tr>
+          </thead>
+          <tbody id="pd-tbody"><tr><td colspan="7" style="padding:20px;text-align:center;color:var(--t4);font-size:12px">Click Refresh to load synthesis table.</td></tr></tbody>
+        </table>
+      </div>
+
+      <!-- Row 4: AI Doctor narrative -->
+      <div class="pn" style="padding:14px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.8px">🤖 AI Diagnosis</div>
+          <div style="font-size:10px;color:var(--t4)" id="pd-ai-ts">Not yet run</div>
+        </div>
+        <div id="pd-ai-narrative"><div style="color:var(--t4);font-size:12px">Click "AI Diagnosis" to get prescriptions for your portfolio.</div></div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ═══ SETTINGS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-settings">
     <div class="sec-head"><div class="sec-title">Settings</div></div>
@@ -3295,14 +3367,14 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio', dividends:'portfolio', divcal:'portfolio',
   action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis', riskpro:'analysis',
   screener:'portfolio', journal:'portfolio',
-  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai',
+  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai',
   alerts:'tools', notifications:'tools', calendar:'tools', deals:'tools', news:'tools', tax:'tools', import:'tools', macro:'tools',
   settings:'settings'
 };
@@ -3344,6 +3416,7 @@ function go(id) {
   if(id==='daily-brief') renderDailyBrief();
   if(id==='fair-value') renderFairValueEngine();
   if(id==='entry-triggers') renderEntryTriggers();
+  if(id==='portfolio-doctor') renderPortfolioDoctor2();
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -10736,6 +10809,241 @@ async function _sdSentimentContent(h) {
           ${hl.map(t=>`<div style="font-size:12px;color:var(--t2);padding:7px 10px;background:var(--s2);border-radius:6px;border:1px solid var(--b1);line-height:1.4">${t}</div>`).join('')}
         </div>` : `<div style="font-size:11px;color:var(--t4);padding:10px;background:var(--s2);border-radius:6px;border:1px solid var(--b1)">🤖 Scored from AI training knowledge — live headlines unavailable via current proxies.</div>`}
     </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// ██  AI PORTFOLIO DOCTOR  ████████████████████████████████████████████████
+// ════════════════════════════════════════════════════════════════════════
+
+function renderPortfolioDoctor2() {
+  if (!D.holdings.length) {
+    document.getElementById('pd-tbody').innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--t4)">Add holdings first.</td></tr>';
+    return;
+  }
+
+  // ── Compute portfolio totals ─────────────────────────────────
+  const totalCV = D.holdings.reduce((s,h) => s + h.qty*(h.ltp||h.avgPrice), 0);
+  const totalInv = D.holdings.reduce((s,h) => s + h.qty*h.avgPrice, 0);
+
+  // ── GAUGE — health score from score engine ───────────────────
+  const scores = D.holdings.map(h => {
+    const ltp = h.ltp||h.avgPrice, ret = ltp&&h.avgPrice?(ltp-h.avgPrice)/h.avgPrice*100:0;
+    return computeStockScores({ltp,h52:h._h52||h.h52,l52:h._l52||h.l52,pe:h._pe||h.pe||28,roe:h._roe?h._roe*100:12,beta:h._beta||h.beta||1,ret,sector:h.sector});
+  });
+  const avgScore = scores.reduce((s,sc) => s+sc.overall, 0) / scores.length;
+  const healthScore = Math.round(avgScore);
+  const hLabel = healthScore>=75?'Excellent':healthScore>=60?'Good':healthScore>=45?'Fair':healthScore>=30?'Poor':'Critical';
+  const hColor = healthScore>=75?'#2dd36f':healthScore>=60?'#fbbf24':healthScore>=45?'#f97316':'#ef4444';
+
+  // Draw gauge
+  const gc = document.getElementById('pd-gauge-canvas');
+  if (gc) {
+    const ctx = gc.getContext('2d');
+    const cx=70, cy=80, r=55;
+    ctx.clearRect(0,0,140,140);
+    // Background arc
+    ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,2*Math.PI); ctx.strokeStyle='#333'; ctx.lineWidth=10; ctx.stroke();
+    // Value arc
+    const pct = healthScore/100;
+    ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,Math.PI+pct*Math.PI); ctx.strokeStyle=hColor; ctx.lineWidth=10; ctx.lineCap='round'; ctx.stroke();
+    // Number
+    ctx.fillStyle=hColor; ctx.font='bold 22px var(--mono,monospace)'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(healthScore, cx, cy);
+    ctx.fillStyle='#888'; ctx.font='11px sans-serif'; ctx.fillText('/100', cx, cy+20);
+  }
+  const labelEl = document.getElementById('pd-health-label');
+  const subEl = document.getElementById('pd-health-sub');
+  if (labelEl) { labelEl.textContent = hLabel; labelEl.style.color = hColor; }
+  if (subEl) subEl.textContent = `${scores.filter(s=>s.rec==='BUY').length} BUY · ${scores.filter(s=>s.rec==='AVOID').length} AVOID of ${D.holdings.length}`;
+
+  // ── SECTOR ALLOCATION bar chart ──────────────────────────────
+  const sectorMap = {};
+  D.holdings.forEach(h => {
+    const sec = h.sector || 'Other';
+    const cv = h.qty * (h.ltp||h.avgPrice);
+    sectorMap[sec] = (sectorMap[sec]||0) + cv;
+  });
+  const sectors = Object.entries(sectorMap).sort((a,b)=>b[1]-a[1]);
+  const PALETTE = ['#4f8ef7','#2dd36f','#fbbf24','#8b5cf6','#f97316','#ec4899','#22d3ee','#38d9a9','#ef4444','#a3e635'];
+  const ac = document.getElementById('pd-alloc-canvas');
+  if (ac) {
+    const ctx = ac.getContext('2d');
+    const W = ac.offsetWidth||700, H=130;
+    ac.width = W; ac.height = H;
+    ctx.clearRect(0,0,W,H);
+    const barH = 28, gap=8, labelW=90;
+    const maxVal = sectors[0]?.[1]||1;
+    sectors.slice(0,6).forEach(([sec,val],i) => {
+      const y = i*(barH+gap)+16;
+      const barW = Math.round((val/maxVal)*(W-labelW-80));
+      // Label
+      ctx.fillStyle='#888'; ctx.font='11px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
+      ctx.fillText(sec.slice(0,12), labelW-4, y+barH/2);
+      // Bar
+      ctx.fillStyle=PALETTE[i%PALETTE.length];
+      ctx.beginPath(); _roundRect(ctx,labelW,y,barW,barH,4); ctx.fill();
+      // Pct text
+      const pct = (val/totalCV*100).toFixed(1);
+      ctx.fillStyle='#ccc'; ctx.font='10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText(pct+'%  ₹'+fI(val), labelW+barW+6, y+barH/2);
+    });
+  }
+  // Legend
+  const legendEl = document.getElementById('pd-alloc-legend');
+  if (legendEl) {
+    legendEl.innerHTML = sectors.map(([sec,val],i) =>
+      `<span style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--t3)"><span style="width:8px;height:8px;border-radius:2px;background:${PALETTE[i%PALETTE.length]};display:inline-block"></span>${sec} ${(val/totalCV*100).toFixed(0)}%</span>`
+    ).join('');
+  }
+
+  // ── CONCENTRATION RISK ────────────────────────────────────────
+  const concEl = document.getElementById('pd-concentration');
+  if (concEl) {
+    const flags = [];
+    D.holdings.forEach(h => {
+      const wt = (h.qty*(h.ltp||h.avgPrice)/totalCV)*100;
+      if (wt > 20) flags.push({sym:h.symbol, wt, level:'danger', msg:`${h.symbol} is ${wt.toFixed(1)}% of portfolio — very concentrated`});
+      else if (wt > 12) flags.push({sym:h.symbol, wt, level:'warn', msg:`${h.symbol} is ${wt.toFixed(1)}% — moderately concentrated`});
+    });
+    // Sector concentration
+    sectors.forEach(([sec,val]) => {
+      const pct = val/totalCV*100;
+      if (pct > 35) flags.push({sym:sec, wt:pct, level:'danger', msg:`${sec} sector is ${pct.toFixed(1)}% of portfolio`});
+      else if (pct > 25) flags.push({sym:sec, wt:pct, level:'warn', msg:`${sec} sector is ${pct.toFixed(1)}% — watch concentration`});
+    });
+    if (!flags.length) {
+      concEl.innerHTML = '<span style="font-size:12px;color:var(--grn)">✅ No concentration issues — well diversified.</span>';
+    } else {
+      concEl.innerHTML = flags.map(f => {
+        const col = f.level==='danger'?'var(--red)':'var(--yel)';
+        return `<div style="font-size:11px;color:${col};background:${col}12;border:1px solid ${col}44;border-radius:6px;padding:4px 10px">${f.level==='danger'?'🔴':'🟡'} ${f.msg}</div>`;
+      }).join('');
+    }
+  }
+
+  // ── SYNTHESIS TABLE ───────────────────────────────────────────
+  const tbody = document.getElementById('pd-tbody');
+  if (tbody) {
+    const rows = D.holdings.map((h,i) => {
+      const ltp = h.ltp||h.avgPrice;
+      const cv = h.qty*ltp, inv=h.qty*h.avgPrice, plp=(ltp-h.avgPrice)/h.avgPrice*100;
+      const wt = (cv/totalCV*100);
+      const sc = scores[i];
+      const gradeCol = sc.grade==='A'?'var(--grn)':sc.grade.startsWith('B')?'var(--ac)':sc.grade==='C'?'var(--yel)':'var(--red)';
+      // Sentiment
+      const st = h._sentiment;
+      const sentCol = st?.sentiment==='Bullish'?'var(--grn)':st?.sentiment==='Bearish'?'var(--red)':'var(--t4)';
+      const sentTxt = st?.sentiment || '—';
+      const sentIc = st?.sentiment==='Bullish'?'▲':st?.sentiment==='Bearish'?'▼':'—';
+      // Fair Value
+      const fv = computeFairValue(h);
+      const mosCol = fv.mos!=null ? (fv.mos>10?'var(--grn)':fv.mos<-10?'var(--red)':'var(--yel)') : 'var(--t4)';
+      const mosTxt = fv.mos!=null ? (fv.mos>0?'+':'')+fv.mos+'% MoS' : '—';
+      // Action
+      const action = _pdAction(sc, st, fv, wt);
+      const actionCol = action.col;
+
+      return `<tr style="border-bottom:1px solid var(--b2);cursor:pointer" onclick="openDetail(${h.id})">
+        <td style="padding:9px 12px">
+          <div style="font-weight:700;font-size:13px;color:var(--t1)">${h.symbol}</div>
+          <div style="font-size:10px;color:var(--t4)">${h.sector||'—'}</div>
+        </td>
+        <td style="text-align:center;padding:9px 8px">
+          <div style="font-size:12px;font-weight:600;color:var(--t2)">${wt.toFixed(1)}%</div>
+          <div style="width:50px;height:4px;background:var(--b2);border-radius:2px;margin:3px auto 0"><div style="width:${Math.min(100,wt/20*100)}%;height:100%;background:${wt>15?'var(--red)':wt>10?'var(--yel)':'var(--grn)'};border-radius:2px"></div></div>
+        </td>
+        <td style="text-align:center;padding:9px 8px">
+          <span style="font-size:13px;font-weight:700;color:${gradeCol}">${sc.overall}</span>
+          <span style="font-size:10px;color:var(--t4)"> ${sc.grade}</span>
+        </td>
+        <td style="text-align:center;padding:9px 8px;color:${sentCol};font-size:11px;font-weight:600">${sentIc} ${sentTxt}</td>
+        <td style="text-align:center;padding:9px 8px;color:${mosCol};font-size:11px;font-weight:600">${mosTxt}</td>
+        <td style="text-align:center;padding:9px 8px;color:${plp>=0?'var(--grn)':'var(--red)'};font-size:11px;font-weight:600">${plp>=0?'+':''}${plp.toFixed(1)}%</td>
+        <td style="text-align:center;padding:9px 12px">
+          <span style="font-size:10px;font-weight:700;color:${actionCol};background:${actionCol}18;border:1px solid ${actionCol}44;border-radius:10px;padding:2px 8px;white-space:nowrap">${action.label}</span>
+        </td>
+      </tr>`;
+    }).join('');
+    tbody.innerHTML = rows;
+  }
+}
+
+// Helper: round rect for canvas
+function _roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+// Action recommendation from all three signals
+function _pdAction(sc, st, fv, wt) {
+  const bullSent = st?.sentiment === 'Bullish';
+  const bearSent = st?.sentiment === 'Bearish';
+  const cheap = fv?.cheap === true;
+  const expensive = fv?.expensive === true;
+  const highScore = sc.overall >= 65;
+  const lowScore = sc.overall < 40;
+  const overweight = wt > 15;
+
+  if (sc.rec === 'AVOID' || lowScore) return {label:'⚠ Review', col:'var(--red)'};
+  if (overweight && (expensive || bearSent)) return {label:'✂ Trim', col:'var(--orn)'};
+  if (highScore && cheap && bullSent) return {label:'➕ Add More', col:'var(--grn)'};
+  if (highScore && cheap) return {label:'💎 Accumulate', col:'var(--cyn)'};
+  if (expensive && overweight) return {label:'✂ Reduce', col:'var(--yel)'};
+  if (highScore && bullSent) return {label:'✅ Hold', col:'var(--grn)'};
+  if (bearSent && expensive) return {label:'⚠ Watch', col:'var(--yel)'};
+  return {label:'✅ Hold', col:'var(--t3)'};
+}
+
+// AI Diagnosis narrative
+async function runPortfolioDoctorAI() {
+  const btn = document.getElementById('pd-ai-btn');
+  const narrativeEl = document.getElementById('pd-ai-narrative');
+  const tsEl = document.getElementById('pd-ai-ts');
+  if (!D.holdings.length) { toast('No holdings'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Diagnosing…'; }
+  if (narrativeEl) narrativeEl.innerHTML = '<div style="color:var(--t4);font-size:12px">🤖 AI is analyzing your portfolio…</div>';
+
+  const totalCV = D.holdings.reduce((s,h) => s+h.qty*(h.ltp||h.avgPrice), 0);
+  const totalInv = D.holdings.reduce((s,h) => s+h.qty*h.avgPrice, 0);
+  const portRet = ((totalCV-totalInv)/totalInv*100).toFixed(1);
+
+  const holdSummary = D.holdings.map(h => {
+    const ltp = h.ltp||h.avgPrice, wt = ((h.qty*ltp/totalCV)*100).toFixed(0);
+    const sc = (() => { const ret=(ltp-h.avgPrice)/h.avgPrice*100; return computeStockScores({ltp,h52:h._h52||h.h52,l52:h._l52||h.l52,pe:h._pe||h.pe||28,roe:h._roe?h._roe*100:12,beta:h._beta||h.beta||1,ret,sector:h.sector}); })();
+    const fv = computeFairValue(h);
+    return `${h.symbol}(${wt}%,score${sc.overall},${h._sentiment?.sentiment||'?'},MoS${fv.mos!=null?fv.mos+'%':'?'})`;
+  }).join(' ');
+
+  const prompt = `Portfolio Doctor, Indian retail investor. ${D.holdings.length} stocks, ₹${fI(totalCV)} total, ${portRet}% return.
+Holdings: ${holdSummary}.
+Give 3 specific, actionable prescriptions — which stocks to trim, add, or exit and why. Be direct.
+Reply JSON: {"diagnosis":"<2 sentence overall>","rx":["<prescription 1>","<prescription 2>","<prescription 3>"],"watchlist":["<stock to watch 1>","<stock to watch 2>"],"verdict":"<Healthy|Needs Attention|At Risk>"}`;
+
+  const result = await claudeJSON(prompt).catch(()=>null);
+  if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Diagnosis'; }
+
+  if (!result || !result.diagnosis) {
+    if (narrativeEl) narrativeEl.innerHTML = '<div style="color:var(--red);font-size:12px">AI diagnosis failed — try again.</div>';
+    return;
+  }
+
+  const verdictCol = result.verdict==='Healthy'?'var(--grn)':result.verdict==='Needs Attention'?'var(--yel)':'var(--red)';
+  if (narrativeEl) narrativeEl.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="font-size:12px;font-weight:700;color:${verdictCol};background:${verdictCol}18;border:1px solid ${verdictCol}44;border-radius:10px;padding:2px 10px">${result.verdict||'—'}</span>
+    </div>
+    <div style="font-size:13px;color:var(--t2);line-height:1.6;margin-bottom:14px">${result.diagnosis||''}</div>
+    <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Prescriptions</div>
+    <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:14px">
+      ${(result.rx||[]).map((rx,i)=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 12px;background:var(--s2);border-radius:7px;border:1px solid var(--b1)"><span style="font-size:14px;flex-shrink:0">💊</span><span style="font-size:12px;color:var(--t2);line-height:1.5">${rx}</span></div>`).join('')}
+    </div>
+    ${result.watchlist?.length?`<div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Keep watching</div><div style="display:flex;gap:6px;flex-wrap:wrap">${result.watchlist.map(s=>`<span style="font-size:11px;font-weight:700;color:var(--ac);background:var(--ac)18;border:1px solid var(--ac)44;border-radius:10px;padding:2px 9px">${s}</span>`).join('')}</div>`:''}`;
+  if (tsEl) tsEl.textContent = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
 }
 
 // ════════════════════════════════════════════════════════════════════════
