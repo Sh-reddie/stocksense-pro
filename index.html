@@ -11574,8 +11574,8 @@ Reply ONLY with compact valid JSON no markdown:
       // Repair common LLM error: recommendations array closed early, extra items placed outside
       // Pattern: }], {"symbol" should be }, {"symbol"
       s = s.replace(/\}\],\s*\{"symbol"/g, '}, {"symbol"');
-      // Strip any stray ] before key names that follow a comma
-      s = s.replace(/\]\s*,\s*"(priority_exit|total_realizable_gain)"/g, '],"$1"');
+      // Strip any stray ] or ]} before trailing key names (model closes outer obj early)
+      s = s.replace(/\]\s*\}?\s*,\s*"(priority_exit|total_realizable_gain)"/g, '],"$1"');
       // Try direct parse, then extract first {...} block
       try { return JSON.parse(s); } catch(e) {
         const m = s.match(/\{[\s\S]*\}/);
