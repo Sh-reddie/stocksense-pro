@@ -758,6 +758,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('position-builder')">🎯 Position Builder</div>
         <div class="tn-drop-item" onclick="go('stress-test')">🧨 Stress Test</div>
         <div class="tn-drop-item" onclick="go('comparator')">⚔ Stock Comparator</div>
+        <div class="tn-drop-item" onclick="go('intel-report')" style="font-weight:600;color:var(--ac)">📑 Intel Report</div>
       </div>
     </div>
     <!-- Tools dropdown -->
@@ -2455,6 +2456,84 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
   </div>
 
+  <!-- ═══ INTEL REPORT ════════════════════════════════════ -->
+  <div class="sec" id="sec-intel-report">
+    <div class="sec-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div class="sec-title">📑 Portfolio Intelligence Report</div>
+        <div style="font-size:11px;color:var(--t4);margin-top:2px">All signals synthesised — your complete portfolio state at a glance</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g btn-sm" id="ir-ai-btn" onclick="runIntelAI()">🤖 AI Executive Summary</button>
+        <button class="btn btn-g btn-sm" onclick="window.print()">🖨 Print</button>
+        <button class="btn btn-p btn-sm" onclick="renderIntelReport()">🔄 Refresh</button>
+      </div>
+    </div>
+
+    <!-- Row 1: Health + Allocation -->
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+      <!-- Health gauge (text-based, no canvas needed) -->
+      <div class="pn" style="flex:1;min-width:200px;padding:18px 20px;text-align:center">
+        <div style="font-size:10px;color:var(--t4);margin-bottom:8px;letter-spacing:1px">PORTFOLIO HEALTH</div>
+        <div id="ir-health-score" style="font-size:52px;font-weight:900;line-height:1">—</div>
+        <div id="ir-health-grade" style="font-size:13px;font-weight:700;margin-top:4px">—</div>
+        <div id="ir-health-bar" style="height:6px;border-radius:3px;background:var(--b3);margin:10px 0 6px;overflow:hidden"><div id="ir-health-fill" style="height:100%;width:0%;transition:width .6s"></div></div>
+        <div id="ir-health-sub" style="font-size:10px;color:var(--t4)">—</div>
+      </div>
+
+      <!-- Sector allocation bars -->
+      <div class="pn" style="flex:2;min-width:260px;padding:14px 18px">
+        <div style="font-size:10px;color:var(--t4);margin-bottom:10px;letter-spacing:1px">SECTOR ALLOCATION</div>
+        <div id="ir-sector-bars"></div>
+      </div>
+
+      <!-- Signal mix donut (text) -->
+      <div class="pn" style="flex:1;min-width:180px;padding:14px 18px">
+        <div style="font-size:10px;color:var(--t4);margin-bottom:10px;letter-spacing:1px">SIGNAL OVERVIEW</div>
+        <div id="ir-signals"></div>
+      </div>
+    </div>
+
+    <!-- Row 2: Action cards -->
+    <div id="ir-action-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+
+    <!-- Row 3: Sentiment bar + Stress preview -->
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+      <div class="pn" style="flex:2;min-width:240px;padding:14px 18px">
+        <div style="font-size:10px;color:var(--t4);margin-bottom:10px;letter-spacing:1px">SENTIMENT DISTRIBUTION</div>
+        <div id="ir-sentiment"></div>
+      </div>
+      <div class="pn" style="flex:1;min-width:180px;padding:14px 18px">
+        <div style="font-size:10px;color:var(--t4);margin-bottom:10px;letter-spacing:1px">STRESS PREVIEW (−20%)</div>
+        <div id="ir-stress"></div>
+      </div>
+      <div class="pn" style="flex:1;min-width:180px;padding:14px 18px">
+        <div style="font-size:10px;color:var(--t4);margin-bottom:10px;letter-spacing:1px">TOP WATCHLIST PICK</div>
+        <div id="ir-watchlist-pick"></div>
+      </div>
+    </div>
+
+    <!-- Row 4: Holdings snapshot table (top 5 by weight) -->
+    <div class="pn" style="margin-bottom:14px">
+      <div style="font-size:10px;color:var(--t4);margin-bottom:10px;letter-spacing:1px;padding:14px 18px 0">TOP HOLDINGS</div>
+      <div style="overflow-x:auto">
+        <table class="htbl" style="width:100%">
+          <thead><tr><th>Stock</th><th>Sector</th><th>Weight</th><th>Score</th><th>Sentiment</th><th>Action</th><th>P&amp;L</th></tr></thead>
+          <tbody id="ir-holdings-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- AI Executive Summary -->
+    <div class="pn" id="ir-ai-panel" style="display:none">
+      <div class="pn-h" style="display:flex;justify-content:space-between;align-items:center">
+        <div class="pn-t">🤖 AI Executive Summary</div>
+        <div id="ir-generated-at" style="font-size:10px;color:var(--t4)"></div>
+      </div>
+      <div class="pn-b" id="ir-ai-content" style="font-size:13px;color:var(--t2);line-height:1.7"></div>
+    </div>
+  </div>
+
   <!-- ═══ SETTINGS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-settings">
     <div class="sec-head"><div class="sec-title">Settings</div></div>
@@ -3663,14 +3742,14 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ AI Stock Comparator'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ AI Stock Comparator','intel-report':'📑 Portfolio Intelligence Report'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio', dividends:'portfolio', divcal:'portfolio',
   action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis', riskpro:'analysis',
   screener:'portfolio', journal:'portfolio',
-  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai', 'position-builder':'ai', 'stress-test':'ai', 'comparator':'ai',
+  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai', 'position-builder':'ai', 'stress-test':'ai', 'comparator':'ai', 'intel-report':'ai',
   alerts:'tools', notifications:'tools', calendar:'tools', deals:'tools', news:'tools', tax:'tools', import:'tools', macro:'tools',
   settings:'settings'
 };
@@ -3718,6 +3797,7 @@ function go(id) {
   if(id==='position-builder') initPositionBuilder();
   if(id==='stress-test') runStress(0);
   if(id==='comparator') initComparator();
+  if(id==='intel-report') renderIntelReport();
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -11115,6 +11195,218 @@ async function _sdSentimentContent(h) {
 // ════════════════════════════════════════════════════════════════════════
 // ██  WATCHLIST OPPORTUNITY RANKER  ██████████████████████████████████████
 // ════════════════════════════════════════════════════════════════════════
+
+// ── PHASE 10: PORTFOLIO INTELLIGENCE REPORT ─────────────────────────────────
+
+function renderIntelReport() {
+  if (!D.holdings.length) return;
+
+  const totalVal = D.holdings.reduce((s,h) => s + (h.ltp||h.avgPrice||0)*h.qty, 0);
+  const totalCost = D.holdings.reduce((s,h) => s + (h.avgPrice||0)*h.qty, 0);
+
+  // ── Health Score (avg of all scored stocks, else fall back to P&L proxy) ──
+  const scored = D.holdings.filter(h => h._scores);
+  const healthScore = scored.length
+    ? Math.round(scored.reduce((s,h) => s+h._scores.overall, 0) / scored.length)
+    : Math.min(100, Math.max(0, Math.round(50 + (totalVal - totalCost) / totalCost * 100)));
+  const healthGrade = healthScore >= 70 ? {l:'Healthy 💪', c:'var(--grn)'} :
+                      healthScore >= 50 ? {l:'Moderate ⚖', c:'var(--yel)'} :
+                                          {l:'At Risk ⚠', c:'var(--red)'};
+  document.getElementById('ir-health-score').textContent = healthScore;
+  document.getElementById('ir-health-score').style.color = healthGrade.c;
+  document.getElementById('ir-health-grade').textContent = healthGrade.l;
+  document.getElementById('ir-health-grade').style.color = healthGrade.c;
+  document.getElementById('ir-health-fill').style.width = healthScore + '%';
+  document.getElementById('ir-health-fill').style.background = healthGrade.c;
+  document.getElementById('ir-health-sub').textContent =
+    `${scored.length}/${D.holdings.length} stocks scored · ${totalVal>=100000?(totalVal/100000).toFixed(1)+'L':'₹'+Math.round(totalVal).toLocaleString('en-IN')} portfolio`;
+
+  // ── Sector allocation bars ──
+  const sectorMap = {};
+  D.holdings.forEach(h => {
+    const s = h.sector || 'Other';
+    const v = (h.ltp||h.avgPrice||0) * h.qty;
+    sectorMap[s] = (sectorMap[s]||0) + v;
+  });
+  const sectors = Object.entries(sectorMap).sort((a,b) => b[1]-a[1]).slice(0,7);
+  const maxSV = sectors[0]?.[1] || 1;
+  const sectorColours = ['var(--ac)','var(--ac2)','var(--grn)','var(--cyn)','var(--yel)','var(--orn)','var(--red)'];
+  document.getElementById('ir-sector-bars').innerHTML = sectors.map(([s,v],i) => {
+    const pct = (v/totalVal*100).toFixed(1);
+    const barW = (v/maxSV*100).toFixed(1);
+    return `<div style="margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">
+        <span style="color:var(--t2)">${s}</span>
+        <span style="color:var(--t3)">${pct}%</span>
+      </div>
+      <div style="height:5px;background:var(--b3);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${barW}%;background:${sectorColours[i]};border-radius:3px"></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // ── Signal overview ──
+  const allSigs = D.holdings.map(h => _weeklySignals(h));
+  const buys = allSigs.filter(s=>s.actionGroup==='buy').length;
+  const holds = allSigs.filter(s=>s.actionGroup==='hold').length;
+  const sells = allSigs.filter(s=>s.actionGroup==='sell').length;
+  const sentScored = D.holdings.filter(h=>h._sentiment).length;
+  const bullSent = D.holdings.filter(h=>h._sentiment?.sentiment==='Bullish').length;
+  const bearSent = D.holdings.filter(h=>h._sentiment?.sentiment==='Bearish').length;
+  document.getElementById('ir-signals').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:7px">
+      ${[
+        {l:'🟢 Buy / Accumulate', v:buys, c:'var(--grn)'},
+        {l:'🟡 Hold / Watch',     v:holds, c:'var(--yel)'},
+        {l:'🔴 Trim / Review',    v:sells, c:'var(--red)'}
+      ].map(r=>`<div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;color:var(--t3)">${r.l}</span>
+        <span style="font-size:13px;font-weight:700;color:${r.c}">${r.v}</span>
+      </div>`).join('')}
+      <div style="border-top:1px solid var(--b2);padding-top:6px;margin-top:2px;font-size:10px;color:var(--t4)">${sentScored} stocks sentiment-scored · ${bullSent}▲ ${bearSent}▼</div>
+    </div>`;
+
+  // ── Top action cards ──
+  const sortedSigs = allSigs.slice().sort((a,b)=>b.bull-a.bull);
+  const topBuy  = allSigs.filter(s=>s.actionGroup==='buy').sort((a,b)=>b.conviction-a.conviction)[0];
+  const topTrim = allSigs.filter(s=>s.actionGroup==='sell').sort((a,b)=>b.bear-a.bear)[0];
+  const topWatch= allSigs.filter(s=>s.actionGroup==='hold').sort((a,b)=>b.conviction-a.conviction)[0];
+  const mkCard = (sig, icon, label, col) => sig ? `
+    <div class="pn" style="flex:1;min-width:160px;padding:12px 16px;border-left:3px solid ${col}">
+      <div style="font-size:10px;color:var(--t4);margin-bottom:4px">${icon} ${label}</div>
+      <div style="font-size:16px;font-weight:700;color:${col}">${sig.stock.symbol}</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:2px">${sig.action} · ${sig.conviction}% conviction</div>
+      <div style="font-size:10px;color:var(--t4);margin-top:2px">${sig.keyReason}</div>
+    </div>` : '';
+  document.getElementById('ir-action-cards').innerHTML = [
+    mkCard(topBuy,  '🟢','TOP BUY','var(--grn)'),
+    mkCard(topTrim, '🔴','TOP TRIM','var(--red)'),
+    mkCard(topWatch,'🟡','WATCH','var(--yel)')
+  ].join('');
+
+  // ── Sentiment bar ──
+  const neutSent = sentScored - bullSent - bearSent;
+  const pB = sentScored ? Math.round(bullSent/sentScored*100) : 0;
+  const pN = sentScored ? Math.round(neutSent/sentScored*100) : 0;
+  const pBr= sentScored ? 100-pB-pN : 0;
+  document.getElementById('ir-sentiment').innerHTML = sentScored ? `
+    <div style="display:flex;height:20px;border-radius:6px;overflow:hidden;margin-bottom:8px">
+      ${pB?`<div style="width:${pB}%;background:var(--grn)" title="Bullish ${pB}%"></div>`:''}
+      ${pN?`<div style="width:${pN}%;background:var(--yel)" title="Neutral ${pN}%"></div>`:''}
+      ${pBr?`<div style="width:${pBr}%;background:var(--red)" title="Bearish ${pBr}%"></div>`:''}
+    </div>
+    <div style="display:flex;gap:12px;font-size:11px">
+      <span style="color:var(--grn)">▲ Bullish ${bullSent}</span>
+      <span style="color:var(--yel)">— Neutral ${neutSent}</span>
+      <span style="color:var(--red)">▼ Bearish ${bearSent}</span>
+    </div>
+    <div style="font-size:10px;color:var(--t4);margin-top:4px">${sentScored}/${D.holdings.length} holdings scored</div>
+  ` : `<div style="color:var(--t4);font-size:12px">Run 🗞 Sentiment to score holdings</div>`;
+
+  // ── Stress preview (−20%) ──
+  const stressRows = D.holdings.map(h => {
+    const ltp = h.ltp||h.avgPrice||0;
+    const beta = h._beta || SECTOR_BETA[h.sector||'default'] || 1.0;
+    return (ltp * (1 + (-20*beta/100))) * h.qty;
+  });
+  const stressTotal = stressRows.reduce((s,v)=>s+v,0);
+  const stressImpact = stressTotal - totalVal;
+  const stressPct = (stressImpact/totalVal*100).toFixed(1);
+  document.getElementById('ir-stress').innerHTML = `
+    <div style="font-size:18px;font-weight:700;color:var(--red)">${stressPct}%</div>
+    <div style="font-size:11px;color:var(--t3);margin-top:3px">−₹${Math.abs(stressImpact)>=100000?(Math.abs(stressImpact)/100000).toFixed(1)+'L':(Math.abs(stressImpact)/1000).toFixed(0)+'K'} estimated impact</div>
+    <div style="font-size:10px;color:var(--t4);margin-top:2px">Portfolio after: ₹${stressTotal>=100000?(stressTotal/100000).toFixed(1)+'L':(stressTotal/1000).toFixed(0)+'K'}</div>
+    <div style="font-size:10px;color:var(--t4);margin-top:6px">Beta-adjusted · See Stress Test for full view</div>`;
+
+  // ── Watchlist top pick ──
+  const topOpp = D.watchlist.length
+    ? D.watchlist.map(w=>({w,sc:_oppScore(w)})).sort((a,b)=>b.sc.total-a.sc.total)[0]
+    : null;
+  document.getElementById('ir-watchlist-pick').innerHTML = topOpp ? `
+    <div style="font-size:18px;font-weight:700;color:var(--ac)">${topOpp.w.symbol}</div>
+    <div style="font-size:11px;color:var(--t3);margin-top:3px">Opp Score ${topOpp.sc.total}/100</div>
+    <div style="font-size:10px;color:var(--t4);margin-top:2px">${topOpp.w.sector||'—'} · ₹${f(topOpp.w.ltp||0)}</div>
+    <div style="font-size:10px;color:var(--t4);margin-top:6px">See Opp. Ranker for full list</div>
+  ` : `<div style="color:var(--t4);font-size:12px">No watchlist stocks</div>`;
+
+  // ── Top holdings table ──
+  const sorted = D.holdings.slice().sort((a,b) => ((b.ltp||b.avgPrice||0)*b.qty) - ((a.ltp||a.avgPrice||0)*a.qty));
+  const fmtPL = h => {
+    const ltp = h.ltp||h.avgPrice||0;
+    const pct = h.avgPrice ? ((ltp-h.avgPrice)/h.avgPrice*100) : 0;
+    return `<span style="color:${pct>=0?'var(--grn)':'var(--red)'}">${pct>=0?'+':''}${pct.toFixed(1)}%</span>`;
+  };
+  document.getElementById('ir-holdings-tbody').innerHTML = sorted.slice(0,8).map(h => {
+    const wt = totalVal > 0 ? ((h.ltp||h.avgPrice||0)*h.qty/totalVal*100).toFixed(1) : 0;
+    const sc = h._scores;
+    const st = h._sentiment;
+    const sig = _weeklySignals(h);
+    const sentIcon = st ? (st.sentiment==='Bullish'?'<span style="color:var(--grn)">▲</span>':st.sentiment==='Bearish'?'<span style="color:var(--red)">▼</span>':'<span style="color:var(--yel)">—</span>') : '<span style="color:var(--t4)">—</span>';
+    return `<tr onclick="openDetail(${h.id})" style="cursor:pointer">
+      <td><div style="font-weight:600">${h.symbol}</div><div style="font-size:10px;color:var(--t4)">₹${f(h.ltp||h.avgPrice||0)}</div></td>
+      <td style="font-size:11px;color:var(--t4)">${h.sector||'—'}</td>
+      <td style="font-weight:600">${wt}%</td>
+      <td>${sc ? `<span style="font-weight:700;color:${sc.overall>=65?'var(--grn)':sc.overall<40?'var(--red)':'var(--yel)'}">${sc.overall}</span>` : '—'}</td>
+      <td>${sentIcon}</td>
+      <td><span style="font-size:11px;color:${sig.actionCol}">${sig.action}</span></td>
+      <td>${fmtPL(h)}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function runIntelAI() {
+  renderIntelReport();
+  const btn = document.getElementById('ir-ai-btn');
+  const panel = document.getElementById('ir-ai-panel');
+  const content = document.getElementById('ir-ai-content');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Analysing…'; }
+  if (panel) panel.style.display = '';
+  if (content) content.innerHTML = '<div style="color:var(--t4);font-size:12px">Generating executive summary…</div>';
+
+  const totalVal = D.holdings.reduce((s,h) => s + (h.ltp||h.avgPrice||0)*h.qty, 0);
+  const totalCost = D.holdings.reduce((s,h) => s + (h.avgPrice||0)*h.qty, 0);
+  const pnlPct = totalCost > 0 ? ((totalVal-totalCost)/totalCost*100).toFixed(1) : 0;
+  const allSigs = D.holdings.map(h => _weeklySignals(h));
+  const buys = allSigs.filter(s=>s.actionGroup==='buy').length;
+  const sells = allSigs.filter(s=>s.actionGroup==='sell').length;
+  const scored = D.holdings.filter(h=>h._scores);
+  const avgScore = scored.length ? Math.round(scored.reduce((s,h)=>s+h._scores.overall,0)/scored.length) : null;
+  const topBuy  = allSigs.filter(s=>s.actionGroup==='buy').sort((a,b)=>b.conviction-a.conviction)[0];
+  const topTrim = allSigs.filter(s=>s.actionGroup==='sell').sort((a,b)=>b.bear-a.bear)[0];
+  const sectorMap = {};
+  D.holdings.forEach(h => { const s=h.sector||'Other'; const v=(h.ltp||h.avgPrice||0)*h.qty; sectorMap[s]=(sectorMap[s]||0)+v; });
+  const topSector = Object.entries(sectorMap).sort((a,b)=>b[1]-a[1])[0];
+  const concentration = topSector ? (topSector[1]/totalVal*100).toFixed(0) : 0;
+
+  const prompt = `Indian portfolio manager writing a weekly briefing. Portfolio: ₹${Math.round(totalVal/1000)}K, P&L ${pnlPct>0?'+':''}${pnlPct}%, avg score ${avgScore??'N/A'}/100, ${buys} buy signals ${sells} trim signals, top sector ${topSector?.[0]||'—'} at ${concentration}% weight${topBuy?', top buy: '+topBuy.stock.symbol:''}${topTrim?', top trim: '+topTrim.stock.symbol:''}.
+Write a 3-sentence executive summary for the investor. Reply JSON: {"summary":"<60 words>","strength":"<12 words>","concern":"<12 words>","outlook":"Positive|Cautious|Negative"}`;
+
+  try {
+    const res = await claudeJSON(prompt);
+    if (!res || !res.outlook) throw new Error('bad response');
+    const olCol = res.outlook==='Positive'?'var(--grn)':res.outlook==='Negative'?'var(--red)':'var(--yel)';
+    const now = new Date().toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'});
+    document.getElementById('ir-generated-at').textContent = `Generated ${now}`;
+    content.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700;color:${olCol};background:${olCol}18;border:1px solid ${olCol}44;border-radius:10px;padding:3px 12px">${res.outlook} Outlook</span>
+      </div>
+      <p style="margin:0 0 14px;color:var(--t1);font-size:13px;line-height:1.7">${res.summary}</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:160px;background:var(--grn)11;border:1px solid var(--grn)33;border-radius:8px;padding:10px 14px">
+          <div style="font-size:10px;color:var(--t4);margin-bottom:3px">PORTFOLIO STRENGTH</div>
+          <div style="font-size:12px;color:var(--grn)">${res.strength}</div>
+        </div>
+        <div style="flex:1;min-width:160px;background:var(--yel)11;border:1px solid var(--yel)33;border-radius:8px;padding:10px 14px">
+          <div style="font-size:10px;color:var(--t4);margin-bottom:3px">KEY CONCERN</div>
+          <div style="font-size:12px;color:var(--yel)">${res.concern}</div>
+        </div>
+      </div>`;
+  } catch(e) {
+    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed — check your OpenRouter key in Settings.</div>';
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Executive Summary'; }
+}
 
 // ── PHASE 9: AI STOCK COMPARATOR ────────────────────────────────────────────
 
