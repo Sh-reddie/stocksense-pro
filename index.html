@@ -757,6 +757,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('action-plan')" style="font-weight:600;color:var(--grn)">📋 Action Plan</div>
         <div class="tn-drop-item" onclick="go('position-builder')">🎯 Position Builder</div>
         <div class="tn-drop-item" onclick="go('stress-test')">🧨 Stress Test</div>
+        <div class="tn-drop-item" onclick="go('comparator')">⚔ Stock Comparator</div>
       </div>
     </div>
     <!-- Tools dropdown -->
@@ -2405,6 +2406,55 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
   </div>
 
+  <!-- ═══ COMPARATOR ══════════════════════════════════════ -->
+  <div class="sec" id="sec-comparator">
+    <div class="sec-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div class="sec-title">⚔ AI Stock Comparator</div>
+        <div style="font-size:11px;color:var(--t4);margin-top:2px">Head-to-head across valuation, score, sentiment, risk and momentum — AI picks the winner</div>
+      </div>
+    </div>
+
+    <!-- Stock pickers -->
+    <div class="pn" style="margin-bottom:16px;padding:14px 18px">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:180px">
+          <div style="font-size:10px;color:var(--t4);margin-bottom:4px">STOCK A</div>
+          <select id="cmp-a" class="inp" style="width:100%"><option value="">— Select —</option></select>
+        </div>
+        <div style="font-size:20px;font-weight:700;color:var(--t4);padding-bottom:6px">vs</div>
+        <div style="flex:1;min-width:180px">
+          <div style="font-size:10px;color:var(--t4);margin-bottom:4px">STOCK B</div>
+          <select id="cmp-b" class="inp" style="width:100%"><option value="">— Select —</option></select>
+        </div>
+        <button class="btn btn-p btn-sm" onclick="runComparator()" style="white-space:nowrap">⚔ Compare</button>
+        <button class="btn btn-g btn-sm" id="cmp-ai-btn" onclick="runComparatorAI()" style="white-space:nowrap">🤖 AI Verdict</button>
+      </div>
+    </div>
+
+    <!-- Scoreboard header (hidden until run) -->
+    <div id="cmp-header" style="display:none;margin-bottom:10px">
+      <div style="display:grid;grid-template-columns:160px 1fr 60px 1fr;gap:0;align-items:center;text-align:center;padding:12px 16px;background:var(--b2);border-radius:10px 10px 0 0">
+        <div style="text-align:left;font-size:10px;color:var(--t4)">DIMENSION</div>
+        <div id="cmp-hdr-a" style="font-size:15px;font-weight:700;color:var(--ac)">—</div>
+        <div style="font-size:11px;color:var(--t4)">Winner</div>
+        <div id="cmp-hdr-b" style="font-size:15px;font-weight:700;color:var(--ac2)">—</div>
+      </div>
+    </div>
+
+    <!-- Comparison rows -->
+    <div id="cmp-rows"></div>
+
+    <!-- Score tally -->
+    <div id="cmp-tally" style="display:none;margin-top:10px;padding:12px 16px;background:var(--b2);border-radius:0 0 10px 10px;display:flex;gap:20px;align-items:center;flex-wrap:wrap"></div>
+
+    <!-- AI verdict panel -->
+    <div class="pn" id="cmp-ai-panel" style="margin-top:14px;display:none">
+      <div class="pn-h"><div class="pn-t">🤖 AI Investment Verdict</div></div>
+      <div class="pn-b" id="cmp-ai-content" style="font-size:13px;color:var(--t2);line-height:1.6"></div>
+    </div>
+  </div>
+
   <!-- ═══ SETTINGS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-settings">
     <div class="sec-head"><div class="sec-title">Settings</div></div>
@@ -3613,14 +3663,14 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ AI Stock Comparator'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio', dividends:'portfolio', divcal:'portfolio',
   action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis', riskpro:'analysis',
   screener:'portfolio', journal:'portfolio',
-  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai', 'position-builder':'ai', 'stress-test':'ai',
+  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai', 'position-builder':'ai', 'stress-test':'ai', 'comparator':'ai',
   alerts:'tools', notifications:'tools', calendar:'tools', deals:'tools', news:'tools', tax:'tools', import:'tools', macro:'tools',
   settings:'settings'
 };
@@ -3667,6 +3717,7 @@ function go(id) {
   if(id==='action-plan') renderActionPlan();
   if(id==='position-builder') initPositionBuilder();
   if(id==='stress-test') runStress(0);
+  if(id==='comparator') initComparator();
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -11064,6 +11115,254 @@ async function _sdSentimentContent(h) {
 // ════════════════════════════════════════════════════════════════════════
 // ██  WATCHLIST OPPORTUNITY RANKER  ██████████████████████████████████████
 // ════════════════════════════════════════════════════════════════════════
+
+// ── PHASE 9: AI STOCK COMPARATOR ────────────────────────────────────────────
+
+function _cmpBuildOptions() {
+  const seen = new Set();
+  const opts = ['<option value="">— Select —</option><optgroup label="Holdings">'];
+  D.holdings.forEach(h => {
+    if (!seen.has(h.symbol)) {
+      seen.add(h.symbol);
+      opts.push(`<option value="h|${h.id}">${h.symbol} (₹${f(h.ltp||h.avgPrice||0)})</option>`);
+    }
+  });
+  opts.push('</optgroup><optgroup label="Watchlist">');
+  D.watchlist.forEach(w => {
+    if (!seen.has(w.symbol)) {
+      seen.add(w.symbol);
+      opts.push(`<option value="w|${w.id}">${w.symbol} (₹${f(w.ltp||0)})</option>`);
+    }
+  });
+  opts.push('</optgroup>');
+  return opts.join('');
+}
+
+function initComparator() {
+  const html = _cmpBuildOptions();
+  ['cmp-a','cmp-b'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+  });
+  // Pre-select first two different stocks
+  const stocks = [...D.holdings, ...D.watchlist];
+  if (stocks.length >= 2) {
+    const a = document.getElementById('cmp-a');
+    const b = document.getElementById('cmp-b');
+    if (a && stocks[0]) a.value = (D.holdings.includes(stocks[0]) ? 'h|' : 'w|') + stocks[0].id;
+    if (b && stocks[1]) b.value = (D.holdings.includes(stocks[1]) ? 'h|' : 'w|') + stocks[1].id;
+  }
+  document.getElementById('cmp-header').style.display = 'none';
+  document.getElementById('cmp-rows').innerHTML = '';
+  document.getElementById('cmp-tally').style.display = 'none';
+  document.getElementById('cmp-ai-panel').style.display = 'none';
+}
+
+function _cmpResolve(selId) {
+  const val = document.getElementById(selId)?.value;
+  if (!val) return null;
+  const [src, id] = val.split('|');
+  const numId = parseInt(id);
+  return src === 'h' ? D.holdings.find(x => x.id === numId) : D.watchlist.find(x => x.id === numId);
+}
+
+function _cmpProfile(stock) {
+  const ltp    = stock.ltp || stock.avgPrice || 0;
+  const pe     = stock._pe || stock.pe || null;
+  const beta   = stock._beta || SECTOR_BETA[stock.sector||'default'] || 1.0;
+  const sector = stock.sector || '—';
+  const avgPE  = SECTOR_PE[sector] || SECTOR_PE.default;
+  const fv     = (() => { try { return computeFairValue(ltp, pe, stock._eps||null, stock._bvps||null, sector); } catch(e) { return null; } })();
+  const sc     = stock._scores || null;
+  const st     = stock._sentiment || null;
+  const h52    = stock._h52 || null;
+  const l52    = stock._l52 || null;
+  const pos52  = (h52 && l52 && ltp && h52 > l52) ? Math.round((ltp - l52) / (h52 - l52) * 100) : null;
+  const peRatio = (pe && avgPE) ? pe / avgPE : null;
+  const mos    = fv?.mos ?? null;
+
+  return { stock, ltp, pe, beta, sector, avgPE, fv, sc, st, pos52, peRatio, mos, h52, l52 };
+}
+
+function runComparator() {
+  const sA = _cmpResolve('cmp-a');
+  const sB = _cmpResolve('cmp-b');
+  if (!sA || !sB) { toast('Select two stocks to compare'); return; }
+  if (sA === sB || sA.symbol === sB.symbol) { toast('Select two different stocks'); return; }
+
+  const pA = _cmpProfile(sA);
+  const pB = _cmpProfile(sB);
+
+  // Update headers
+  document.getElementById('cmp-hdr-a').textContent = sA.symbol;
+  document.getElementById('cmp-hdr-b').textContent = sB.symbol;
+  document.getElementById('cmp-header').style.display = '';
+
+  // Define comparison dimensions
+  // Each returns {valA, valB, displayA, displayB, winner:'a'|'b'|'tie', lowerIsBetter}
+  const dims = [
+    {
+      label: '📊 Stock Score', icon:'📊',
+      get: p => p.sc?.overall ?? null,
+      fmt: v => v != null ? `${v}/100 (${p=>p.sc?.grade??'—'})` : '—',
+      fmtA: () => pA.sc ? `${pA.sc.overall} — ${pA.sc.grade}` : '—',
+      fmtB: () => pB.sc ? `${pB.sc.overall} — ${pB.sc.grade}` : '—',
+      winner: () => { const a=pA.sc?.overall, b=pB.sc?.overall; return a==null&&b==null?'tie':a==null?'b':b==null?'a':a>b?'a':a<b?'b':'tie'; }
+    },
+    {
+      label: '💎 Fair Value MoS', icon:'💎',
+      fmtA: () => pA.mos!=null ? `${pA.mos}% MoS (₹${f(pA.fv?.fair||0)})` : '—',
+      fmtB: () => pB.mos!=null ? `${pB.mos}% MoS (₹${f(pB.fv?.fair||0)})` : '—',
+      winner: () => { const a=pA.mos, b=pB.mos; return a==null&&b==null?'tie':a==null?'b':b==null?'a':a>b?'a':a<b?'b':'tie'; }
+    },
+    {
+      label: '💰 PE vs Sector', icon:'💰',
+      fmtA: () => pA.pe ? `${pA.pe.toFixed(1)} (avg ${pA.avgPE})` : '—',
+      fmtB: () => pB.pe ? `${pB.pe.toFixed(1)} (avg ${pB.avgPE})` : '—',
+      winner: () => {
+        const a=pA.peRatio, b=pB.peRatio;
+        if (a==null&&b==null) return 'tie'; if (a==null) return 'b'; if (b==null) return 'a';
+        return a<b?'a':a>b?'b':'tie'; // lower PE ratio vs sector = better
+      }
+    },
+    {
+      label: '🗞 Sentiment', icon:'🗞',
+      fmtA: () => pA.st ? `${pA.st.sentiment} (${pA.st.score}/10)` : '—',
+      fmtB: () => pB.st ? `${pB.st.sentiment} (${pB.st.score}/10)` : '—',
+      winner: () => {
+        const score = s => s?.sentiment==='Bullish'?2:s?.sentiment==='Neutral'?1:s?.sentiment==='Bearish'?0:null;
+        const a=score(pA.st), b=score(pB.st);
+        return a==null&&b==null?'tie':a==null?'b':b==null?'a':a>b?'a':a<b?'b':'tie';
+      }
+    },
+    {
+      label: '📈 52W Position', icon:'📈',
+      fmtA: () => pA.pos52!=null ? `${pA.pos52}% of range` : '—',
+      fmtB: () => pB.pos52!=null ? `${pB.pos52}% of range` : '—',
+      winner: () => {
+        const a=pA.pos52, b=pB.pos52;
+        return a==null&&b==null?'tie':a==null?'b':b==null?'a':a<b?'a':a>b?'b':'tie'; // lower = more upside
+      }
+    },
+    {
+      label: '⚡ Beta (Volatility)', icon:'⚡',
+      fmtA: () => `${pA.beta.toFixed(2)} (${pA.beta>=1.2?'High':pA.beta<=0.7?'Low':'Mid'})`,
+      fmtB: () => `${pB.beta.toFixed(2)} (${pB.beta>=1.2?'High':pB.beta<=0.7?'Low':'Mid'})`,
+      winner: () => { // lower beta wins for stability
+        const a=pA.beta, b=pB.beta;
+        return a<b?'a':a>b?'b':'tie';
+      }
+    },
+    {
+      label: '📉 Fundamental Score', icon:'📉',
+      fmtA: () => pA.sc ? `${pA.sc.fundamental}/100` : '—',
+      fmtB: () => pB.sc ? `${pB.sc.fundamental}/100` : '—',
+      winner: () => { const a=pA.sc?.fundamental, b=pB.sc?.fundamental; return a==null&&b==null?'tie':a==null?'b':b==null?'a':a>b?'a':a<b?'b':'tie'; }
+    },
+    {
+      label: '⚖ Risk Score', icon:'⚖',
+      fmtA: () => pA.sc ? `${pA.sc.risk}/100` : '—',
+      fmtB: () => pB.sc ? `${pB.sc.risk}/100` : '—',
+      winner: () => { const a=pA.sc?.risk, b=pB.sc?.risk; return a==null&&b==null?'tie':a==null?'b':b==null?'a':a>b?'a':a<b?'b':'tie'; }
+    },
+    {
+      label: '🚀 Momentum Score', icon:'🚀',
+      fmtA: () => pA.sc ? `${pA.sc.momentum}/100` : '—',
+      fmtB: () => pB.sc ? `${pB.sc.momentum}/100` : '—',
+      winner: () => { const a=pA.sc?.momentum, b=pB.sc?.momentum; return a==null&&b==null?'tie':a==null?'b':b==null?'a':a>b?'a':a<b?'b':'tie'; }
+    },
+    {
+      label: '💹 CMP vs Avg Cost', icon:'💹',
+      fmtA: () => sA.avgPrice ? `${(((pA.ltp/sA.avgPrice)-1)*100).toFixed(1)}% P&L` : `₹${f(pA.ltp)}`,
+      fmtB: () => sB.avgPrice ? `${(((pB.ltp/sB.avgPrice)-1)*100).toFixed(1)}% P&L` : `₹${f(pB.ltp)}`,
+      winner: () => {
+        const pnlA = sA.avgPrice ? (pA.ltp/sA.avgPrice-1)*100 : null;
+        const pnlB = sB.avgPrice ? (pB.ltp/sB.avgPrice-1)*100 : null;
+        return pnlA==null&&pnlB==null?'tie':pnlA==null?'b':pnlB==null?'a':pnlA>pnlB?'a':pnlA<pnlB?'b':'tie';
+      }
+    }
+  ];
+
+  let winsA = 0, winsB = 0;
+  const colA = 'var(--ac)', colB = 'var(--ac2)';
+
+  const rowsHtml = dims.map(d => {
+    const w = d.winner();
+    if (w === 'a') winsA++;
+    else if (w === 'b') winsB++;
+    const winnerIcon = w === 'a' ? `<span style="color:${colA};font-size:14px">◀</span>` :
+                       w === 'b' ? `<span style="color:${colB};font-size:14px">▶</span>` :
+                       `<span style="color:var(--t4);font-size:11px">—</span>`;
+    const bgA = w==='a'?`background:${colA}11;`:'';
+    const bgB = w==='b'?`background:${colB}11;`:'';
+
+    return `<div style="display:grid;grid-template-columns:160px 1fr 60px 1fr;gap:0;align-items:center;padding:9px 16px;border-bottom:1px solid var(--b2)">
+      <div style="font-size:11px;color:var(--t4)">${d.label}</div>
+      <div style="font-size:12px;font-weight:${w==='a'?'700':'400'};color:${w==='a'?colA:'var(--t2)'};text-align:center;${bgA}padding:4px 8px;border-radius:6px">${d.fmtA()}</div>
+      <div style="text-align:center">${winnerIcon}</div>
+      <div style="font-size:12px;font-weight:${w==='b'?'700':'400'};color:${w==='b'?colB:'var(--t2)'};text-align:center;${bgB}padding:4px 8px;border-radius:6px">${d.fmtB()}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('cmp-rows').innerHTML = `<div style="background:var(--b1);border:1px solid var(--b2);border-radius:0 0 10px 10px">${rowsHtml}</div>`;
+
+  // Tally
+  const winner = winsA > winsB ? sA.symbol : winsB > winsA ? sB.symbol : null;
+  const tallyEl = document.getElementById('cmp-tally');
+  tallyEl.style.display = 'flex';
+  tallyEl.innerHTML = `
+    <div style="font-size:13px;color:${colA};font-weight:700">${sA.symbol}: ${winsA} wins</div>
+    <div style="font-size:13px;color:var(--t4)">vs</div>
+    <div style="font-size:13px;color:${colB};font-weight:700">${sB.symbol}: ${winsB} wins</div>
+    ${winner ? `<div style="margin-left:auto;font-size:13px;font-weight:700;color:var(--grn);background:var(--grn)18;border:1px solid var(--grn)44;border-radius:8px;padding:3px 12px">🏆 ${winner} leads</div>` : `<div style="margin-left:auto;font-size:13px;color:var(--yel)">🤝 Tied</div>`}`;
+
+  // Store for AI
+  window._cmpData = {pA, pB, sA, sB, winsA, winsB, winner};
+}
+
+async function runComparatorAI() {
+  if (!window._cmpData) { toast('Run a comparison first'); return; }
+  const btn = document.getElementById('cmp-ai-btn');
+  const panel = document.getElementById('cmp-ai-panel');
+  const content = document.getElementById('cmp-ai-content');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Thinking…'; }
+  if (panel) panel.style.display = '';
+  if (content) content.innerHTML = '<div style="color:var(--t4);font-size:12px">Analysing both stocks…</div>';
+
+  const {pA, pB, sA, sB, winsA, winsB} = window._cmpData;
+  const fmt = p => `${p.stock.symbol}(score:${p.sc?.overall??'?'},PE:${p.pe?.toFixed(0)??'?'},MoS:${p.mos??'?'}%,sent:${p.st?.sentiment??'?'},beta:${p.beta.toFixed(1)},sector:${p.sector})`;
+
+  const prompt = `Indian equity analyst comparing two stocks. ${fmt(pA)} vs ${fmt(pB)}. Signal wins: ${sA.symbol} ${winsA}, ${sB.symbol} ${winsB}.
+Pick the better investment and explain. Reply JSON: {"pick":"${sA.symbol} or ${sB.symbol}","reason":"<25 words>","buyCase":"<15 words>","watchOut":"<12 words>","horizon":"short-term or long-term"}`;
+
+  try {
+    const res = await claudeJSON(prompt);
+    if (!res || !res.pick) throw new Error('bad response');
+    const pickCol = res.pick === sA.symbol ? 'var(--ac)' : 'var(--ac2)';
+    content.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+        <div style="font-size:22px;font-weight:700;color:${pickCol}">🏆 ${res.pick}</div>
+        <div style="font-size:13px;color:var(--t2);font-style:italic;flex:1">"${res.reason}"</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:150px;background:var(--grn)11;border:1px solid var(--grn)33;border-radius:8px;padding:10px 14px">
+          <div style="font-size:10px;color:var(--t4);margin-bottom:3px">BUY CASE</div>
+          <div style="font-size:12px;color:var(--grn)">${res.buyCase}</div>
+        </div>
+        <div style="flex:1;min-width:150px;background:var(--yel)11;border:1px solid var(--yel)33;border-radius:8px;padding:10px 14px">
+          <div style="font-size:10px;color:var(--t4);margin-bottom:3px">WATCH OUT</div>
+          <div style="font-size:12px;color:var(--yel)">${res.watchOut}</div>
+        </div>
+        <div style="min-width:120px;background:var(--b2);border-radius:8px;padding:10px 14px">
+          <div style="font-size:10px;color:var(--t4);margin-bottom:3px">HORIZON</div>
+          <div style="font-size:12px;font-weight:600;color:var(--t1)">${res.horizon}</div>
+        </div>
+      </div>`;
+  } catch(e) {
+    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed — check your OpenRouter key in Settings.</div>';
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Verdict'; }
+}
 
 // ── PHASE 8: PORTFOLIO STRESS TEST ──────────────────────────────────────────
 
