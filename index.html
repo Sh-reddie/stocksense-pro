@@ -7099,6 +7099,11 @@ function init(){
 
   setupRefresh();
 }
+// ── SECTOR PE BENCHMARKS — declared here (before init) so detectPattern
+//    (a hoisted fn declaration) can access it during page-load renderWatchlist()
+const SECTOR_PE = {IT:28,Banking:14,FMCG:48,Pharma:32,Auto:20,Energy:15,
+  Infra:18,Metals:12,Defence:35,Chemicals:28,Telecom:22,'Real Estate':25,default:22};
+
 init();
 
 // ═══════════════════════════════════════════════════
@@ -10047,10 +10052,6 @@ Give 3 macro signals (one sentence each): VIX risk reading, USD/INR impact on th
 // ════════════════════════════════════════════════════════════════════════
 // ██████  AI INVESTMENT OS — PHASE 1 INTELLIGENCE ENGINE  ████████████████
 // ════════════════════════════════════════════════════════════════════════
-
-// ── SECTOR PE BENCHMARKS ───────────────────────────────────────────────
-const SECTOR_PE = {IT:28,Banking:14,FMCG:48,Pharma:32,Auto:20,Energy:15,
-  Infra:18,Metals:12,Defence:35,Chemicals:28,Telecom:22,'Real Estate':25,default:22};
 
 // ── SCORE ENGINE (Rule-based, instant, no API) ─────────────────────────
 // ── TECHNICAL PATTERN DETECTOR ────────────────────────────────────────
