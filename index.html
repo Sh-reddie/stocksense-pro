@@ -759,6 +759,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('stress-test')">🧨 Stress Test</div>
         <div class="tn-drop-item" onclick="go('comparator')">⚔ Stock Comparator</div>
         <div class="tn-drop-item" onclick="go('intel-report')" style="font-weight:600;color:var(--ac)">📑 Intel Report</div>
+        <div class="tn-drop-item" onclick="go('watchlist-builder')">🔭 Watchlist Builder</div>
       </div>
     </div>
     <!-- Tools dropdown -->
@@ -2534,6 +2535,31 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
   </div>
 
+  <!-- ═══ WATCHLIST BUILDER ═══════════════════════════════ -->
+  <div class="sec" id="sec-watchlist-builder">
+    <div class="sec-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div class="sec-title">🔭 AI Watchlist Builder</div>
+        <div style="font-size:11px;color:var(--t4);margin-top:2px">Finds sector gaps in your portfolio → AI recommends quality Indian stocks to fill them</div>
+      </div>
+      <button class="btn btn-p btn-sm" id="wb-run-btn" onclick="runWatchlistBuilder()">🤖 Find Opportunities</button>
+    </div>
+
+    <!-- Gap analysis bar -->
+    <div class="pn" id="wb-gap-panel" style="margin-bottom:16px;display:none">
+      <div class="pn-h"><div class="pn-t">📊 Sector Gap Analysis</div></div>
+      <div class="pn-b" id="wb-gap-content"></div>
+    </div>
+
+    <!-- Recommendation cards grid -->
+    <div id="wb-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px"></div>
+
+    <!-- Empty state -->
+    <div id="wb-empty" style="padding:20px;text-align:center;color:var(--t4);font-size:12px">
+      Click "Find Opportunities" to analyse your portfolio and get AI stock recommendations.
+    </div>
+  </div>
+
   <!-- ═══ SETTINGS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-settings">
     <div class="sec-head"><div class="sec-title">Settings</div></div>
@@ -3742,14 +3768,14 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ AI Stock Comparator','intel-report':'📑 Portfolio Intelligence Report'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ AI Stock Comparator','intel-report':'📑 Portfolio Intelligence Report','watchlist-builder':'🔭 AI Watchlist Builder'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio', dividends:'portfolio', divcal:'portfolio',
   action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis', riskpro:'analysis',
   screener:'portfolio', journal:'portfolio',
-  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai', 'position-builder':'ai', 'stress-test':'ai', 'comparator':'ai', 'intel-report':'ai',
+  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai', 'position-builder':'ai', 'stress-test':'ai', 'comparator':'ai', 'intel-report':'ai', 'watchlist-builder':'ai',
   alerts:'tools', notifications:'tools', calendar:'tools', deals:'tools', news:'tools', tax:'tools', import:'tools', macro:'tools',
   settings:'settings'
 };
@@ -3798,6 +3824,7 @@ function go(id) {
   if(id==='stress-test') runStress(0);
   if(id==='comparator') initComparator();
   if(id==='intel-report') renderIntelReport();
+  if(id==='watchlist-builder') initWatchlistBuilder();
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -11195,6 +11222,149 @@ async function _sdSentimentContent(h) {
 // ════════════════════════════════════════════════════════════════════════
 // ██  WATCHLIST OPPORTUNITY RANKER  ██████████████████████████████████████
 // ════════════════════════════════════════════════════════════════════════
+
+// ── PHASE 11: AI WATCHLIST BUILDER ──────────────────────────────────────────
+
+// Ideal diversified allocation benchmarks (% target)
+const IDEAL_ALLOC = {
+  Banking: 18, IT: 14, FMCG: 10, Pharma: 8, Auto: 8,
+  Energy: 7, Infra: 6, Metals: 5, Defence: 5, Chemicals: 5,
+  Finance: 5, Telecom: 4, 'Real Estate': 3, Others: 2
+};
+
+function initWatchlistBuilder() {
+  document.getElementById('wb-gap-panel').style.display = 'none';
+  document.getElementById('wb-cards').innerHTML = '';
+  document.getElementById('wb-empty').style.display = '';
+}
+
+async function runWatchlistBuilder() {
+  if (!D.holdings.length) { toast('Add holdings first'); return; }
+  const btn = document.getElementById('wb-run-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Analysing…'; }
+  document.getElementById('wb-empty').style.display = 'none';
+  document.getElementById('wb-cards').innerHTML = '<div style="color:var(--t4);font-size:12px;padding:8px">Identifying sector gaps…</div>';
+
+  // ── Current allocation ──
+  const totalVal = D.holdings.reduce((s,h) => s+(h.ltp||h.avgPrice||0)*h.qty, 0);
+  const currentAlloc = {};
+  D.holdings.forEach(h => {
+    const sec = h.sector || 'Others';
+    const v = (h.ltp||h.avgPrice||0)*h.qty;
+    currentAlloc[sec] = (currentAlloc[sec]||0) + v;
+  });
+
+  // Already-held and watchlist symbols to avoid duplicates
+  const alreadyHeld = new Set([...D.holdings.map(h=>h.symbol), ...D.watchlist.map(w=>w.symbol)]);
+
+  // ── Gap analysis ──
+  const gaps = [];
+  Object.entries(IDEAL_ALLOC).forEach(([sec, idealPct]) => {
+    const curPct = currentAlloc[sec] ? (currentAlloc[sec]/totalVal*100) : 0;
+    const gap = idealPct - curPct;
+    if (gap > 3) gaps.push({ sec, idealPct, curPct: +curPct.toFixed(1), gap: +gap.toFixed(1) });
+  });
+  gaps.sort((a,b) => b.gap - a.gap);
+
+  // Render gap bars
+  const gapPanel = document.getElementById('wb-gap-panel');
+  const gapContent = document.getElementById('wb-gap-content');
+  gapPanel.style.display = '';
+  gapContent.innerHTML = `
+    <div style="font-size:11px;color:var(--t4);margin-bottom:10px">Compared to a diversified Indian equity allocation. Green = current · Grey = gap to target.</div>
+    <div style="display:flex;flex-direction:column;gap:7px">
+      ${gaps.slice(0,6).map(g => `
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">
+            <span style="color:var(--t2);font-weight:600">${g.sec}</span>
+            <span style="color:var(--t4)">${g.curPct}% current → ${g.idealPct}% target <span style="color:var(--orn)">−${g.gap}% gap</span></span>
+          </div>
+          <div style="height:6px;background:var(--b3);border-radius:3px;overflow:hidden">
+            <div style="display:flex;height:100%">
+              <div style="width:${Math.min(g.curPct/g.idealPct*100,100)}%;background:var(--ac);border-radius:3px"></div>
+            </div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+
+  // ── AI recommendations per top 4 gap sectors ──
+  const topGaps = gaps.slice(0, 4);
+  document.getElementById('wb-cards').innerHTML = '';
+
+  for (const g of topGaps) {
+    // Add loading placeholder
+    const placeholder = document.createElement('div');
+    placeholder.className = 'pn';
+    placeholder.style.cssText = 'padding:16px;opacity:0.5';
+    placeholder.innerHTML = `<div style="font-size:10px;color:var(--t4);margin-bottom:6px">🔭 ${g.sec.toUpperCase()}</div><div style="color:var(--t4);font-size:12px">Asking AI for recommendations…</div>`;
+    document.getElementById('wb-cards').appendChild(placeholder);
+
+    // AI call per sector
+    try {
+      const held = D.holdings.filter(h=>(h.sector||'Others')===g.sec).map(h=>h.symbol).join(', ') || 'none';
+      const prompt = `Indian equity analyst. Recommend 3 quality NSE-listed stocks in the ${g.sec} sector for a long-term portfolio. Already held: ${held}. Focus on fundamentally strong, liquid mid/large caps.
+Reply JSON: {"stocks":[{"symbol":"NSE_SYMBOL","name":"Company Name","thesis":"<12 words>","risk":"<8 words>","pe":"<number or ??>"},{"symbol":"...","name":"...","thesis":"...","risk":"...","pe":"..."},{"symbol":"...","name":"...","thesis":"...","risk":"...","pe":"..."}]}`;
+
+      const res = await claudeJSON(prompt);
+      placeholder.remove();
+
+      if (res?.stocks?.length) {
+        const card = document.createElement('div');
+        card.className = 'pn';
+        card.style.cssText = 'padding:0;overflow:hidden';
+        card.innerHTML = `
+          <div style="padding:12px 16px 8px;background:var(--ac)11;border-bottom:1px solid var(--b2)">
+            <div style="font-size:10px;color:var(--t4);margin-bottom:2px">SECTOR GAP · ${g.gap}% UNDERWEIGHT</div>
+            <div style="font-size:14px;font-weight:700;color:var(--ac)">${g.sec}</div>
+            <div style="font-size:10px;color:var(--t4)">${g.curPct}% current → ${g.idealPct}% target</div>
+          </div>
+          <div style="padding:8px 0">
+            ${res.stocks.filter(s=>s.symbol).map(s => {
+              const inWl = alreadyHeld.has(s.symbol);
+              return `<div style="padding:10px 16px;border-bottom:1px solid var(--b2);display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                <div style="flex:1">
+                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+                    <span style="font-weight:700;font-size:13px;color:var(--t1)">${s.symbol}</span>
+                    ${s.pe && s.pe!='??' ? `<span style="font-size:10px;color:var(--t4);background:var(--b3);border-radius:4px;padding:1px 5px">PE ~${s.pe}</span>` : ''}
+                    ${inWl ? `<span style="font-size:10px;color:var(--grn)">✓ In list</span>` : ''}
+                  </div>
+                  <div style="font-size:11px;color:var(--t3);margin-bottom:2px">${s.name||''}</div>
+                  <div style="font-size:11px;color:var(--t2)">${s.thesis||''}</div>
+                  <div style="font-size:10px;color:var(--red);margin-top:2px">⚠ ${s.risk||''}</div>
+                </div>
+                ${!inWl ? `<button class="btn btn-g btn-xs" style="white-space:nowrap;flex-shrink:0" onclick="wbAddToWatchlist('${s.symbol}','${(s.name||"").replace(/'/g,"\\'")}','${g.sec}')">+ Watchlist</button>` : ''}
+              </div>`;
+            }).join('')}
+          </div>`;
+        document.getElementById('wb-cards').appendChild(card);
+      }
+    } catch(e) {
+      placeholder.innerHTML = `<div style="font-size:10px;color:var(--t4)">🔭 ${g.sec}</div><div style="color:var(--red);font-size:11px">Failed to get recommendations</div>`;
+    }
+  }
+
+  if (!topGaps.length) {
+    document.getElementById('wb-cards').innerHTML = `<div class="pn" style="padding:20px;text-align:center;color:var(--grn);font-size:13px;font-weight:600">🎉 Portfolio is well-diversified! No major sector gaps detected.</div>`;
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = '🔄 Refresh'; }
+}
+
+function wbAddToWatchlist(symbol, name, sector) {
+  if (D.watchlist.find(w=>w.symbol===symbol)) { toast(`${symbol} already in watchlist`); return; }
+  D.watchlist.push({
+    id: Date.now()+Math.random(), symbol, name, sector,
+    ltp: 0, addedAt: new Date().toISOString(), wlDecision: null
+  });
+  save('watchlist');
+  toast(`✅ ${symbol} added to watchlist`);
+  // Update button in place
+  document.querySelectorAll(`[onclick*="wbAddToWatchlist('${symbol}'"]`).forEach(btn => {
+    btn.textContent = '✓ Added';
+    btn.disabled = true;
+    btn.style.color = 'var(--grn)';
+  });
+}
 
 // ── PHASE 10: PORTFOLIO INTELLIGENCE REPORT ─────────────────────────────────
 
