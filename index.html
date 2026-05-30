@@ -13395,9 +13395,11 @@ Reply ONLY with compact valid JSON:
       const typeIcon = { wait_ltcg:'⏳', harvest_loss:'🌾', sell_now:'💰' };
       const typeColor = { wait_ltcg:'var(--yel)', harvest_loss:'var(--grn)', sell_now:'var(--cyn)' };
       const typeLabel = { wait_ltcg:'Wait for LTCG', harvest_loss:'Harvest Loss', sell_now:'Sell & Realise' };
+      const totalSaving = Number(res.total_saving) > 0 ? Number(res.total_saving)
+        : (res.actions||[]).reduce((s,a) => s + (Number(a.saving)||0), 0);
       planEl.innerHTML = `
         <div class="pn" style="margin-bottom:14px">
-          <div class="pn-h"><div class="pn-t">🤖 AI Tax Optimisation Plan</div><div style="font-size:11px;color:var(--grn)">Est. savings: ₹${fI(res.total_saving||0)}</div></div>
+          <div class="pn-h"><div class="pn-t">🤖 AI Tax Optimisation Plan</div><div style="font-size:11px;color:var(--grn)">${totalSaving > 0 ? 'Est. savings: ₹'+fI(totalSaving) : 'See recommendations below'}</div></div>
           <div class="pn-b">
             <div style="font-size:13px;color:var(--t2);margin-bottom:12px">${res.summary||''}</div>
             ${res.priority_action ? `<div style="background:rgba(79,142,247,.1);border:1px solid rgba(79,142,247,.3);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px">
