@@ -756,6 +756,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('opportunity')">🏆 Opp. Ranker</div>
         <div class="tn-drop-item" onclick="go('action-plan')" style="font-weight:600;color:var(--grn)">📋 Action Plan</div>
         <div class="tn-drop-item" onclick="go('position-builder')">🎯 Position Builder</div>
+        <div class="tn-drop-item" onclick="go('stress-test')">🧨 Stress Test</div>
       </div>
     </div>
     <!-- Tools dropdown -->
@@ -2353,6 +2354,57 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
   </div>
 
+  <!-- ═══ STRESS TEST ════════════════════════════════════ -->
+  <div class="sec" id="sec-stress-test">
+    <div class="sec-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div class="sec-title">🧨 Portfolio Stress Test</div>
+        <div style="font-size:11px;color:var(--t4);margin-top:2px">Beta-adjusted scenario modelling — see exactly what each holding does when markets move</div>
+      </div>
+      <button class="btn btn-g btn-sm" id="st-ai-btn" onclick="runStressAI()">🤖 AI Hedge Advice</button>
+    </div>
+
+    <!-- Scenario picker -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <button class="btn btn-sm st-scen-btn" id="st-s-bull"    onclick="runStress(15)"   style="background:var(--grn)22;border:1px solid var(--grn)55;color:var(--grn)">🚀 Bull +15%</button>
+      <button class="btn btn-sm st-scen-btn" id="st-s-mild"    onclick="runStress(-10)"  style="background:var(--yel)22;border:1px solid var(--yel)55;color:var(--yel)">📉 Mild −10%</button>
+      <button class="btn btn-sm st-scen-btn" id="st-s-bear"    onclick="runStress(-20)"  style="background:var(--orn)22;border:1px solid var(--orn)55;color:var(--orn)">🐻 Bear −20%</button>
+      <button class="btn btn-sm st-scen-btn" id="st-s-crash"   onclick="runStress(-35)"  style="background:var(--red)22;border:1px solid var(--red)55;color:var(--red)">💥 Crash −35%</button>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input id="st-custom-val" class="inp" type="number" placeholder="Custom %" style="width:90px" onkeydown="if(event.key==='Enter')runStress(parseFloat(this.value))">
+        <button class="btn btn-g btn-sm" onclick="runStress(parseFloat(document.getElementById('st-custom-val').value)||0)">Run</button>
+      </div>
+    </div>
+
+    <!-- Summary cards -->
+    <div id="st-summary" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+
+    <!-- Results table -->
+    <div style="overflow-x:auto">
+      <table class="htbl" style="width:100%;min-width:660px">
+        <thead><tr>
+          <th>Stock</th>
+          <th>Beta</th>
+          <th>CMP</th>
+          <th>Scenario Price</th>
+          <th>Stock Δ%</th>
+          <th>P&amp;L Impact</th>
+          <th>New Value</th>
+          <th>Signal</th>
+        </tr></thead>
+        <tbody id="st-tbody">
+          <tr><td colspan="8" style="padding:20px;text-align:center;color:var(--t4);font-size:12px">Pick a scenario above to run the stress test.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- AI hedge advice panel -->
+    <div class="pn" id="st-ai-panel" style="margin-top:14px;display:none">
+      <div class="pn-h"><div class="pn-t">🤖 AI Hedge Recommendations</div></div>
+      <div class="pn-b" id="st-ai-content" style="font-size:13px;color:var(--t2);line-height:1.6"></div>
+    </div>
+  </div>
+
   <!-- ═══ SETTINGS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-settings">
     <div class="sec-head"><div class="sec-title">Settings</div></div>
@@ -3561,14 +3613,14 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio', dividends:'portfolio', divcal:'portfolio',
   action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis', riskpro:'analysis',
   screener:'portfolio', journal:'portfolio',
-  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai', 'position-builder':'ai',
+  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai', 'position-builder':'ai', 'stress-test':'ai',
   alerts:'tools', notifications:'tools', calendar:'tools', deals:'tools', news:'tools', tax:'tools', import:'tools', macro:'tools',
   settings:'settings'
 };
@@ -3614,6 +3666,7 @@ function go(id) {
   if(id==='opportunity') renderOpportunityRanker();
   if(id==='action-plan') renderActionPlan();
   if(id==='position-builder') initPositionBuilder();
+  if(id==='stress-test') runStress(0);
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -11011,6 +11064,154 @@ async function _sdSentimentContent(h) {
 // ════════════════════════════════════════════════════════════════════════
 // ██  WATCHLIST OPPORTUNITY RANKER  ██████████████████████████████████████
 // ════════════════════════════════════════════════════════════════════════
+
+// ── PHASE 8: PORTFOLIO STRESS TEST ──────────────────────────────────────────
+
+// Sector beta estimates (used when h._beta not available)
+const SECTOR_BETA = {
+  IT:1.0, Banking:1.2, FMCG:0.65, Pharma:0.75, Auto:1.1,
+  Energy:0.9, Infra:1.15, Metals:1.3, Defence:0.95, Chemicals:1.0,
+  Telecom:0.85, 'Real Estate':1.2, Finance:1.15, default:1.0
+};
+
+let _stLastPct = 0;
+
+function runStress(marketPct) {
+  if (isNaN(marketPct)) { toast('Enter a valid %'); return; }
+  _stLastPct = marketPct;
+
+  // Highlight active scenario button
+  document.querySelectorAll('.st-scen-btn').forEach(b => b.style.fontWeight = '');
+  const btnMap = {15:'st-s-bull', '-10':'st-s-mild', '-20':'st-s-bear', '-35':'st-s-crash'};
+  const activeBtn = document.getElementById(btnMap[String(marketPct)]);
+  if (activeBtn) activeBtn.style.fontWeight = '700';
+
+  const tbody = document.getElementById('st-tbody');
+  const summary = document.getElementById('st-summary');
+  if (!tbody || !D.holdings.length) {
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--t4);font-size:12px">No holdings to stress test.</td></tr>';
+    return;
+  }
+
+  // Per-stock scenario calculation
+  const rows = D.holdings.map(h => {
+    const ltp     = h.ltp || h.avgPrice || 0;
+    const beta    = h._beta || SECTOR_BETA[h.sector||'default'] || 1.0;
+    const stockPct = marketPct * beta;           // beta-adjusted move
+    const scenPx  = ltp * (1 + stockPct / 100);
+    const qty     = h.qty || 0;
+    const curVal  = ltp * qty;
+    const newVal  = scenPx * qty;
+    const impactRs = newVal - curVal;
+    const costVal = (h.avgPrice||0) * qty;
+    const newPnl  = newVal - costVal;
+    return {h, ltp, beta, scenPx, stockPct, curVal, newVal, impactRs, newPnl};
+  });
+
+  // Sort by impact (worst first in bear, best first in bull)
+  rows.sort((a,b) => marketPct >= 0 ? b.impactRs - a.impactRs : a.impactRs - b.impactRs);
+
+  const totalCur  = rows.reduce((s,r) => s + r.curVal, 0);
+  const totalNew  = rows.reduce((s,r) => s + r.newVal, 0);
+  const totalImpact = totalNew - totalCur;
+  const totalCost = rows.reduce((s,r) => s + (r.h.avgPrice||0)*r.h.qty, 0);
+
+  // Summary cards
+  const scenLabel = marketPct > 0 ? `+${marketPct}%` : `${marketPct}%`;
+  const scenName  = {15:'🚀 Bull','-10':'📉 Mild Correction','-20':'🐻 Bear Market','-35':'💥 Market Crash'}[String(marketPct)] || `📊 Custom ${scenLabel}`;
+  const impactCol = totalImpact >= 0 ? 'var(--grn)' : 'var(--red)';
+  const survivePct = (totalNew / totalCur * 100 - 100).toFixed(1);
+  const worstStock = rows[rows.length - 1];
+  const bestStock  = rows[0];
+
+  summary.innerHTML = [
+    {l:'SCENARIO', v: scenName, sub:'', c:'var(--ac)'},
+    {l:'PORTFOLIO AFTER', v:`₹${totalNew>=100000?(totalNew/100000).toFixed(1)+'L':(totalNew/1000).toFixed(0)+'K'}`, sub:`was ₹${totalCur>=100000?(totalCur/100000).toFixed(1)+'L':(totalCur/1000).toFixed(0)+'K'}`, c:'var(--t1)'},
+    {l:'TOTAL IMPACT', v:`${totalImpact>=0?'+':''}₹${Math.abs(totalImpact)>=100000?(Math.abs(totalImpact)/100000).toFixed(1)+'L':(Math.abs(totalImpact)/1000).toFixed(0)+'K'}`, sub:`${survivePct>0?'+':''}${survivePct}% portfolio`, c:impactCol},
+    {l:'BIGGEST HIT', v:worstStock.h.symbol, sub:`₹${f(Math.abs(worstStock.impactRs)/1000*1000<1000?Math.abs(worstStock.impactRs):Math.abs(worstStock.impactRs))} (${worstStock.stockPct.toFixed(1)}%)`, c:'var(--red)'},
+    {l:'BEST PERFORMER', v:bestStock.h.symbol, sub:`${bestStock.stockPct.toFixed(1)}% move`, c:'var(--grn)'}
+  ].map(c=>`<div class="pn" style="flex:1;min-width:110px;padding:10px 14px">
+    <div style="font-size:10px;color:var(--t4);margin-bottom:3px">${c.l}</div>
+    <div style="font-size:14px;font-weight:700;color:${c.c}">${c.v}</div>
+    <div style="font-size:10px;color:var(--t4)">${c.sub}</div>
+  </div>`).join('');
+
+  // Table rows
+  const fmtRs = v => {
+    const abs = Math.abs(v);
+    const str = abs >= 100000 ? (abs/100000).toFixed(1)+'L' : abs >= 1000 ? (abs/1000).toFixed(1)+'K' : Math.round(abs).toString();
+    return (v >= 0 ? '+₹' : '−₹') + str;
+  };
+
+  tbody.innerHTML = rows.map(r => {
+    const pctCol  = r.stockPct >= 0 ? 'var(--grn)' : 'var(--red)';
+    const impCol  = r.impactRs >= 0 ? 'var(--grn)' : 'var(--red)';
+    const newPnlCol = r.newPnl >= 0 ? 'var(--grn)' : 'var(--red)';
+    const betaLbl = r.beta >= 1.2 ? '⚡ High' : r.beta <= 0.7 ? '🛡 Low' : '〰 Mid';
+    // Signal: in a crash, high-beta overweight stocks are dangerous
+    let signal = '';
+    const wt = totalCur > 0 ? r.curVal / totalCur * 100 : 0;
+    if (marketPct <= -20 && r.beta >= 1.2 && wt > 10) signal = '<span style="font-size:10px;color:var(--red);background:var(--red)18;border-radius:6px;padding:1px 6px">⚠ High Risk</span>';
+    else if (marketPct <= -10 && r.beta <= 0.75) signal = '<span style="font-size:10px;color:var(--grn);background:var(--grn)18;border-radius:6px;padding:1px 6px">🛡 Defensive</span>';
+    else if (marketPct >= 10 && r.beta >= 1.2) signal = '<span style="font-size:10px;color:var(--grn);background:var(--grn)18;border-radius:6px;padding:1px 6px">🚀 Leveraged</span>';
+
+    return `<tr onclick="openDetail(${r.h.id})" style="cursor:pointer">
+      <td>
+        <div style="font-weight:600">${r.h.symbol}</div>
+        <div style="font-size:10px;color:var(--t4)">${r.h.sector||'—'} · ${f(wt.toFixed(1))}% wt</div>
+      </td>
+      <td style="font-size:11px">${r.beta.toFixed(2)} <span style="color:var(--t4);font-size:10px">${betaLbl}</span></td>
+      <td style="font-weight:600">₹${f(r.ltp)}</td>
+      <td style="font-weight:600;color:${pctCol}">₹${f(r.scenPx)}</td>
+      <td style="font-weight:700;color:${pctCol}">${r.stockPct >= 0 ? '+' : ''}${r.stockPct.toFixed(1)}%</td>
+      <td style="font-weight:700;color:${impCol}">${fmtRs(r.impactRs)}</td>
+      <td style="font-size:11px;color:${newPnlCol}">${fmtRs(r.newPnl)} total P&amp;L</td>
+      <td>${signal}</td>
+    </tr>`;
+  }).join('');
+
+  // Store for AI call
+  window._stData = {marketPct, scenName, totalCur, totalNew, totalImpact, rows};
+}
+
+async function runStressAI() {
+  if (!window._stData) { toast('Run a scenario first'); return; }
+  const btn = document.getElementById('st-ai-btn');
+  const panel = document.getElementById('st-ai-panel');
+  const content = document.getElementById('st-ai-content');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Thinking…'; }
+  if (panel) panel.style.display = '';
+  if (content) content.innerHTML = '<div style="color:var(--t4);font-size:12px">Analysing portfolio vulnerability…</div>';
+
+  const {marketPct, scenName, rows} = window._stData;
+  const topVuln = rows.filter(r=>r.stockPct < 0).slice(-3).map(r=>`${r.h.symbol}(beta ${r.beta.toFixed(1)},wt ${((r.curVal/rows.reduce((s,x)=>s+x.curVal,0))*100).toFixed(0)}%)`).join(', ');
+  const topDef  = rows.filter(r=>r.beta <= 0.8).slice(0,2).map(r=>r.h.symbol).join(', ') || 'none';
+  const pctStr  = marketPct >= 0 ? `+${marketPct}%` : `${marketPct}%`;
+
+  const prompt = `Indian equity portfolio manager. Scenario: ${scenName} (${pctStr} market move). Most vulnerable holdings: ${topVuln||'none'}. Defensive holdings: ${topDef}.
+Recommend 3 specific hedging/defensive actions. Reply JSON: {"summary":"<20 words>","actions":[{"action":"<8 words>","reason":"<10 words>"},{"action":"<8 words>","reason":"<10 words>"},{"action":"<8 words>","reason":"<10 words>"}],"verdict":"Resilient|Moderate Risk|High Risk"}`;
+
+  try {
+    const res = await claudeJSON(prompt);
+    if (!res || !res.verdict) throw new Error('bad response');
+    const vCol = res.verdict==='Resilient'?'var(--grn)':res.verdict==='High Risk'?'var(--red)':'var(--yel)';
+    const actionCards = (res.actions||[]).map((a,i)=>`<div style="flex:1;min-width:180px;background:var(--b2);border-radius:8px;padding:10px 14px">
+      <div style="font-size:10px;color:var(--t4);margin-bottom:3px">ACTION ${i+1}</div>
+      <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:3px">${a.action}</div>
+      <div style="font-size:11px;color:var(--t3)">${a.reason}</div>
+    </div>`).join('');
+
+    content.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700;color:${vCol};background:${vCol}18;border:1px solid ${vCol}44;border-radius:10px;padding:3px 12px">${res.verdict}</span>
+        <span style="font-size:13px;color:var(--t2);font-style:italic">"${res.summary}"</span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">${actionCards}</div>`;
+  } catch(e) {
+    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed — check your OpenRouter key in Settings.</div>';
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Hedge Advice'; }
+}
 
 // ── PHASE 7: AI POSITION BUILDER ────────────────────────────────────────────
 
