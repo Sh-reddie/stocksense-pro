@@ -11305,7 +11305,11 @@ async function runWatchlistBuilder() {
       const prompt = `Indian equity analyst. Recommend 3 quality NSE-listed stocks in the ${g.sec} sector for a long-term portfolio. Already held: ${held}. Focus on fundamentally strong, liquid mid/large caps.
 Reply JSON: {"stocks":[{"symbol":"NSE_SYMBOL","name":"Company Name","thesis":"<12 words>","risk":"<8 words>","pe":"<number or ??>"},{"symbol":"...","name":"...","thesis":"...","risk":"...","pe":"..."},{"symbol":"...","name":"...","thesis":"...","risk":"...","pe":"..."}]}`;
 
-      const res = await claudeJSON(prompt);
+      const _raw = await claudeJSON(prompt);
+      const res = (() => {
+        if (_raw && typeof _raw === 'object') return _raw;
+        try { return JSON.parse((_raw||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+      })();
       placeholder.remove();
 
       if (res?.stocks?.length) {
