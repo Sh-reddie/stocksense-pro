@@ -13532,7 +13532,11 @@ async function runComparatorAI() {
 Pick the better investment and explain. Reply JSON: {"pick":"${sA.symbol} or ${sB.symbol}","reason":"<25 words>","buyCase":"<15 words>","watchOut":"<12 words>","horizon":"short-term or long-term"}`;
 
   try {
-    const res = await claudeJSON(prompt);
+    const _rawCmp = await claudeJSON(prompt);
+    const res = (() => {
+      if (_rawCmp && typeof _rawCmp === 'object') return _rawCmp;
+      try { return JSON.parse((_rawCmp||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+    })();
     if (!res || !res.pick) throw new Error('bad response');
     const pickCol = res.pick === sA.symbol ? 'var(--ac)' : 'var(--ac2)';
     content.innerHTML = `
@@ -13687,7 +13691,11 @@ async function runStressAI() {
 Recommend 3 specific hedging/defensive actions. Reply JSON: {"summary":"<20 words>","actions":[{"action":"<8 words>","reason":"<10 words>"},{"action":"<8 words>","reason":"<10 words>"},{"action":"<8 words>","reason":"<10 words>"}],"verdict":"Resilient|Moderate Risk|High Risk"}`;
 
   try {
-    const res = await claudeJSON(prompt);
+    const _rawSt = await claudeJSON(prompt);
+    const res = (() => {
+      if (_rawSt && typeof _rawSt === 'object') return _rawSt;
+      try { return JSON.parse((_rawSt||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+    })();
     if (!res || !res.verdict) throw new Error('bad response');
     const vCol = res.verdict==='Resilient'?'var(--grn)':res.verdict==='High Risk'?'var(--red)':'var(--yel)';
     const actionCards = (res.actions||[]).map((a,i)=>`<div style="flex:1;min-width:180px;background:var(--b2);border-radius:8px;padding:10px 14px">
@@ -13875,7 +13883,11 @@ async function runPositionAI() {
 Explain why this entry plan makes sense and key risks. Reply JSON: {"rationale":"<30 words>","bullCase":"<15 words>","keyRisk":"<15 words>","timing":"<10 words>"}`;
 
   try {
-    const res = await claudeJSON(prompt);
+    const _rawPb = await claudeJSON(prompt);
+    const res = (() => {
+      if (_rawPb && typeof _rawPb === 'object') return _rawPb;
+      try { return JSON.parse((_rawPb||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+    })();
     if (!res || !res.rationale) throw new Error('bad response');
     content.innerHTML = `
       <div style="font-size:13px;color:var(--t2);margin-bottom:12px">${res.rationale}</div>
@@ -14113,7 +14125,11 @@ Give a weekly action plan: top 2 buys, top 1 trim, and 1-sentence market comment
 Reply JSON: {"commentary":"<20 words>","buys":[{"sym":"X","rationale":"<12 words>"},{"sym":"Y","rationale":"<12 words>"}],"trim":{"sym":"Z","rationale":"<12 words>"},"verdict":"Aggressive|Balanced|Defensive"}`;
 
   try {
-    const res = await claudeJSON(prompt);
+    const _rawAp = await claudeJSON(prompt);
+    const res = (() => {
+      if (_rawAp && typeof _rawAp === 'object') return _rawAp;
+      try { return JSON.parse((_rawAp||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+    })();
     if (!res || !res.verdict) throw new Error('bad response');
 
     const vCol = res.verdict==='Aggressive'?'var(--grn)':res.verdict==='Defensive'?'var(--red)':'var(--yel)';
@@ -14695,7 +14711,11 @@ async function runEntryTriggerAI(wId, sym) {
 Reply with ONE sentence: the single most important condition that, if met, would make this stock a BUY today. Be specific with price levels or catalysts.`;
 
   try {
-    const result = await claudeJSON(prompt + '\nReply JSON: {"trigger":"<one sentence>"}');
+    const _rawEt = await claudeJSON(prompt + '\nReply JSON: {"trigger":"<one sentence>"}');
+    const result = (() => {
+      if (_rawEt && typeof _rawEt === 'object') return _rawEt;
+      try { return JSON.parse((_rawEt||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+    })();
     const txt = (result?.trigger || await claude(prompt)).slice(0,150);
     el.innerHTML = `<div style="background:rgba(79,142,247,.08);border:1px solid rgba(79,142,247,.2);border-radius:6px;padding:6px 8px;font-size:10px;color:var(--t2);margin-top:3px;line-height:1.4">${txt}</div>`;
   } catch(e) {
