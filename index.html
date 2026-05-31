@@ -9704,7 +9704,7 @@ async function loadBenchmark() {
 
   const [n50Data, nscData] = await Promise.all([
     fetchIndexPrice('^NSEI'),
-    fetchIndexPrice('^CNXSC') // NIFTY SMALLCAP 100
+    fetchIndexPrice('^CNXSC').then(d => d || fetchIndexPrice('NIFTYSMLCAP100.NS')) // NIFTY SMALLCAP 100
   ]);
 
   const calcReturn = data => {
@@ -10311,13 +10311,33 @@ const SECTOR_COLORS = {
   'Real Estate':'#a78bfa','Chemicals':'#fb923c','Defence & Aerospace':'#f43f5e'
 };
 
+// Normalise short sector names used in holdings → canonical SECTORS_LIST names
+const SECTOR_ALIASES = {
+  'Auto':'Auto & EV','Auto & EV':'Auto & EV',
+  'Banking':'Banking & Finance','Banking & Finance':'Banking & Finance',
+  'Defence':'Defence & Aerospace','Defence & Aerospace':'Defence & Aerospace',
+  'Energy':'Energy & Power','Energy & Power':'Energy & Power',
+  'FMCG':'Consumer Goods','Consumer Goods':'Consumer Goods',
+  'IT':'Technology','Technology':'Technology',
+  'Pharma':'Pharma & Healthcare','Pharma & Healthcare':'Pharma & Healthcare',
+  'Consumer Tech':'Technology',
+  'Industrial':'Infrastructure','Infrastructure':'Infrastructure',
+  'Textiles':'Metals & Mining',
+  'Metals & Mining':'Metals & Mining',
+  'Chemicals':'Chemicals',
+  'Telecom':'Telecom',
+  'Real Estate':'Real Estate',
+  'MF/ETF':'Others','Others':'Others'
+};
+function _normSector(s){ return SECTOR_ALIASES[s] || s; }
+
 function renderSectorMap() {
   const grid = document.getElementById('sector-grid');
   if (!grid) return;
   const totalCv = D.holdings.reduce((s,h) => s + h.qty*(h.ltp||h.avgPrice), 0);
 
   const rows = SECTORS_LIST.map(sec => {
-    const hs = D.holdings.filter(h => h.sector === sec || (sec === 'Technology' && (h.sector||'').toLowerCase().includes('tech')) || (sec === 'Banking & Finance' && ((h.sector||'').toLowerCase().includes('bank') || (h.sector||'').toLowerCase().includes('financ'))));
+    const hs = D.holdings.filter(h => _normSector(h.sector||'') === sec);
     const cv = hs.reduce((s,h) => s + h.qty*(h.ltp||h.avgPrice), 0);
     const inv = hs.reduce((s,h) => s + h.qty*h.avgPrice, 0);
     const allocPct = totalCv > 0 ? cv/totalCv*100 : 0;
