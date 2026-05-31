@@ -11809,9 +11809,13 @@ async function runStockScoreAI(sym) {
   const ctx  = D._marketCtx||{sentimentLabel:'Neutral'};
   const prompt = `Indian equity research analyst. Stock: ${sym}, sector: ${h.sector||'—'}, CMP ₹${Math.round(ltp)}, PE ${h._pe?.toFixed(0)||'—'}, ROE ${h._roe?+(h._roe*100).toFixed(0)+'%':'—'}, beta ${h._beta?.toFixed(2)||'—'}, return-since-buy ${ret.toFixed(1)}%, market: ${ctx.sentimentLabel}.
 Reply JSON only: {"confidence":0-100,"rec":"BUY|HOLD|AVOID","reasons":["","",""],"entry":"₹X-Y","sl":"₹Z","target":"₹W","horizon":"3-6M or 6-12M or 1-3Y","thesis":"one sentence"}`;
-  const raw = await claudeJSON(prompt);
-  if (!raw || typeof raw !== 'object') {
-    el.innerHTML = `<div class="ai-txt">${md2h(typeof raw==='string'?raw:'Research unavailable.')}</div>`;
+  const _rawRes = await claudeJSON(prompt);
+  const raw = (() => {
+    if (_rawRes && typeof _rawRes === 'object') return _rawRes;
+    try { return JSON.parse((_rawRes||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+  })();
+  if (!raw || !raw.rec) {
+    el.innerHTML = `<div class="ai-txt">${md2h(typeof _rawRes==='string'?_rawRes:'Research unavailable.')}</div>`;
     return;
   }
   const recCol = raw.rec==='BUY'?'var(--grn)':raw.rec==='HOLD'?'var(--yel)':'var(--red)';
@@ -13277,7 +13281,11 @@ async function runIntelAI() {
 Write a 3-sentence executive summary for the investor. Reply JSON: {"summary":"<60 words>","strength":"<12 words>","concern":"<12 words>","outlook":"Positive|Cautious|Negative"}`;
 
   try {
-    const res = await claudeJSON(prompt);
+    const _rawIR = await claudeJSON(prompt);
+    const res = (() => {
+      if (_rawIR && typeof _rawIR === 'object') return _rawIR;
+      try { return JSON.parse((_rawIR||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+    })();
     if (!res || !res.outlook) throw new Error('bad response');
     const olCol = res.outlook==='Positive'?'var(--grn)':res.outlook==='Negative'?'var(--red)':'var(--yel)';
     const now = new Date().toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'});
@@ -14502,7 +14510,11 @@ Holdings: ${holdSummary}.
 Give 3 specific, actionable prescriptions — which stocks to trim, add, or exit and why. Be direct.
 Reply JSON: {"diagnosis":"<2 sentence overall>","rx":["<prescription 1>","<prescription 2>","<prescription 3>"],"watchlist":["<stock to watch 1>","<stock to watch 2>"],"verdict":"<Healthy|Needs Attention|At Risk>"}`;
 
-  const result = await claudeJSON(prompt).catch(()=>null);
+  const _raw = await claudeJSON(prompt).catch(()=>null);
+  const result = (() => {
+    if (_raw && typeof _raw === 'object') return _raw;
+    try { return JSON.parse((_raw||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+  })();
   if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Diagnosis'; }
 
   if (!result || !result.diagnosis) {
