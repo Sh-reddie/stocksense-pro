@@ -1682,29 +1682,34 @@ textarea.fi{resize:vertical;min-height:70px;}
   <!-- ═══ IMPORT ═══════════════════════════════════════ -->
   <div class="sec" id="sec-import">
     <div class="sec-head"><div class="sec-title">Import from CSV</div></div>
+    <!-- Broker support banner -->
+    <div style="background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+      <span style="font-size:11px;font-weight:700;color:var(--t4);text-transform:uppercase;letter-spacing:1px;margin-right:4px">✅ Supported:</span>
+      <span class="tag t-buy" style="font-size:11px">Groww</span>
+      <span class="tag t-buy" style="font-size:11px">Zerodha</span>
+      <span class="tag t-buy" style="font-size:11px">Upstox</span>
+      <span class="tag t-buy" style="font-size:11px">Tickertape</span>
+      <span class="tag t-hold" style="font-size:11px">Angel One</span>
+      <span class="tag t-hold" style="font-size:11px">Dhan</span>
+      <span class="tag t-neu" style="font-size:11px">Any generic CSV</span>
+      <span style="font-size:11px;color:var(--t4);margin-left:4px">— broker auto-detected from file headers</span>
+    </div>
     <div class="g21">
       <div style="display:flex;flex-direction:column;gap:14px">
         <div class="pn"><div class="pn-h"><div class="pn-t">📁 Holdings (Open Positions)</div></div><div class="pn-b">
           <div class="drop-z" onclick="document.getElementById('hf').click()" ondragover="ondrag(event,'hdrop')" ondragleave="offdrag('hdrop')" ondrop="ondropf(event,'holdings')" id="hdrop">
             <input type="file" id="hf" accept=".csv,.xlsx,.xls" onchange="handleFile(this.files[0],'holdings')">
             <div style="font-size:32px;margin-bottom:8px">📂</div>
-            <div style="font-family:var(--display);font-weight:600;margin-bottom:4px">Drop Groww Holdings File</div>
-            <div style="font-size:11px;color:var(--t4)">Excel .xlsx or CSV · click or drag &amp; drop</div>
+            <div style="font-family:var(--display);font-weight:600;margin-bottom:4px">Drop Holdings File</div>
+            <div style="font-size:11px;color:var(--t4)">Excel .xlsx or CSV · Groww / Zerodha / Upstox / Tickertape · click or drag &amp; drop</div>
           </div>
-          <div class="ai-box" style="margin-top:12px"><div class="ai-txt" style="font-size:11px">
-            <strong style="color:var(--t1)">✅ Groww Holdings Statement fully supported</strong><br>
-            Auto-skips metadata rows (Name, Client Code, Summary etc.) and finds the real data table automatically.<br><br>
-            <strong style="color:var(--t1)">Mapped columns:</strong><br>
-            <span style="font-family:var(--mono);font-size:10px;color:var(--cyn)">Stock Name · ISIN · Quantity · Average buy price · Closing price · Unrealised P&amp;L</span><br><br>
-            Duplicates skipped by Symbol + Date + Price + Qty.
-          </div></div>
         </div></div>
         <div class="pn"><div class="pn-h"><div class="pn-t">📊 Realised P&L / Tradebook</div></div><div class="pn-b">
           <div class="drop-z" onclick="document.getElementById('rf').click()" ondragover="ondrag(event,'rdrop')" ondragleave="offdrag('rdrop')" ondrop="ondropf(event,'realised')" id="rdrop">
             <input type="file" id="rf" accept=".csv,.xlsx,.xls" onchange="handleFile(this.files[0],'realised')">
             <div style="font-size:32px;margin-bottom:8px">📊</div>
-            <div style="font-family:var(--display);font-weight:600;margin-bottom:4px">Drop Groww P&L / Tradebook</div>
-            <div style="font-size:11px;color:var(--t4)">Excel .xlsx or CSV · Tradebook or P&L report</div>
+            <div style="font-family:var(--display);font-weight:600;margin-bottom:4px">Drop P&L / Tradebook</div>
+            <div style="font-size:11px;color:var(--t4)">Excel .xlsx or CSV · Groww P&L · Zerodha Tradebook (BUY rows auto-filtered)</div>
           </div>
         </div></div>
         <div class="pn"><div class="pn-h"><div class="pn-t">💰 Dividend History</div></div><div class="pn-b">
@@ -1722,7 +1727,14 @@ textarea.fi{resize:vertical;min-height:70px;}
       </div>
       <div style="display:flex;flex-direction:column;gap:14px">
         <div class="pn" style="flex:1"><div class="pn-h"><div class="pn-t">📋 Import Log</div><div style="display:flex;gap:6px"><button class="btn btn-yel btn-xs" onclick="const n=mergeHoldingsBySymbol();renderAll();toast(n?'✅ Merged '+n+' duplicate symbol(s)':'No duplicates to merge');ilog(n?'🔗 Merged '+n+' duplicate symbol(s) into single rows':'✅ No duplicate symbols found');" title="Merge multiple lots of same stock into one weighted-average row">🔗 Merge Dupes</button><button class="btn btn-g btn-xs" onclick="document.getElementById('ilog').innerHTML=''">Clear</button></div></div><div class="pn-b" id="ilog" style="font-family:var(--mono);font-size:11px;line-height:1.9;color:var(--t2);max-height:380px;overflow-y:auto">Waiting…</div></div>
-        <div class="pn"><div class="pn-h"><div class="pn-t">📖 Groww Export Guide</div></div><div class="pn-b" style="font-size:12px;line-height:1.9;color:var(--t2)"><strong style="color:var(--t1)">Holdings:</strong> Groww App → Portfolio → ⋮ → Download Report<br><strong style="color:var(--t1)">P&L:</strong> Groww App → Reports → P&L → Download CSV<br><strong style="color:var(--t1)">Dividends:</strong> Groww App → Reports → Dividend → Download<br><br><span style="color:var(--yel)">⚠ "Scrip Name" and "Symbol" both handled automatically.</span></div></div>
+        <div class="pn"><div class="pn-h"><div class="pn-t">📖 Broker Export Guide</div></div><div class="pn-b" style="font-size:12px;line-height:2;color:var(--t2)">
+          <strong style="color:var(--t1)">Groww:</strong> Portfolio → ⋮ → Download Report (Holdings) · Reports → P&L → Download CSV<br>
+          <strong style="color:var(--t1)">Zerodha:</strong> Console → Portfolio → Holdings → Download ↓ (Holdings CSV) · Console → Reports → Tradebook → Download<br>
+          <strong style="color:var(--t1)">Upstox:</strong> Portfolio → Holdings → Export CSV · Reports → Trade History → Export<br>
+          <strong style="color:var(--t1)">Tickertape:</strong> Portfolio → Export → Download CSV<br>
+          <strong style="color:var(--t1)">Zerodha Tradebook:</strong> Uploaded to Holdings section — BUY trades are aggregated per symbol automatically.<br>
+          <br><span style="color:var(--yel)">⚠ Always export as CSV (not PDF). If export gives .xlsx, open in Excel → Save As → CSV UTF-8.</span>
+        </div></div>
       </div>
     </div>
   </div>
@@ -8462,6 +8474,63 @@ async function claudeJSON(prompt, sys) {
 // ═══════════════════════════════════════════════════
 // GROWW STATEMENT PARSER
 // ═══════════════════════════════════════════════════
+function detectBroker(rows2d) {
+  for (let i=0; i<Math.min(rows2d.length,5); i++) {
+    const cells = rows2d[i].map(c=>String(c||'').toLowerCase());
+    const flat  = cells.join(' ');
+    if (flat.includes('groww'))       return 'Groww';
+    if (flat.includes('zerodha'))     return 'Zerodha';
+    if (flat.includes('upstox'))      return 'Upstox';
+    if (flat.includes('tickertape'))  return 'Tickertape';
+    if (flat.includes('angel one') || flat.includes('angelone')) return 'Angel One';
+    if (flat.includes('dhan'))        return 'Dhan';
+  }
+  // Detect by column signature
+  for (let i=0; i<Math.min(rows2d.length,8); i++) {
+    const row = rows2d[i].map(c=>String(c||'').toLowerCase().trim());
+    if (row.includes('trade_type') || row.includes('trade type')) return 'Zerodha Tradebook';
+    if (row.includes('instrument') && row.includes('qty') && !row.includes('stock name')) return 'Zerodha Holdings';
+    if (row.includes('instrument name') || row.includes('script name'))  return 'Upstox';
+    if (row.includes('ticker') && row.includes('average buy price'))      return 'Tickertape';
+  }
+  return 'Generic CSV';
+}
+
+// Pre-process Zerodha tradebook: aggregate BUY trades by symbol → weighted avg
+function processZerodhaTradebook(rows2d) {
+  const hdrRow = rows2d.findIndex(r => {
+    const low = r.map(c=>String(c||'').toLowerCase().trim());
+    return low.includes('trade_type') || low.includes('trade type');
+  });
+  if (hdrRow < 0) return null;
+  const hdrs = rows2d[hdrRow].map(c=>String(c||'').toLowerCase().trim());
+  const fi = k => hdrs.findIndex(h=>h===k||h.includes(k));
+  const iSym  = fi('symbol'); const iType = fi('trade_type')||fi('trade type');
+  const iQty  = fi('quantity'); const iPrice = fi('price')||fi('trade price');
+  const iDate = fi('trade_date')||fi('trade date')||fi('date'); const iExch = fi('exchange');
+  if (iSym<0||iQty<0||iPrice<0) return null;
+  const map = {};
+  for (let i=hdrRow+1; i<rows2d.length; i++) {
+    const r=rows2d[i];
+    const type=(r[iType]||'').toLowerCase().trim();
+    if (!type.includes('buy')) continue;
+    const sym=(r[iSym]||'').toUpperCase().replace(/\s+/g,'');
+    const qty=parseFloat(r[iQty]||0);
+    const price=parseFloat(r[iPrice]||0);
+    const date=iDate>=0?String(r[iDate]||''):'';
+    const exch=iExch>=0?String(r[iExch]||'NSE'):'NSE';
+    if (!sym||!qty||!price) continue;
+    if (!map[sym]) map[sym]={sym,exch,totalQty:0,totalCost:0,firstDate:date};
+    map[sym].totalQty+=qty; map[sym].totalCost+=qty*price;
+    if (date && (!map[sym].firstDate || date < map[sym].firstDate)) map[sym].firstDate=date;
+  }
+  return Object.values(map).map(s=>({
+    rawName:s.sym, qty:s.totalQty,
+    avgPrice:+(s.totalCost/s.totalQty).toFixed(2),
+    isin:'', ltp:null, pl:null, exchange:s.exch, buyDate:s.firstDate||null
+  }));
+}
+
 function parseGrowwStatement(rows2d) {
   let headerIdx = -1;
   for(let i=0;i<rows2d.length;i++){
@@ -8471,10 +8540,19 @@ function parseGrowwStatement(rows2d) {
   if(headerIdx===-1){
     for(let i=0;i<rows2d.length;i++){
       const row=rows2d[i].map(c=>String(c||'').toLowerCase().trim());
+      // Zerodha: "instrument" + qty, Upstox: "instrument name", Tickertape: "ticker"
+      const hasName=row.some(c=>c==='instrument'||c==='instrument name'||c==='ticker'||c==='script name'||c==='symbol'||c==='trading symbol');
+      const hasQty=row.some(c=>c==='quantity'||c==='qty');
+      if(hasName&&hasQty){headerIdx=i;break;}
+    }
+  }
+  if(headerIdx===-1){
+    for(let i=0;i<rows2d.length;i++){
+      const row=rows2d[i].map(c=>String(c||'').toLowerCase().trim());
       if(row.some(c=>c==='quantity'||c==='qty')&&row.some(c=>c.includes('price'))){headerIdx=i;break;}
     }
   }
-  if(headerIdx===-1){ilog('⛔ Could not find data header row. Expected "Stock Name" and "Quantity" columns.','error');return null;}
+  if(headerIdx===-1){ilog('⛔ Could not find data header row. Expected "Stock Name"/"Instrument" and "Quantity" columns.','error');return null;}
   const headers=rows2d[headerIdx].map(c=>String(c||'').toLowerCase().trim());
   ilog('📋 Data header at row '+(headerIdx+1)+': '+headers.filter(Boolean).join(' | '));
 
@@ -8488,13 +8566,15 @@ function parseGrowwStatement(rows2d) {
   }
 
   const findCol=aliases=>{for(const a of aliases){const i=headers.findIndex(h=>h.includes(a));if(i>=0)return i;}return -1;};
-  const colName=findCol(['stock name','scrip name','security name','name']);
-  const colQty =findCol(['quantity','qty','shares']);
-  const colAvg =findCol(['average buy price','avg buy price','average price','avg price','buy price','cost price','purchase price']);
-  const colLtp =findCol(['closing price','ltp','last traded','current price','market price','cmp','close price']);
-  const colPl  =findCol(['unrealised p','unrealized p','p&l','pnl']);
-  const colExch=findCol(['exchange','exch']);
+  // Broad column search — covers Groww, Zerodha, Upstox, Tickertape, Angel, Dhan
+  const colName=findCol(['stock name','scrip name','security name','instrument name','instrument','script name','ticker','symbol','scrip','trading symbol','trade symbol']);
+  const colQty =findCol(['quantity','qty','shares','net qty','holding qty','units']);
+  const colAvg =findCol(['average buy price','avg buy price','average price','avg. cost','avg. price','avg price','avg cost','buy price','cost price','purchase price','trade price','average cost','weighted avg']);
+  const colLtp =findCol(['closing price','close price','ltp','last traded','current price','market price','cmp','last price']);
+  const colPl  =findCol(['unrealised p','unrealized p','p&l','pnl','profit','gain']);
+  const colExch=findCol(['exchange','exch','market']);
   const colIsin=findCol(['isin']);
+  const colDate=findCol(['trade date','buy date','date','order date','purchase date']);
   ilog('🗂 Cols → Name:'+colName+' Qty:'+colQty+' AvgPrice:'+colAvg+' LTP:'+colLtp);
   if(colName<0||colQty<0||colAvg<0){ilog('⛔ Missing critical columns. Found: '+headers.join(', '),'error');return null;}
   const out=[];
@@ -8505,7 +8585,8 @@ function parseGrowwStatement(rows2d) {
     const avgPrice=parseFloat(String(row[colAvg]||'').replace(/,/g,''));
     if(!name||!qty||isNaN(qty)||qty<=0||!avgPrice||isNaN(avgPrice)||avgPrice<=0)continue;
     const isin=colIsin>=0?String(row[colIsin]||'').trim():'';
-    out.push({rawName:name,qty,avgPrice,isin,ltp:colLtp>=0?parseFloat(String(row[colLtp]||'0').replace(/,/g,''))||null:null,pl:colPl>=0?parseFloat(String(row[colPl]||'0').replace(/,/g,''))||null:null,exchange:colExch>=0?String(row[colExch]||'NSE').toUpperCase():'NSE'});
+    const rawDate=colDate>=0?String(row[colDate]||'').trim():'';
+    out.push({rawName:name,qty,avgPrice,isin,ltp:colLtp>=0?parseFloat(String(row[colLtp]||'0').replace(/,/g,''))||null:null,pl:colPl>=0?parseFloat(String(row[colPl]||'0').replace(/,/g,''))||null:null,exchange:colExch>=0?String(row[colExch]||'NSE').toUpperCase():'NSE',buyDate:rawDate||null});
   }
   return out;
 }
@@ -8673,7 +8754,17 @@ async function handleFile(file, type) {
 // ═══════════════════════════════════════════════════
 async function importHoldingsV2(rows2d) {
   ilog('🔍 Analysing file structure...');
-  const parsed=parseGrowwStatement(rows2d);
+  const broker = detectBroker(rows2d);
+  ilog(`🏦 Detected format: <strong style="color:var(--ac)">${broker}</strong>`);
+  // Zerodha tradebook: aggregate BUY rows first
+  let parsed;
+  if (broker === 'Zerodha Tradebook') {
+    parsed = processZerodhaTradebook(rows2d);
+    if (parsed?.length) ilog(`📊 Zerodha tradebook: aggregated ${parsed.length} unique symbols from BUY trades`);
+    else { ilog('⛔ Could not parse Zerodha tradebook — check column names','error'); return; }
+  } else {
+    parsed=parseGrowwStatement(rows2d);
+  }
   if(!parsed||!parsed.length){ilog('⛔ Could not find data table. Check file has Quantity + Average price columns.','error');ilog('💡 Open in Excel → Save As → CSV UTF-8 → re-upload','warn');return;}
   ilog('✅ Found '+parsed.length+' stock rows');
   let added=0,dupes=0,skip=0,mapped=0,unmapped=0;
