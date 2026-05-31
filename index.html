@@ -5476,6 +5476,37 @@ function startWlBuy(id){document.querySelectorAll('.wl-card').forEach(c=>c.class
 function cancelWlBuy(id){document.getElementById('wlc-'+id)?.classList.remove('buying');}
 function rmWatch(id){D.watchlist=D.watchlist.filter(w=>w.id!==id);save('watchlist');renderWatchlist();toast('Removed from watchlist');}
 
+function toggleWlAlertForm(id) {
+  const el = document.getElementById('wlaf-'+id);
+  if (!el) return;
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  if (!open) {
+    // Show existing active alerts for this symbol
+    const w = D.watchlist.find(x=>x.id===id);
+    if (!w) return;
+    const existing = loadAlerts().filter(a=>a.sym===w.symbol && !a.triggered);
+    const activeEl = document.getElementById('wlaf-active-'+id);
+    if (activeEl && existing.length) {
+      activeEl.innerHTML = 'Active alerts: ' + existing.map(a=>`<span style="background:var(--s4);border:1px solid var(--b2);border-radius:4px;padding:2px 6px;margin-right:4px">${a.type==='above'?'📈':'📉'} ₹${a.price}</span>`).join('');
+    }
+  }
+}
+
+function addWlQuickAlert(id, sym) {
+  const typeEl  = document.getElementById('wlaf-type-'+id);
+  const priceEl = document.getElementById('wlaf-price-'+id);
+  if (!typeEl || !priceEl) return;
+  const type  = typeEl.value;
+  const price = parseFloat(priceEl.value);
+  if (!price || isNaN(price) || price <= 0) { toast('Enter a valid price', 'warn'); return; }
+  const alerts = loadAlerts();
+  alerts.push({ id: Date.now(), sym, type, price, label: type==='above'?'Above ₹'+price:'Below ₹'+price, src:'watchlist', created: new Date().toISOString(), triggered: false });
+  saveAlerts(alerts);
+  toast(`🔔 Alert set: ${sym} ${type==='above'?'≥':'≤'} ₹${price}`, 'ok');
+  toggleWlAlertForm(id);
+}
+
 async function confirmWlAdd(wid, sym, exch, sector, name) {
   const qty=parseFloat(document.getElementById('wlf-qty-'+wid)?.value);
   const price=parseFloat(document.getElementById('wlf-price-'+wid)?.value);
@@ -5571,7 +5602,7 @@ function renderHoldings() {
         case 'stock':return`<td onclick="openDetail(${h.id})" style="cursor:pointer"><div class="sym">${h.symbol}</div><div class="snm">${h.name}</div></td>`;
         case 'qty':return`<td class="mn">${h.qty}</td>`;
         case 'avg':return`<td class="mn">₹${f(h.avgPrice)}</td>`;
-        case 'ltp':{const staleInd=h.ltpStale?` <span title="Live price unavailable — showing avg buy price. Click ↻ to retry." style="color:var(--yel);font-size:10px;cursor:help">⚠</span>`:'';return`<td class="mn">₹${f(ltp)}${staleInd}</td>`; }
+        case 'ltp':{const staleInd=h.ltpStale?` <span title="Live price unavailable — showing avg buy price. Click ↻ to retry." style="color:var(--yel);font-size:10px;cursor:help">⚠</span>`:'';const _sm=!h.ltpStale&&h.ltpUpdatedAt?Math.round((Date.now()-new Date(h.ltpUpdatedAt).getTime())/60000):null;const ageStr=_sm!==null&&_sm>5?`<div style="font-size:9px;color:var(--t4);line-height:1.2;margin-top:1px">${_sm<60?_sm+'m':Math.round(_sm/60)+'h'} ago</div>`:'';return`<td class="mn">₹${f(ltp)}${staleInd}${ageStr}</td>`; }
         case 'cv':return`<td class="mn" style="font-weight:600">₹${fI(cv)}</td>`;
         case 'chg':return`<td class="mn ${cls(h.chgP||0)}">${fP(h.chgP||0)}</td>`;
         case 'pl':return`<td class="mn ${cls(pl)}">${pl>=0?'+':''}₹${fI(Math.abs(pl))}</td>`;
@@ -6511,6 +6542,7 @@ function renderWatchlist() {
           <button class="btn btn-grn btn-xs" onclick="quickAddToHoldings(${w.id})">+ Holdings</button>
           <button id="wl-ai-btn-${w.id}" class="btn btn-p btn-xs" onclick="_wlAnalyseSingle(${w.id})">${hasAI ? '🔄 Re-analyse' : '🤖 AI'}</button>
           <button class="btn btn-g btn-xs" onclick="toggleWlExpand(${w.id})">${document.getElementById('wle-'+w.id)?.style.display!=='none'?'▲ Less':'▼ Detail'}</button>
+          <button class="btn btn-g btn-xs" onclick="toggleWlAlertForm(${w.id})" title="Set price alert">🔔</button>
           <button class="btn btn-red btn-xs" onclick="rmWatch(${w.id})">✕</button>
         </div>
       </div>
@@ -6594,6 +6626,21 @@ function renderWatchlist() {
         <div style="font-size:10px;color:var(--t4);margin-top:6px">
           Stock will remain on watchlist after adding to holdings · SL and targets from AI analysis will be applied
         </div>
+      </div>
+
+      <!-- ── QUICK ALERT FORM ──────────────────────────── -->
+      <div class="wl-alert-form" id="wlaf-${w.id}" style="display:none;border-top:1px solid var(--b1);padding:12px 14px;background:var(--s3)">
+        <div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:8px">🔔 Set Price Alert for ${w.symbol} <span style="color:var(--t4);font-weight:400">(current: ₹${f(ltp)})</span></div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <select class="fi" id="wlaf-type-${w.id}" style="flex:0 0 120px;padding:5px 8px;font-size:12px">
+            <option value="above">📈 Alert Above</option>
+            <option value="below">📉 Alert Below</option>
+          </select>
+          <input type="number" class="fi" id="wlaf-price-${w.id}" placeholder="₹ target price" value="${ltp||''}" step="0.5" style="flex:1;min-width:120px;max-width:160px">
+          <button class="btn btn-p btn-sm" onclick="addWlQuickAlert(${w.id},'${w.symbol}')">Set Alert</button>
+          <button class="btn btn-g btn-sm" onclick="toggleWlAlertForm(${w.id})">Cancel</button>
+        </div>
+        <div id="wlaf-active-${w.id}" style="margin-top:8px;font-size:11px;color:var(--t4)"></div>
       </div>
     </div>`;
   };
