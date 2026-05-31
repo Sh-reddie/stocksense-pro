@@ -169,7 +169,8 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 /* Dropdown menus */
 .tn-drop-wrap { position:relative; }
 .tn-drop-wrap:hover .tn-drop,.tn-drop-wrap.open .tn-drop { display:block; }
-.tn-drop { display:none; position:absolute; top:100%; left:0; background:var(--s1); border:1px solid var(--b1); border-radius:10px; min-width:190px; padding:6px; box-shadow:0 8px 24px rgba(0,0,0,.4); z-index:200; }
+.tn-drop { display:none; position:absolute; top:100%; left:0; background:var(--s1); border:1px solid var(--b1); border-radius:10px; min-width:190px; padding:6px; box-shadow:0 8px 24px rgba(0,0,0,.4); z-index:200; max-height:calc(100vh - 120px); overflow-y:auto; }
+.tn-drop::-webkit-scrollbar{width:4px;} .tn-drop::-webkit-scrollbar-track{background:transparent;} .tn-drop::-webkit-scrollbar-thumb{background:var(--b2);border-radius:4px;}
 .tn-drop-item { padding:8px 12px; font-size:12.5px; color:var(--t2); cursor:pointer; border-radius:6px; white-space:nowrap; transition:all .12s; }
 .tn-drop-item:hover { background:var(--s2); color:var(--t1); }
 .tn-drop-div { padding:8px 12px 3px; font-size:9px; font-weight:700; letter-spacing:1.5px; color:var(--t4); text-transform:uppercase; pointer-events:none; margin-top:4px; }
