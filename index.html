@@ -769,6 +769,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="mob-nav-sect">Analytics</div>
     <div class="mob-nav-item" onclick="mgo('allocation')">📊 Allocation</div>
     <div class="mob-nav-item" onclick="mgo('risk')">⚠ Risk Analytics</div>
+    <div class="mob-nav-item" onclick="mgo('timeline')">📈 Portfolio Timeline</div>
     <div class="mob-nav-item" onclick="mgo('alerts')">🔔 Price Alerts</div>
     <div class="mob-nav-item" onclick="mgo('notifications')">🔔 Notifications</div>
     <div class="mob-nav-sect">Tools</div>
@@ -850,6 +851,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('sectormap')">🌡 Sector Map</div>
         <div class="tn-drop-item" onclick="go('rebalancer')">⚖ Rebalancer</div>
         <div class="tn-drop-item" onclick="go('riskpro')">⚠ Risk Analytics</div>
+        <div class="tn-drop-item" onclick="go('timeline')" style="color:var(--ac2)">📈 Portfolio Timeline</div>
       </div>
     </div>
     <!-- AI dropdown -->
@@ -1452,6 +1454,59 @@ textarea.fi{resize:vertical;min-height:70px;}
           <button class="btn btn-p" onclick="saveCalEvent()">Save Event</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ═══ PORTFOLIO TIMELINE ══════════════════════════════ -->
+  <div class="sec" id="sec-timeline">
+    <div class="sec-head">
+      <div class="sec-title">📈 Portfolio Timeline</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select class="fi" id="tl-range" onchange="renderTimeline()" style="width:110px">
+          <option value="30">1 Month</option>
+          <option value="90">3 Months</option>
+          <option value="180">6 Months</option>
+          <option value="365" selected>1 Year</option>
+          <option value="0">All Time</option>
+        </select>
+        <button class="btn btn-g btn-sm" onclick="tlSnapshot();renderTimeline()">📸 Snapshot Now</button>
+        <button class="btn btn-red btn-sm" onclick="if(confirm('Clear all timeline snapshots?')){localStorage.removeItem('ss_snapshots');renderTimeline()}">🗑 Clear</button>
+      </div>
+    </div>
+    <!-- Stat cards row -->
+    <div class="sg sg-4 gap" id="tl-stats">
+      <div class="sc c1"><div class="sc-lbl">Current Value</div><div class="sc-val" id="tl-cur">—</div><div class="sc-sub">Portfolio total</div></div>
+      <div class="sc c3"><div class="sc-lbl">Total Return</div><div class="sc-val" id="tl-ret">—</div><div class="sc-sub" id="tl-ret-sub">Since first snapshot</div></div>
+      <div class="sc c4"><div class="sc-lbl">Best Day</div><div class="sc-val up" id="tl-best">—</div><div class="sc-sub" id="tl-best-dt">—</div></div>
+      <div class="sc c5"><div class="sc-lbl">Worst Day</div><div class="sc-val dn" id="tl-worst">—</div><div class="sc-sub" id="tl-worst-dt">—</div></div>
+    </div>
+    <!-- Chart -->
+    <div class="pn gap">
+      <div class="pn-h">
+        <div class="pn-t">Portfolio Value Over Time</div>
+        <div id="tl-snapshot-count" style="font-size:11px;color:var(--t4)"></div>
+      </div>
+      <div class="pn-b" style="padding:0">
+        <div id="tl-chart-wrap" style="position:relative;width:100%;height:300px;padding:16px 16px 40px;">
+          <svg id="tl-svg" width="100%" height="100%" style="overflow:visible"></svg>
+          <div id="tl-empty" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--t4)">
+            <div style="font-size:36px;margin-bottom:10px">📸</div>
+            <div style="font-size:14px;font-weight:600;margin-bottom:6px">No snapshots yet</div>
+            <div style="font-size:12px;margin-bottom:16px">Prices are auto-snapshotted each time you refresh. Click "Snapshot Now" to capture today's value immediately.</div>
+            <button class="btn btn-p" onclick="tlSnapshot();renderTimeline()">📸 Take First Snapshot</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Daily table -->
+    <div class="pn gap">
+      <div class="pn-h"><div class="pn-t">Daily Snapshot Log</div></div>
+      <div class="pn-b" style="padding:0"><div style="overflow-x:auto">
+        <table class="tbl" id="tl-tbl">
+          <thead><tr><th>Date</th><th>Portfolio Value</th><th>Change (₹)</th><th>Change (%)</th><th>Invested</th><th>Unrealised P&L</th></tr></thead>
+          <tbody id="tl-tbody"><tr><td colspan="6" style="text-align:center;padding:30px;color:var(--t4)">No snapshots.</td></tr></tbody>
+        </table>
+      </div></div>
     </div>
   </div>
 
@@ -4084,12 +4139,12 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ AI Stock Comparator','intel-report':'📑 Portfolio Intelligence Report','watchlist-builder':'🔭 AI Watchlist Builder','exit-planner':'🚪 AI Exit Strategy Planner','ai-rebalancer':'⚖️ AI Portfolio Rebalancer','earnings-preview':'📣 AI Earnings Preview','dividend-opt':'💸 AI Dividend Optimizer','goal-planner':'🏆 AI Goal Planner'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ AI Stock Comparator','intel-report':'📑 Portfolio Intelligence Report','watchlist-builder':'🔭 AI Watchlist Builder','exit-planner':'🚪 AI Exit Strategy Planner','ai-rebalancer':'⚖️ AI Portfolio Rebalancer','earnings-preview':'📣 AI Earnings Preview','dividend-opt':'💸 AI Dividend Optimizer','goal-planner':'🏆 AI Goal Planner','timeline':'📈 Portfolio Timeline'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio', dividends:'portfolio', divcal:'portfolio',
-  action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis', riskpro:'analysis',
+  action:'analysis', momentum:'analysis', risk:'analysis', benchmark:'analysis', heatmap:'analysis', sectormap:'analysis', rebalancer:'analysis', riskpro:'analysis', timeline:'analysis',
   screener:'portfolio', journal:'portfolio',
   analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai', 'fair-value':'ai', 'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai', 'position-builder':'ai', 'stress-test':'ai', 'comparator':'ai', 'intel-report':'ai', 'watchlist-builder':'ai','exit-planner':'ai','ai-rebalancer':'ai','earnings-preview':'ai','dividend-opt':'ai','goal-planner':'ai',
   alerts:'tools', notifications:'tools', calendar:'tools', deals:'tools', news:'tools', tax:'tools', import:'tools', macro:'tools',
@@ -4146,6 +4201,7 @@ function go(id) {
   if(id==='earnings-preview') renderEarningsPreview();
   if(id==='dividend-opt') renderDividendOpt();
   if(id==='goal-planner') renderGoalPlanner();
+  if(id==='timeline') renderTimeline();
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -5025,6 +5081,7 @@ async function refreshAll() {
   }
 
   save('holdings');save('watchlist');renderAll();
+  tlSnapshot();
   checkStopLosses();
   checkAlerts();
   const elapsed=((Date.now()-t0)/1000).toFixed(1);
@@ -7769,6 +7826,151 @@ Keep it under 100 words total. Be direct and specific. No generic advice.`;
   if(badge && D._marketCtx?.sentimentLabel) {
     badge.textContent = D._marketCtx.sentimentLabel;
     badge.className = 'tag ' + (D._marketCtx.sentimentScore>=60?'t-buy':D._marketCtx.sentimentScore<=40?'t-sell':'t-hold');
+  }
+}
+
+// ── PORTFOLIO TIMELINE ──────────────────────────────────────
+const TL_KEY = 'ss_snapshots';
+function tlLoadSnaps() { try { return JSON.parse(localStorage.getItem(TL_KEY)||'[]'); } catch(e) { return []; } }
+function tlSaveSnaps(snaps) { localStorage.setItem(TL_KEY, JSON.stringify(snaps)); }
+
+function tlSnapshot() {
+  const holdings = D.holdings || [];
+  if (!holdings.length) return;
+  const today = new Date().toISOString().split('T')[0];
+  const invested = holdings.reduce((s,h)=>s+(+(h.avgPrice||0))*(+(h.qty||0)),0);
+  const current  = holdings.reduce((s,h)=>s+(+(h.ltp||h.avgPrice||0))*(+(h.qty||0)),0);
+  const snaps = tlLoadSnaps();
+  // One snapshot per day — overwrite today's if it already exists
+  const idx = snaps.findIndex(s=>s.date===today);
+  const entry = { date:today, current:Math.round(current), invested:Math.round(invested) };
+  if (idx>=0) snaps[idx]=entry; else snaps.push(entry);
+  snaps.sort((a,b)=>a.date.localeCompare(b.date));
+  // Keep at most 400 entries to avoid bloating localStorage
+  if (snaps.length > 400) snaps.splice(0, snaps.length-400);
+  tlSaveSnaps(snaps);
+}
+
+function renderTimeline() {
+  const allSnaps = tlLoadSnaps();
+  const rangeDays = parseInt(document.getElementById('tl-range')?.value || '365');
+  const cutoff = rangeDays > 0
+    ? new Date(Date.now() - rangeDays*86400000).toISOString().split('T')[0]
+    : '0000-00-00';
+  const snaps = allSnaps.filter(s=>s.date>=cutoff);
+
+  const emptyEl = document.getElementById('tl-empty');
+  const svgEl   = document.getElementById('tl-svg');
+  const snapCnt = document.getElementById('tl-snapshot-count');
+  if (snapCnt) snapCnt.textContent = `${allSnaps.length} snapshot${allSnaps.length!==1?'s':''}`;
+
+  if (!snaps.length) {
+    if (emptyEl) emptyEl.style.display='flex';
+    if (svgEl)   svgEl.innerHTML='';
+    document.getElementById('tl-cur').textContent='—';
+    document.getElementById('tl-ret').textContent='—';
+    document.getElementById('tl-best').textContent='—';
+    document.getElementById('tl-worst').textContent='—';
+    document.getElementById('tl-tbody').innerHTML='<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--t4)">No snapshots in range.</td></tr>';
+    return;
+  }
+  if (emptyEl) emptyEl.style.display='none';
+
+  // Stat cards
+  const first = snaps[0], last = snaps[snaps.length-1];
+  const totalRet = first.current ? (last.current-first.current)/first.current*100 : 0;
+  const retColor = totalRet>=0 ? 'var(--grn)' : 'var(--red)';
+  document.getElementById('tl-cur').textContent = '₹'+fI(last.current);
+  document.getElementById('tl-ret').textContent = (totalRet>=0?'+':'')+totalRet.toFixed(2)+'%';
+  document.getElementById('tl-ret').style.color = retColor;
+  document.getElementById('tl-ret-sub').textContent = `₹${fI(last.current-first.current)} since ${first.date}`;
+
+  // Best / worst day
+  let bestSnap=null, worstSnap=null, bestChg=-Infinity, worstChg=Infinity;
+  for (let i=1; i<snaps.length; i++) {
+    const chgPct = snaps[i-1].current ? (snaps[i].current-snaps[i-1].current)/snaps[i-1].current*100 : 0;
+    if (chgPct>bestChg)  { bestChg=chgPct;  bestSnap=snaps[i]; }
+    if (chgPct<worstChg) { worstChg=chgPct; worstSnap=snaps[i]; }
+  }
+  if (bestSnap)  { document.getElementById('tl-best').textContent='+'+bestChg.toFixed(2)+'%'; document.getElementById('tl-best-dt').textContent=bestSnap.date; }
+  if (worstSnap) { document.getElementById('tl-worst').textContent=worstChg.toFixed(2)+'%'; document.getElementById('tl-worst-dt').textContent=worstSnap.date; }
+
+  // SVG line chart
+  if (svgEl && snaps.length > 1) {
+    const W = svgEl.parentElement?.clientWidth || 700;
+    const H = 220;
+    const PAD = { t:10, r:10, b:30, l:70 };
+    const cw = W - PAD.l - PAD.r;
+    const ch = H - PAD.t - PAD.b;
+    const vals = snaps.map(s=>s.current);
+    const minV = Math.min(...vals), maxV = Math.max(...vals);
+    const range = maxV - minV || 1;
+    const px = (i) => PAD.l + (i/(snaps.length-1)) * cw;
+    const py = (v) => PAD.t + ch - ((v-minV)/range)*ch;
+
+    // Build path
+    const pts = snaps.map((s,i)=>`${px(i).toFixed(1)},${py(s.current).toFixed(1)}`);
+    const linePath = 'M'+pts.join('L');
+    // Fill path (close below)
+    const fillPath = linePath + `L${px(snaps.length-1).toFixed(1)},${(PAD.t+ch).toFixed(1)} L${PAD.l.toFixed(1)},${(PAD.t+ch).toFixed(1)} Z`;
+
+    // Y-axis labels (5 ticks)
+    const yTicks = [0,.25,.5,.75,1].map(t=>({v:minV+t*range, y:PAD.t+ch-t*ch}));
+    const yLabels = yTicks.map(({v,y})=>`<text x="${PAD.l-8}" y="${y+4}" text-anchor="end" font-size="10" fill="var(--t4)">${fI(v)}</text>`).join('');
+
+    // X-axis labels (up to 7 evenly spaced)
+    const xStep = Math.max(1, Math.floor(snaps.length/7));
+    const xLabels = snaps.filter((_,i)=>i%xStep===0||i===snaps.length-1).map((s,_,arr)=>{
+      const origI = snaps.indexOf(s);
+      return `<text x="${px(origI).toFixed(1)}" y="${PAD.t+ch+18}" text-anchor="middle" font-size="9" fill="var(--t4)">${s.date.slice(5)}</text>`;
+    }).join('');
+
+    const gradId = 'tl-grad-'+Date.now();
+    const lineColor = totalRet>=0 ? '#10b981' : '#ef4444';
+    const fillColor = totalRet>=0 ? 'rgba(16,185,129,' : 'rgba(239,68,68,';
+
+    svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svgEl.innerHTML = `
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${fillColor}.25)"/>
+          <stop offset="100%" stop-color="${fillColor}.02)"/>
+        </linearGradient>
+      </defs>
+      <!-- Grid lines -->
+      ${yTicks.map(({y})=>`<line x1="${PAD.l}" y1="${y.toFixed(1)}" x2="${PAD.l+cw}" y2="${y.toFixed(1)}" stroke="var(--b1)" stroke-width="1"/>`).join('')}
+      <!-- Fill area -->
+      <path d="${fillPath}" fill="url(#${gradId})"/>
+      <!-- Line -->
+      <path d="${linePath}" fill="none" stroke="${lineColor}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <!-- Y labels -->
+      ${yLabels}
+      <!-- X labels -->
+      ${xLabels}
+      <!-- Dots at first/last -->
+      <circle cx="${px(0).toFixed(1)}" cy="${py(snaps[0].current).toFixed(1)}" r="3" fill="${lineColor}"/>
+      <circle cx="${px(snaps.length-1).toFixed(1)}" cy="${py(last.current).toFixed(1)}" r="4" fill="${lineColor}" stroke="var(--bg)" stroke-width="2"/>
+    `;
+  }
+
+  // Table (newest first)
+  const tbody = document.getElementById('tl-tbody');
+  if (tbody) {
+    const rows = [...snaps].reverse().map((s,i,arr)=>{
+      const prev = arr[i+1];
+      const chg  = prev ? s.current - prev.current : 0;
+      const chgP = prev?.current ? (chg/prev.current*100) : 0;
+      const plCol = s.current - s.invested;
+      return `<tr>
+        <td class="mn">${s.date}</td>
+        <td class="mn" style="font-weight:700">₹${fI(s.current)}</td>
+        <td class="mn ${chg>=0?'up':'dn'}">${prev?(chg>=0?'+':'')+'₹'+fI(Math.abs(chg)):'—'}</td>
+        <td class="mn ${chg>=0?'up':'dn'}">${prev?(chgP>=0?'+':'')+chgP.toFixed(2)+'%':'—'}</td>
+        <td class="mn">₹${fI(s.invested)}</td>
+        <td class="mn ${plCol>=0?'up':'dn'}">${plCol>=0?'+':''}₹${fI(Math.abs(plCol))}</td>
+      </tr>`;
+    }).join('');
+    tbody.innerHTML = rows || '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--t4)">No data.</td></tr>';
   }
 }
 
