@@ -172,6 +172,9 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 .tn-drop { display:none; position:absolute; top:100%; left:0; background:var(--s1); border:1px solid var(--b1); border-radius:10px; min-width:190px; padding:6px; box-shadow:0 8px 24px rgba(0,0,0,.4); z-index:200; }
 .tn-drop-item { padding:8px 12px; font-size:12.5px; color:var(--t2); cursor:pointer; border-radius:6px; white-space:nowrap; transition:all .12s; }
 .tn-drop-item:hover { background:var(--s2); color:var(--t1); }
+.tn-drop-div { padding:8px 12px 3px; font-size:9px; font-weight:700; letter-spacing:1.5px; color:var(--t4); text-transform:uppercase; pointer-events:none; margin-top:4px; }
+.tn-drop-div:first-child { margin-top:0; }
+.tn-drop-sep { height:1px; background:var(--b2); margin:4px 8px; }
 
 /* Main content area — full width, offset for top nav height */
 .main { margin-left:0 !important; padding-top:90px !important; min-height:100vh; display:flex; flex-direction:column; }
@@ -195,6 +198,23 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 #ds-brief-wrap { background:var(--s1); border:1px solid var(--b1); border-radius:12px; margin-bottom:16px; overflow:hidden; }
 #ds-brief-header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--b2); }
 #ds-brief-body { padding:12px 16px; font-size:13px; line-height:1.7; color:var(--t2); }
+
+/* ── Insights Strip ───────────────────────────────────── */
+#ds-insights-row { display:grid; grid-template-columns:260px 1fr; gap:12px; margin-bottom:16px; }
+#ds-donut-wrap { background:var(--s1); border:1px solid var(--b1); border-radius:12px; padding:14px 16px; }
+#ds-donut-title { font-size:10px; font-weight:700; color:var(--t4); text-transform:uppercase; letter-spacing:1.2px; margin-bottom:10px; }
+#ds-donut-chart { width:110px; height:110px; border-radius:50%; margin:0 auto 10px; transition:background .4s; }
+#ds-donut-legend { display:flex; flex-direction:column; gap:4px; }
+.ds-dl { display:flex; align-items:center; gap:6px; font-size:11px; }
+.ds-dl-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+#ds-insight-cards { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.ds-ic { background:var(--s1); border:1px solid var(--b1); border-radius:12px; padding:14px 16px; transition:border-color .3s; }
+.ds-ic-lbl { font-size:10px; font-weight:700; color:var(--t4); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
+.ds-ic-name { font-size:13px; font-weight:700; color:var(--t1); margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ds-ic-val { font-size:22px; font-weight:800; line-height:1.1; }
+.ds-ic-sub { font-size:11px; color:var(--t4); margin-top:4px; }
+@media(max-width:900px) { #ds-insights-row { grid-template-columns:1fr; } #ds-insight-cards { grid-template-columns:repeat(3,1fr); } }
+@media(max-width:600px) { #ds-insight-cards { grid-template-columns:1fr 1fr; } }
 
 /* ── Dashboard Grid ───────────────────────────────────── */
 #ds-main-grid { display:grid; grid-template-columns:1fr 320px; gap:16px; }
@@ -745,26 +765,36 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="tn-drop-wrap">
       <div class="tn-tab" id="tnt-ai" onclick="go('analysis')">🤖 AI ▾</div>
       <div class="tn-drop">
+        <div class="tn-drop-div">Daily</div>
         <div class="tn-drop-item" onclick="go('daily-brief')" style="font-weight:600;color:var(--ac)">🌅 Daily Brief</div>
         <div class="tn-drop-item" onclick="go('analysis')">🔍 Stock Analysis</div>
-        <div class="tn-drop-item" onclick="go('plan')">🎯 Exit Planner</div>
-        <div class="tn-drop-item" onclick="go('planner')">📐 Planner</div>
-        <div class="tn-drop-item" onclick="go('strategies')">🧠 AI Strategies</div>
-        <div class="tn-drop-item" onclick="go('fair-value')">💎 Fair Value Engine</div>
+        <div class="tn-drop-sep"></div>
+        <div class="tn-drop-div">Entry &amp; Exit</div>
         <div class="tn-drop-item" onclick="go('entry-triggers')">🎯 Entry Triggers</div>
-        <div class="tn-drop-item" onclick="go('portfolio-doctor')" style="font-weight:600;color:var(--ac2)">🩺 Portfolio Doctor</div>
-        <div class="tn-drop-item" onclick="go('opportunity')">🏆 Opp. Ranker</div>
-        <div class="tn-drop-item" onclick="go('action-plan')" style="font-weight:600;color:var(--grn)">📋 Action Plan</div>
-        <div class="tn-drop-item" onclick="go('position-builder')">🎯 Position Builder</div>
-        <div class="tn-drop-item" onclick="go('stress-test')">🧨 Stress Test</div>
-        <div class="tn-drop-item" onclick="go('comparator')">⚔ Stock Comparator</div>
-        <div class="tn-drop-item" onclick="go('intel-report')" style="font-weight:600;color:var(--ac)">📑 Intel Report</div>
-        <div class="tn-drop-item" onclick="go('watchlist-builder')">🔭 Watchlist Builder</div>
+        <div class="tn-drop-item" onclick="go('position-builder')">📐 Position Builder</div>
         <div class="tn-drop-item" onclick="go('exit-planner')">🚪 Exit Planner</div>
+        <div class="tn-drop-item" onclick="go('action-plan')" style="color:var(--grn)">📋 Action Plan</div>
+        <div class="tn-drop-sep"></div>
+        <div class="tn-drop-div">Portfolio Health</div>
+        <div class="tn-drop-item" onclick="go('portfolio-doctor')" style="color:var(--ac2)">🩺 Portfolio Doctor</div>
+        <div class="tn-drop-item" onclick="go('stress-test')">🧨 Stress Test</div>
+        <div class="tn-drop-item" onclick="go('intel-report')" style="color:var(--ac)">📑 Intel Report</div>
         <div class="tn-drop-item" onclick="go('ai-rebalancer')">⚖️ AI Rebalancer</div>
+        <div class="tn-drop-sep"></div>
+        <div class="tn-drop-div">Discover</div>
+        <div class="tn-drop-item" onclick="go('opportunity')">🏆 Opp. Ranker</div>
+        <div class="tn-drop-item" onclick="go('watchlist-builder')">🔭 Watchlist Builder</div>
+        <div class="tn-drop-item" onclick="go('fair-value')">💎 Fair Value Engine</div>
+        <div class="tn-drop-item" onclick="go('comparator')">⚔ Comparator</div>
         <div class="tn-drop-item" onclick="go('earnings-preview')">📣 Earnings Preview</div>
-        <div class="tn-drop-item" onclick="go('dividend-opt')">💸 Dividend Optimizer</div>
+        <div class="tn-drop-sep"></div>
+        <div class="tn-drop-div">Planning</div>
         <div class="tn-drop-item" onclick="go('goal-planner')">🏆 Goal Planner</div>
+        <div class="tn-drop-item" onclick="go('planner')">📐 Investment Planner</div>
+        <div class="tn-drop-item" onclick="go('dividend-opt')">💸 Dividend Optimizer</div>
+        <div class="tn-drop-sep"></div>
+        <div class="tn-drop-div">Advanced</div>
+        <div class="tn-drop-item" onclick="go('strategies')">🧠 AI Strategies</div>
       </div>
     </div>
     <!-- Tools dropdown -->
@@ -844,6 +874,20 @@ textarea.fi{resize:vertical;min-height:70px;}
       </div>
       <div id="ds-brief-body">
         <div style="color:var(--t4);font-size:12px;padding:8px 0">Run AI Analysis to get your daily market brief and stock signals →</div>
+      </div>
+    </div>
+
+    <!-- ── Portfolio Insights Strip ──────────────────────── -->
+    <div id="ds-insights-row">
+      <div id="ds-donut-wrap">
+        <div id="ds-donut-title">Sector Allocation</div>
+        <div id="ds-donut-chart"></div>
+        <div id="ds-donut-legend"></div>
+      </div>
+      <div id="ds-insight-cards">
+        <div class="ds-ic" id="ds-ic-winner"><div class="ds-ic-lbl">🏆 Top Winner</div><div class="ds-ic-val" style="color:var(--t4)">—</div></div>
+        <div class="ds-ic" id="ds-ic-loser"><div class="ds-ic-lbl">📉 Biggest Drag</div><div class="ds-ic-val" style="color:var(--t4)">—</div></div>
+        <div class="ds-ic" id="ds-ic-conc"><div class="ds-ic-lbl">📊 Concentration</div><div class="ds-ic-val" style="color:var(--t4)">—</div></div>
       </div>
     </div>
 
@@ -4063,7 +4107,7 @@ const hDays=d=>{if(!d)return null;return Math.floor((Date.now()-new Date(d))/(86
 const taxT=d=>d&&d>=365?'LTCG':'STCG';
 const md2h=s=>s.replace(/\*\*(.*?)\*\*/g,'<strong style="color:var(--t1)">$1</strong>').replace(/\n/g,'<br>');
 const apiKey=()=>document.getElementById('cfg-key')?.value.trim()||localStorage.getItem('apiKey')||'';
-function tagSig(s){if(!s)return'<span class="tag t-neu">—</span>';const u=s.toUpperCase();if(u.includes('STRONG'))return`<span class="tag t-sbuy">${s}</span>`;if(u==='BUY')return'<span class="tag t-buy">BUY</span>';if(u.includes('SELL'))return'<span class="tag t-sell">'+s+'</span>';return'<span class="tag t-hold">HOLD</span>';}
+function tagSig(s){if(!s)return'<span class="tag t-neu">—</span>';const sig=(s.split(/[|,\/]/)[0]).trim();const u=sig.toUpperCase();if(u.includes('STRONG')||u==='STRONG BUY')return`<span class="tag t-sbuy">STRONG BUY</span>`;if(u==='BUY'||u==='BUY MORE')return'<span class="tag t-buy">BUY</span>';if(u.includes('SELL')||u==='REDUCE')return'<span class="tag t-sell">REDUCE</span>';if(u==='EXIT')return'<span class="tag t-sell">EXIT</span>';return'<span class="tag t-hold">HOLD</span>';}
 
 // ═══════════════════════════════════════════════════
 // DATA LAYER — CORS proxy + Yahoo Finance v7 batch
@@ -6058,7 +6102,7 @@ Reply ONLY valid JSON: {"signal":"STRONG BUY|BUY MORE|HOLD|REDUCE|EXIT","urgency
     }
     const j=extractJSON(r);
     if(!j) { h.aiError = 'AI returned unparseable response'; (window.D && D._aiErrors) && D._aiErrors.push(h.symbol+': unparseable model response'); h.lastAnalysed=new Date().toISOString(); return; }
-    if(j.signal)h.signal=j.signal;if(j.stopLoss)h.stopLoss=+j.stopLoss.toFixed(2);if(j.target1)h.target1=+j.target1.toFixed(2);if(j.target2)h.target2=+j.target2.toFixed(2);
+    if(j.signal){const rawSig=j.signal;h.signal=(rawSig.split(/[|,\/]/)[0]).trim();}if(j.stopLoss)h.stopLoss=+j.stopLoss.toFixed(2);if(j.target1)h.target1=+j.target1.toFixed(2);if(j.target2)h.target2=+j.target2.toFixed(2);
     if(j.stopLossPct)h.stopLossPct=+j.stopLossPct.toFixed(1);if(j.target1Pct)h.target1Pct=+j.target1Pct.toFixed(1);if(j.target2Pct)h.target2Pct=+j.target2Pct.toFixed(1);
     if(j.target1Timeline)h.t1Timeline=j.target1Timeline;if(j.target2Timeline)h.t2Timeline=j.target2Timeline;
     if(j.confidence)h.confidence=j.confidence;if(j.bullCase)h.bullCase=j.bullCase;if(j.bearCase)h.bearCase=j.bearCase;
@@ -7590,6 +7634,105 @@ Keep it under 100 words total. Be direct and specific. No generic advice.`;
   }
 }
 
+function renderDashInsights() {
+  const holdings = D.holdings || [];
+  if (!holdings.length) return;
+
+  const SECTOR_COLORS = {
+    'IT':'#6366f1','Technology':'#6366f1','Software':'#6366f1',
+    'Banking':'#3b82f6','Financial Services':'#3b82f6','Finance':'#3b82f6','NBFC':'#60a5fa',
+    'Pharma':'#10b981','Healthcare':'#10b981','Hospital':'#34d399',
+    'Energy':'#f59e0b','Oil & Gas':'#f59e0b','Power':'#fbbf24',
+    'Auto':'#ef4444','Automobile':'#ef4444','Auto Ancillary':'#f87171',
+    'FMCG':'#ec4899','Consumer':'#ec4899',
+    'Metal':'#64748b','Mining':'#64748b','Steel':'#94a3b8',
+    'Infra':'#a16207','Infrastructure':'#a16207','Construction':'#ca8a04',
+    'Realty':'#7c3aed','Real Estate':'#8b5cf6',
+    'Telecom':'#0ea5e9','Media':'#06b6d4',
+    'Chemicals':'#84cc16','Fertilizers':'#a3e635',
+    'Defence':'#dc2626','PSU':'#b45309',
+  };
+  const DEFAULT_COLORS = ['#6366f1','#3b82f6','#10b981','#f59e0b','#ef4444','#ec4899','#64748b','#a16207','#7c3aed','#0ea5e9','#84cc16','#dc2626'];
+  let colorIdx = 0;
+  const assignedColors = {};
+  const colorFor = s => {
+    if (SECTOR_COLORS[s]) return SECTOR_COLORS[s];
+    if (!assignedColors[s]) assignedColors[s] = DEFAULT_COLORS[colorIdx++ % DEFAULT_COLORS.length];
+    return assignedColors[s];
+  };
+
+  // Sector value map
+  const sectorMap = {};
+  let totalVal = 0;
+  holdings.forEach(h => {
+    const sector = (h.sector || 'Other').trim();
+    const val = (+(h.ltp || h.avgPrice || 0)) * (+(h.qty || 0));
+    sectorMap[sector] = (sectorMap[sector] || 0) + val;
+    totalVal += val;
+  });
+  const sectors = Object.entries(sectorMap).sort((a,b) => b[1]-a[1]);
+
+  // Build conic-gradient donut
+  const donutEl = document.getElementById('ds-donut-chart');
+  const legendEl = document.getElementById('ds-donut-legend');
+  if (donutEl && totalVal > 0) {
+    let angle = 0;
+    const stops = [], legendItems = [];
+    sectors.forEach(([name, val]) => {
+      const pct = val / totalVal * 100;
+      const deg = pct * 3.6;
+      const color = colorFor(name);
+      stops.push(`${color} ${angle.toFixed(1)}deg ${(angle+deg).toFixed(1)}deg`);
+      legendItems.push({name, pct, color});
+      angle += deg;
+    });
+    donutEl.style.background = `conic-gradient(${stops.join(',')})`;
+    donutEl.style.boxShadow = 'inset 0 0 0 34px var(--bg)';
+    if (legendEl) {
+      legendEl.innerHTML = legendItems.slice(0,7).map(({name,pct,color}) =>
+        `<div class="ds-dl"><div class="ds-dl-dot" style="background:${color}"></div><span style="color:var(--t2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</span><span style="font-weight:700;color:var(--t1);margin-left:6px">${pct.toFixed(1)}%</span></div>`
+      ).join('');
+    }
+  }
+
+  // P&L % per holding
+  const withPnl = holdings.map(h => ({
+    ...h,
+    plPct: h.avgPrice ? ((+(h.ltp||h.avgPrice) - +h.avgPrice) / +h.avgPrice * 100) : 0
+  }));
+  if (!withPnl.length) return;
+  const winner = withPnl.reduce((a,b) => b.plPct > a.plPct ? b : a, withPnl[0]);
+  const loser  = withPnl.reduce((a,b) => b.plPct < a.plPct ? b : a, withPnl[0]);
+
+  const winEl = document.getElementById('ds-ic-winner');
+  if (winEl) winEl.innerHTML = `
+    <div class="ds-ic-lbl">🏆 Top Winner</div>
+    <div class="ds-ic-name">${winner.name || winner.symbol}</div>
+    <div class="ds-ic-val" style="color:var(--grn)">+${winner.plPct.toFixed(1)}%</div>
+    <div class="ds-ic-sub">${winner.symbol}</div>`;
+
+  const loseEl = document.getElementById('ds-ic-loser');
+  if (loseEl) loseEl.innerHTML = `
+    <div class="ds-ic-lbl">📉 Biggest Drag</div>
+    <div class="ds-ic-name">${loser.name || loser.symbol}</div>
+    <div class="ds-ic-val" style="color:${loser.plPct < 0 ? 'var(--red)' : 'var(--grn)'}">
+      ${loser.plPct >= 0 ? '+' : ''}${loser.plPct.toFixed(1)}%</div>
+    <div class="ds-ic-sub">${loser.symbol}</div>`;
+
+  const topSector = sectors[0];
+  const topPct = totalVal ? (topSector[1]/totalVal*100) : 0;
+  const warn = topPct > 30;
+  const concEl = document.getElementById('ds-ic-conc');
+  if (concEl) {
+    concEl.innerHTML = `
+      <div class="ds-ic-lbl">${warn ? '⚠️' : '✅'} Concentration</div>
+      <div class="ds-ic-name">${topSector[0]}</div>
+      <div class="ds-ic-val" style="color:${warn ? 'var(--red)' : 'var(--grn)'}">${topPct.toFixed(1)}%</div>
+      <div class="ds-ic-sub">${warn ? 'Over-concentrated' : 'Well diversified'}</div>`;
+    concEl.style.borderColor = warn ? 'rgba(239,68,68,.45)' : '';
+  }
+}
+
 function renderAll() {
   renderSummary();
   renderDashHoldings();
@@ -7599,6 +7742,7 @@ function renderAll() {
   renderDividends();
   renderDashActionsV4();
   renderWatchlist();
+  renderDashInsights();
 }
 
 
