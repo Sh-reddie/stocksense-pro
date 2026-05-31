@@ -676,6 +676,59 @@ textarea.fi{resize:vertical;min-height:70px;}
 
 /* ── TAX HARVESTING ──────────────────────────────── */
 .harvest-badge{display:inline-block;background:rgba(251,191,36,.15);border:1px solid var(--yel);color:var(--yel);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:600;}
+
+/* ══ MOBILE NAV DRAWER ══════════════════════════════ */
+#tn-hamburger{display:none;background:none;border:none;color:var(--t1);font-size:22px;cursor:pointer;padding:4px 8px;line-height:1;flex-shrink:0;}
+#mobile-drawer{position:fixed;inset:0;z-index:2000;pointer-events:none;}
+#mobile-drawer-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.6);opacity:0;transition:opacity .25s;}
+#mobile-drawer-panel{position:absolute;top:0;left:0;bottom:0;width:280px;background:var(--s1);border-right:1px solid var(--b1);transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);overflow-y:auto;padding:12px 0 80px;}
+#mobile-drawer.open{pointer-events:all;}
+#mobile-drawer.open #mobile-drawer-backdrop{opacity:1;}
+#mobile-drawer.open #mobile-drawer-panel{transform:translateX(0);}
+.mob-nav-sect{font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--t4);text-transform:uppercase;padding:14px 16px 4px;margin-top:4px;}
+.mob-nav-item{display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:var(--t2);cursor:pointer;transition:background .12s;}
+.mob-nav-item:active{background:var(--s2);color:var(--t1);}
+.mob-nav-close{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 14px;border-bottom:1px solid var(--b1);margin-bottom:4px;}
+.mob-nav-close-title{font-size:15px;font-weight:800;color:var(--t1);}
+.mob-nav-close-btn{background:none;border:none;font-size:20px;color:var(--t3);cursor:pointer;}
+
+/* ══ MOBILE RESPONSIVE ≤600px ══════════════════════ */
+@media(max-width:600px){
+  #tn-hamburger{display:block;}
+  #tn-row2{display:none;}
+  #tn-ticker{display:none !important;}
+  #tn-lastref,.clock,.kv-sync-txt-el,#kv-sync-dot,.mkt-pill{display:none !important;}
+  #tn-actions{gap:3px;}
+  #tn-actions>*{display:none;}
+  #tn-actions .btn-refresh-mob,#tn-actions .btn-ai-mob,#tn-actions .notif-btn,#tn-actions #theme-btn{display:inline-flex !important;}
+  .main{padding-top:50px !important;}
+  .sec{padding:12px 10px;}
+  #pg-titlebar{margin-bottom:10px;}
+  #pgTitle{font-size:17px;}
+  .sec-head{flex-direction:column;align-items:flex-start;gap:8px;}
+  .pn-h{flex-wrap:wrap;gap:6px;}
+  /* Dashboard */
+  #ds-hero{flex-wrap:wrap;padding:10px 12px;gap:0;}
+  .dsh-div{display:none !important;}
+  .dsh-metric{flex:1 1 calc(50% - 1px);border-bottom:1px solid var(--b1);}
+  #ds-brief-header{flex-direction:column;align-items:flex-start;gap:8px;}
+  #ds-main-grid,#ds-right{grid-template-columns:1fr !important;}
+  #ds-insights-row{grid-template-columns:1fr !important;}
+  #ds-insight-cards{grid-template-columns:1fr 1fr !important;}
+  #ds-donut-chart{width:88px;height:88px;}
+  /* Holdings strip */
+  .port-summary-strip{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .pss-item{min-width:88px;flex:0 0 auto;}
+  /* Watchlist */
+  .wl-card [style*="grid-template-columns:1fr auto auto"]{grid-template-columns:1fr auto !important;}
+  /* Multi-column grids → single */
+  .g2,.g3,.g4,.sg-3,.sg-4,.sg-5{grid-template-columns:1fr !important;}
+  .g21,.g12{grid-template-columns:1fr !important;}
+}
+@media(max-width:400px){
+  .dsh-metric{flex:1 1 100%;}
+  #ds-insight-cards{grid-template-columns:1fr !important;}
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
@@ -688,10 +741,48 @@ textarea.fi{resize:vertical;min-height:70px;}
   </div>
 </div>
 
+<!-- MOBILE NAV DRAWER -->
+<div id="mobile-drawer">
+  <div id="mobile-drawer-backdrop" onclick="toggleMobileNav()"></div>
+  <div id="mobile-drawer-panel">
+    <div class="mob-nav-close">
+      <span class="mob-nav-close-title">📊 StockSense<span style="color:var(--ac)">Pro</span></span>
+      <button class="mob-nav-close-btn" onclick="toggleMobileNav()">✕</button>
+    </div>
+    <div class="mob-nav-sect">Portfolio</div>
+    <div class="mob-nav-item" onclick="mgo('dashboard')">🏠 Dashboard</div>
+    <div class="mob-nav-item" onclick="mgo('holdings')">💼 Holdings</div>
+    <div class="mob-nav-item" onclick="mgo('watchlist')">👁 Watchlist</div>
+    <div class="mob-nav-item" onclick="mgo('sip')">📈 SIP Tracker</div>
+    <div class="mob-nav-item" onclick="mgo('realised')">💰 Realised P&amp;L</div>
+    <div class="mob-nav-item" onclick="mgo('dividends')">🏦 Dividends</div>
+    <div class="mob-nav-item" onclick="mgo('screener')">🔍 Stock Screener</div>
+    <div class="mob-nav-item" onclick="mgo('journal')">📒 Trade Journal</div>
+    <div class="mob-nav-sect">AI Tools</div>
+    <div class="mob-nav-item" onclick="mgo('daily-brief')">🌅 Daily Brief</div>
+    <div class="mob-nav-item" onclick="mgo('analysis')">🔍 Stock Analysis</div>
+    <div class="mob-nav-item" onclick="mgo('portfolio-doctor')">🩺 Portfolio Doctor</div>
+    <div class="mob-nav-item" onclick="mgo('exit-planner')">🚪 Exit Planner</div>
+    <div class="mob-nav-item" onclick="mgo('action-plan')">📋 Action Plan</div>
+    <div class="mob-nav-item" onclick="mgo('opportunity')">🏆 Opp. Ranker</div>
+    <div class="mob-nav-item" onclick="mgo('goal-planner')">🎯 Goal Planner</div>
+    <div class="mob-nav-sect">Analytics</div>
+    <div class="mob-nav-item" onclick="mgo('allocation')">📊 Allocation</div>
+    <div class="mob-nav-item" onclick="mgo('risk')">⚠ Risk Analytics</div>
+    <div class="mob-nav-item" onclick="mgo('alerts')">🔔 Price Alerts</div>
+    <div class="mob-nav-item" onclick="mgo('notifications')">🔔 Notifications</div>
+    <div class="mob-nav-sect">Tools</div>
+    <div class="mob-nav-item" onclick="mgo('import')">⬆ Import CSV</div>
+    <div class="mob-nav-item" onclick="mgo('planner')">📐 Planner</div>
+    <div class="mob-nav-item" onclick="toggleTheme();toggleMobileNav()">🌙 Toggle Theme</div>
+  </div>
+</div>
+
 <!-- TOP NAV -->
 <div id="topnav">
   <!-- Row 1: Logo + Indices ticker + Actions -->
   <div id="tn-row1">
+    <button id="tn-hamburger" onclick="toggleMobileNav()" aria-label="Menu">☰</button>
     <div id="tn-logo" onclick="go('dashboard')">
       <span id="tn-logo-icon">📊</span>
       <span id="tn-logo-text">StockSense<span style="color:var(--ac)">Pro</span></span>
@@ -720,8 +811,8 @@ textarea.fi{resize:vertical;min-height:70px;}
       <span id="tn-lastref" style="font-size:10px;color:var(--t4)"></span>
       <div class="mkt-pill" style="margin-right:4px"><div class="dot" id="mktDot"></div><span id="mktTxt" style="font-family:var(--mono);font-size:10px">NSE</span></div>
       <div class="clock" id="clk"></div>
-      <button class="btn btn-g btn-sm" onclick="refreshAll()" title="Refresh prices">↻ Refresh</button>
-      <button class="btn btn-p btn-sm" onclick="runAllAI()" title="Run AI Analysis">🤖 AI</button>
+      <button class="btn btn-g btn-sm btn-refresh-mob" onclick="refreshAll()" title="Refresh prices">↻</button>
+      <button class="btn btn-p btn-sm btn-ai-mob" onclick="runAllAI()" title="Run AI Analysis">🤖</button>
       <span id="kv-sync-dot" style="font-size:10px" title="Cloud sync status"></span>
       <span id="kv-sync-txt" style="font-size:10px;color:var(--t4);display:none" class="kv-sync-txt-el"></span>
       <button class="btn btn-g btn-sm" onclick="exportBackup()" title="Download backup of all portfolio data">💾</button>
@@ -14549,6 +14640,12 @@ async function renderDeals() {
 }
 
 /* ── THEME TOGGLE ──────────────────────────────────── */
+function toggleMobileNav() {
+  const drawer = document.getElementById('mobile-drawer');
+  if (drawer) drawer.classList.toggle('open');
+}
+function mgo(id) { toggleMobileNav(); setTimeout(()=>go(id), 180); }
+
 function toggleTheme() {
   const html = document.documentElement;
   const isLight = html.dataset.theme === 'light';
