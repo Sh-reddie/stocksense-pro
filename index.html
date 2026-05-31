@@ -1580,7 +1580,7 @@ textarea.fi{resize:vertical;min-height:70px;}
           <option value="0">All Time</option>
         </select>
         <button class="btn btn-g btn-sm" onclick="tlSnapshot();renderTimeline()">📸 Snapshot Now</button>
-        <button class="btn btn-red btn-sm" onclick="if(confirm('Clear all timeline snapshots?')){localStorage.removeItem('ss_snapshots');renderTimeline()}">🗑 Clear</button>
+        <button class="btn btn-red btn-sm" onclick="if(confirm('Clear all timeline snapshots?')){localStorage.removeItem(_pfKey('ss_snapshots'));renderTimeline()}">🗑 Clear</button>
       </div>
     </div>
     <!-- Stat cards row -->
@@ -8064,8 +8064,8 @@ Keep it under 100 words total. Be direct and specific. No generic advice.`;
 
 // ── PORTFOLIO TIMELINE ──────────────────────────────────────
 const TL_KEY = 'ss_snapshots';
-function tlLoadSnaps() { try { return JSON.parse(localStorage.getItem(TL_KEY)||'[]'); } catch(e) { return []; } }
-function tlSaveSnaps(snaps) { localStorage.setItem(TL_KEY, JSON.stringify(snaps)); }
+function tlLoadSnaps() { try { return JSON.parse(localStorage.getItem(_pfKey(TL_KEY))||'[]'); } catch(e) { return []; } }
+function tlSaveSnaps(snaps) { localStorage.setItem(_pfKey(TL_KEY), JSON.stringify(snaps)); }
 
 function tlSnapshot() {
   const holdings = D.holdings || [];
@@ -14600,7 +14600,7 @@ function renderEntryTriggers() {
   // with no entry data showing 100% from only the AI gate passing)
   const ready    = scored.filter(({g}) => g.pct === 100 && g.total >= 2).length;
   const close    = scored.filter(({g}) => g.pct >= 75 && g.pct < 100 && g.total >= 2).length;
-  const watching = scored.filter(({g}) => g.pct < 75 && g.w.wlDecision !== 'AVOID').length;
+  const watching = scored.filter(({w, g}) => g.pct < 75 && w.wlDecision !== 'AVOID').length;
   const avoid    = wl.filter(w => w.wlDecision === 'AVOID').length;
 
   const eId = id => document.getElementById(id);
@@ -15553,10 +15553,11 @@ const LK = {
     });
 
     if (!this.isPINSet()) {
-      // First launch — show setup
-      document.body.classList.add('app-locked');
-      this._mode = 'setup1';
-      this.render();
+      // No PIN configured — hide lock screen and proceed normally
+      // PIN setup is only triggered explicitly from Settings
+      const ls = document.getElementById('lock-screen');
+      if (ls) ls.style.display = 'none';
+      this._mode = 'unlocked';
     } else if (sessionStorage.getItem('ss_unlocked') === '1') {
       // Tab was already unlocked in this session
       document.getElementById('lock-screen').style.display = 'none';
