@@ -213,6 +213,26 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 .ds-ic-name { font-size:13px; font-weight:700; color:var(--t1); margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ds-ic-val { font-size:22px; font-weight:800; line-height:1.1; }
 .ds-ic-sub { font-size:11px; color:var(--t4); margin-top:4px; }
+
+/* ── Investment OS Control Tower ─────────────────────────── */
+#ds-os-wrap { background:var(--s1); border:1px solid var(--b1); border-radius:12px; margin-bottom:16px; overflow:hidden; }
+#ds-os-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid var(--b2); }
+.ds-os-title { font-size:14px; font-weight:800; color:var(--t1); }
+.ds-os-sub { font-size:10.5px; color:var(--t4); margin-top:2px; }
+#ds-os-body { display:grid; grid-template-columns:repeat(6,1fr); gap:1px; background:var(--b1); }
+.ds-os-card { background:var(--s1); padding:13px 14px; min-height:96px; cursor:pointer; transition:background .15s,border-color .15s; }
+.ds-os-card:hover { background:var(--s2); }
+.ds-os-card-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+.ds-os-card-name { font-size:11px; font-weight:800; color:var(--t2); text-transform:uppercase; letter-spacing:.55px; }
+.ds-os-card-status { font-size:9px; font-weight:800; padding:2px 7px; border-radius:20px; border:1px solid var(--b2); color:var(--t4); white-space:nowrap; }
+.ds-os-card-status.ready { color:var(--grn); border-color:rgba(45,211,111,.35); background:rgba(45,211,111,.08); }
+.ds-os-card-status.warn { color:var(--yel); border-color:rgba(251,191,36,.35); background:rgba(251,191,36,.08); }
+.ds-os-card-status.risk { color:var(--red); border-color:rgba(240,82,82,.35); background:rgba(240,82,82,.08); }
+.ds-os-card-val { font-size:18px; font-weight:800; font-family:var(--mono); color:var(--t1); line-height:1.1; }
+.ds-os-card-note { font-size:10.5px; color:var(--t4); margin-top:5px; line-height:1.35; }
+.ds-os-disclosure { padding:9px 16px; border-top:1px solid var(--b2); font-size:10.5px; color:var(--t4); line-height:1.45; }
+@media(max-width:1100px) { #ds-os-body { grid-template-columns:repeat(3,1fr); } }
+@media(max-width:650px) { #ds-os-head { align-items:flex-start; flex-direction:column; } #ds-os-body { grid-template-columns:1fr 1fr; } .ds-os-card { min-height:88px; } }
 @media(max-width:900px) { #ds-insights-row { grid-template-columns:1fr; } #ds-insight-cards { grid-template-columns:repeat(3,1fr); } }
 @media(max-width:600px) { #ds-insight-cards { grid-template-columns:1fr 1fr; } }
 
@@ -742,6 +762,40 @@ textarea.fi{resize:vertical;min-height:70px;}
 </div>
 
 <!-- MOBILE NAV DRAWER -->
+<!-- PORTFOLIO SWITCHER MODAL -->
+<div id="pf-modal" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.6);align-items:center;justify-content:center" onclick="if(event.target===this)closePfModal()">
+  <div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:20px 22px;width:320px;max-width:90vw">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <span style="font-weight:700;font-size:15px">Switch Portfolio</span>
+      <button class="btn btn-g btn-xs" onclick="closePfModal()">✕</button>
+    </div>
+    <div id="pf-modal-list"></div>
+    <hr style="border:none;border-top:1px solid var(--b1);margin:12px 0">
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="pf-new-name" placeholder="New portfolio name" style="flex:1;background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:7px 10px;color:var(--t1);font-size:13px">
+      <input id="pf-new-color" type="color" value="#4f8ef7" style="width:32px;height:32px;border:none;border-radius:6px;cursor:pointer;padding:0">
+      <button class="btn btn-p btn-sm" onclick="createPortfolio()">+ Create</button>
+    </div>
+    <div style="margin-top:10px;text-align:right">
+      <button class="btn btn-g btn-xs" onclick="openPfManage()">⚙ Manage</button>
+    </div>
+  </div>
+</div>
+
+<!-- PORTFOLIO MANAGE MODAL -->
+<div id="pf-manage-modal" style="display:none;position:fixed;inset:0;z-index:3001;background:rgba(0,0,0,.6);align-items:center;justify-content:center" onclick="if(event.target===this)closePfManage()">
+  <div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:20px 22px;width:340px;max-width:90vw">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <span style="font-weight:700;font-size:15px">Manage Portfolios</span>
+      <button class="btn btn-g btn-xs" onclick="closePfManage()">✕</button>
+    </div>
+    <div id="pf-manage-list"></div>
+    <div style="margin-top:14px;text-align:right">
+      <button class="btn btn-g btn-sm" onclick="closePfManage();openPfModal()">← Back</button>
+    </div>
+  </div>
+</div>
+
 <div id="mobile-drawer">
   <div id="mobile-drawer-backdrop" onclick="toggleMobileNav()"></div>
   <div id="mobile-drawer-panel">
@@ -807,6 +861,11 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-ix" onclick="openIndexDetail('USDINR=X','USD/INR')"><span class="tn-ix-name">USD/INR</span><span class="tn-ix-val" id="ix5d">—</span></div>
         <div class="tn-ix" onclick="openIndexDetail('GC=F','GOLD')"><span class="tn-ix-name">GOLD</span><span class="tn-ix-val" id="ix6d">—</span></div>
       </div>
+    </div>
+    <!-- Portfolio Switcher -->
+    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;margin-right:4px">
+      <span id="pf-dot" style="width:8px;height:8px;border-radius:50%;background:#4f8ef7;flex-shrink:0"></span>
+      <button id="pf-btn" class="btn btn-g btn-sm" onclick="openPfModal()" title="Switch portfolio" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">My Portfolio</button>
     </div>
     <div id="tn-actions">
       <span id="tn-lastref" style="font-size:10px;color:var(--t4)"></span>
@@ -967,6 +1026,56 @@ textarea.fi{resize:vertical;min-height:70px;}
       </div>
       <div id="ds-brief-body">
         <div style="color:var(--t4);font-size:12px;padding:8px 0">Run AI Analysis to get your daily market brief and stock signals →</div>
+      </div>
+    </div>
+
+    <!-- ── Investment OS Control Tower ────────────────────── -->
+    <div id="ds-os-wrap">
+      <div id="ds-os-head">
+        <div>
+          <div class="ds-os-title">AI Investment OS Control Tower</div>
+          <div class="ds-os-sub">Opportunity discovery · portfolio risk · tax awareness · decision journal · why-not-buy discipline</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-g btn-sm" onclick="go('portfolio-doctor')">Portfolio Doctor</button>
+          <button class="btn btn-g btn-sm" onclick="go('entry-triggers')">Entry Gates</button>
+          <button class="btn btn-p btn-sm" onclick="go('action-plan')">Weekly Plan</button>
+        </div>
+      </div>
+      <div id="ds-os-body">
+        <div class="ds-os-card" onclick="go('opportunity')">
+          <div class="ds-os-card-top"><span class="ds-os-card-name">Opportunity</span><span class="ds-os-card-status" id="os-opp-status">—</span></div>
+          <div class="ds-os-card-val" id="os-opp-val">—</div>
+          <div class="ds-os-card-note" id="os-opp-note">Add watchlist stocks to rank opportunities.</div>
+        </div>
+        <div class="ds-os-card" onclick="go('portfolio-doctor')">
+          <div class="ds-os-card-top"><span class="ds-os-card-name">Portfolio</span><span class="ds-os-card-status" id="os-port-status">—</span></div>
+          <div class="ds-os-card-val" id="os-port-val">—</div>
+          <div class="ds-os-card-note" id="os-port-note">Health score, concentration and quality checks.</div>
+        </div>
+        <div class="ds-os-card" onclick="go('riskpro')">
+          <div class="ds-os-card-top"><span class="ds-os-card-name">Risk</span><span class="ds-os-card-status" id="os-risk-status">—</span></div>
+          <div class="ds-os-card-val" id="os-risk-val">—</div>
+          <div class="ds-os-card-note" id="os-risk-note">Stops, concentration and downside controls.</div>
+        </div>
+        <div class="ds-os-card" onclick="go('tax')">
+          <div class="ds-os-card-top"><span class="ds-os-card-name">Tax</span><span class="ds-os-card-status" id="os-tax-status">FY 2025-26</span></div>
+          <div class="ds-os-card-val" id="os-tax-val">—</div>
+          <div class="ds-os-card-note" id="os-tax-note">STCG/LTCG timing and harvesting awareness.</div>
+        </div>
+        <div class="ds-os-card" onclick="go('journal')">
+          <div class="ds-os-card-top"><span class="ds-os-card-name">Journal</span><span class="ds-os-card-status" id="os-journal-status">—</span></div>
+          <div class="ds-os-card-val" id="os-journal-val">—</div>
+          <div class="ds-os-card-note" id="os-journal-note">Record thesis, mistakes and outcome patterns.</div>
+        </div>
+        <div class="ds-os-card" onclick="go('macro')">
+          <div class="ds-os-card-top"><span class="ds-os-card-name">Why Not Buy</span><span class="ds-os-card-status" id="os-wnb-status">—</span></div>
+          <div class="ds-os-card-val" id="os-wnb-val">—</div>
+          <div class="ds-os-card-note" id="os-wnb-note">Governance, pledging, weak cash flow and price risk.</div>
+        </div>
+      </div>
+      <div class="ds-os-disclosure">
+        Educational decision-support only. StockSense is not SEBI-registered investment advice; every buy, sell, tax and allocation decision should remain human-reviewed.
       </div>
     </div>
 
@@ -3888,19 +3997,125 @@ const STOCKS_DB = [
 ];
 
 // ═══════════════════════════════════════════════════
+// MULTI-PORTFOLIO SUPPORT
+// ═══════════════════════════════════════════════════
+let _pfId = localStorage.getItem('ss_active_pf') || 'default';
+function _pfKey(k) { return _pfId === 'default' ? k : _pfId + '_' + k; }
+function _pfLoad(k, fb) {
+  try { return JSON.parse(localStorage.getItem(_pfKey(k)) || fb); } catch(e) { return JSON.parse(fb); }
+}
+function pfList() {
+  try { return JSON.parse(localStorage.getItem('ss_portfolios') || 'null') || [{id:'default',name:'My Portfolio',color:'#4f8ef7'}]; }
+  catch(e) { return [{id:'default',name:'My Portfolio',color:'#4f8ef7'}]; }
+}
+function pfSaveList(list) { localStorage.setItem('ss_portfolios', JSON.stringify(list)); }
+function pfCurrent() { return pfList().find(p=>p.id===_pfId) || {id:'default',name:'My Portfolio',color:'#4f8ef7'}; }
+function switchPortfolio(id) {
+  if (id === _pfId) { closePfModal(); return; }
+  _pfId = id;
+  localStorage.setItem('ss_active_pf', _pfId);
+  D.holdings  = _pfLoad('holdings','[]');
+  D.realised  = _pfLoad('realised','[]');
+  D.watchlist = _pfLoad('watchlist','[]');
+  D.dividends = _pfLoad('dividends','[]');
+  D.cfg       = _pfLoad('cfg','{"risk":"aggressive","hor":"medium","pt":20,"sl":12,"ref":60}');
+  D.notifs    = _pfLoad('notifs','[]');
+  closePfModal();
+  renderPfSwitcher();
+  renderAll();
+  toast('Switched to ' + pfCurrent().name, 'ok');
+}
+function createPortfolio() {
+  const nameEl = document.getElementById('pf-new-name');
+  const colorEl = document.getElementById('pf-new-color');
+  const name = (nameEl ? nameEl.value.trim() : '') || 'Portfolio';
+  const color = colorEl ? colorEl.value : '#4f8ef7';
+  const id = 'pf_' + Date.now();
+  const list = pfList();
+  list.push({id, name, color});
+  pfSaveList(list);
+  switchPortfolio(id);
+}
+function deletePortfolio(id) {
+  if (id === 'default') { toast('Cannot delete default portfolio','warn'); return; }
+  if (!confirm('Delete this portfolio and all its data?')) return;
+  ['holdings','realised','watchlist','dividends','cfg','notifs'].forEach(k => {
+    localStorage.removeItem(id + '_' + k);
+  });
+  const list = pfList().filter(p=>p.id!==id);
+  pfSaveList(list);
+  if (_pfId === id) switchPortfolio('default');
+  else renderPfManageList();
+}
+function renamePf(id, newName) {
+  const list = pfList();
+  const p = list.find(x=>x.id===id);
+  if (p) { p.name = newName.trim() || p.name; pfSaveList(list); }
+  renderPfSwitcher();
+  renderPfManageList();
+}
+function renderPfSwitcher() {
+  const cur = pfCurrent();
+  const btn = document.getElementById('pf-btn');
+  if (btn) btn.textContent = cur.name;
+  const dot = document.getElementById('pf-dot');
+  if (dot) dot.style.background = cur.color || '#4f8ef7';
+}
+function renderPfManageList() {
+  const el = document.getElementById('pf-manage-list');
+  if (!el) return;
+  const list = pfList();
+  el.innerHTML = list.map(p => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--b1)">
+      <span style="width:10px;height:10px;border-radius:50%;background:${p.color||'#4f8ef7'};flex-shrink:0"></span>
+      <input value="${p.name}" onblur="renamePf('${p.id}',this.value)" style="flex:1;background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:4px 8px;color:var(--t1);font-size:13px">
+      ${p.id==='default'?'<span style="font-size:11px;color:var(--t4)">default</span>':'<button class="btn btn-g btn-xs" onclick="deletePortfolio(\''+p.id+'\')">🗑</button>'}
+    </div>
+  `).join('');
+}
+function openPfModal() {
+  const list = pfList();
+  const el = document.getElementById('pf-modal');
+  if (!el) return;
+  el.querySelector('#pf-modal-list').innerHTML = list.map(p => `
+    <div onclick="switchPortfolio('${p.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;background:${p.id===_pfId?'var(--s2)':'transparent'};border:1px solid ${p.id===_pfId?'var(--acc)':'var(--b1)'};margin-bottom:6px;transition:.2s">
+      <span style="width:12px;height:12px;border-radius:50%;background:${p.color||'#4f8ef7'};flex-shrink:0"></span>
+      <span style="flex:1;font-size:14px">${p.name}</span>
+      ${p.id===_pfId?'<span style="font-size:11px;color:var(--acc)">active</span>':''}
+    </div>
+  `).join('');
+  el.style.display = 'flex';
+}
+function closePfModal() {
+  const el = document.getElementById('pf-modal');
+  if (el) el.style.display = 'none';
+}
+function openPfManage() {
+  closePfModal();
+  const el = document.getElementById('pf-manage-modal');
+  if (!el) return;
+  renderPfManageList();
+  el.style.display = 'flex';
+}
+function closePfManage() {
+  const el = document.getElementById('pf-manage-modal');
+  if (el) el.style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════
 let D = {
-  holdings:  JSON.parse(localStorage.getItem('holdings')||'[]'),
-  realised:  JSON.parse(localStorage.getItem('realised')||'[]'),
-  watchlist: JSON.parse(localStorage.getItem('watchlist')||'[]'),
-  dividends: JSON.parse(localStorage.getItem('dividends')||'[]'),
-  cfg:       JSON.parse(localStorage.getItem('cfg')||'{"risk":"aggressive","hor":"medium","pt":20,"sl":12,"ref":60}'),
-  notifs:    JSON.parse(localStorage.getItem('notifs')||'[]'),
+  holdings:  _pfLoad('holdings','[]'),
+  realised:  _pfLoad('realised','[]'),
+  watchlist: _pfLoad('watchlist','[]'),
+  dividends: _pfLoad('dividends','[]'),
+  cfg:       _pfLoad('cfg','{"risk":"aggressive","hor":"medium","pt":20,"sl":12,"ref":60}'),
+  notifs:    _pfLoad('notifs','[]'),
 };
 // save() — writes to localStorage AND schedules a KV cloud sync
 function save(k) {
-  try { localStorage.setItem(k, JSON.stringify(D[k])); } catch(e) {}
+  try { localStorage.setItem(_pfKey(k), JSON.stringify(D[k])); } catch(e) {}
   _kv.schedule();
 }
 
@@ -6268,6 +6483,7 @@ async function getMarketContext() {
   const sectors=[...new Set(D.holdings.map(h=>h.sector).filter(Boolean))].join(', ');
   const holdSummary=D.holdings.map(h=>`${h.symbol}(${h.sector})`).join(', ');
   const prompt=`Indian equity market analyst. Date: ${today}. Sectors: ${sectors}. Holdings: ${holdSummary}.
+Act as an educational investment co-pilot, not a SEBI-registered advisor. Separate facts, estimates and uncertainty. Human investor makes the final decision.
 Reply ONLY valid JSON: {"sentimentScore":<0-100>,"sentimentLabel":"Strongly Bullish|Bullish|Cautiously Bullish|Neutral|Cautiously Bearish|Bearish","niftyOutlook":"<phrase>","fiiDii":"<stance>","topRisks":["r1","r2","r3"],"hotSectors":["s1","s2"],"weakSectors":["s1","s2"],"brief":"<3 sentence summary>","actionBias":"AGGRESSIVE_BUY|BUY_SELECTIVELY|HOLD|REDUCE|DEFENSIVE"}`;
   try{const r=await claudeJSON(prompt); const parsed=extractJSON(r); if(parsed) return parsed; throw new Error('parse');}
   catch(e){return{sentimentScore:50,sentimentLabel:'Neutral',niftyOutlook:'Sideways',fiiDii:'Mixed',topRisks:['Global uncertainty','Earnings season','Currency risk'],hotSectors:['Defence','Infra'],weakSectors:['IT','FMCG'],brief:'Market analysis unavailable. Prices refreshed. Please check individual stock signals.',actionBias:'HOLD'};}
@@ -6278,11 +6494,12 @@ function applySentimentToUI(ctx){if(!ctx)return;const sc=ctx.sentimentScore||50;
 async function analyseHolding(h,ctx) {
   const ltp=h.ltp||h.avgPrice; const plp=((ltp-h.avgPrice)/h.avgPrice*100).toFixed(1); const days=hDays(h.buyDate)||0; const tt=days>=365?'LTCG':'STCG';
   const isHot=ctx?.hotSectors?.includes(h.sector); const isWeak=ctx?.weakSectors?.includes(h.sector);
-  const prompt=`Indian stock analyst. Analyse ${h.symbol} (${h.exchange}).
+  const prompt=`Indian stock analyst. Analyse ${h.symbol} (${h.exchange}) for decision support, not personalised SEBI-registered advice.
 LTP ₹${f(ltp)} | Avg ₹${f(h.avgPrice)} | Qty ${h.qty} | P&L ${plp}% | ${days}d | ${tt}
 52W ₹${f(h.l52)}–₹${f(h.h52)} | PE ${h.pe||'N/A'} | ROE ${h.roe?(h.roe*100).toFixed(1)+'%':'N/A'} | Beta ${h.beta||'N/A'}
 Sector ${h.sector} (${isHot?'HOT':'NEUTRAL'}) | Market ${ctx?.sentimentLabel||'Neutral'} | Bias ${ctx?.actionBias||'HOLD'}
-Reply ONLY valid JSON: {"signal":"STRONG BUY|BUY MORE|HOLD|REDUCE|EXIT","urgency":"ACT TODAY|WATCH|STABLE","stopLoss":<n>,"stopLossPct":<n>,"target1":<n>,"target1Pct":<n>,"target1Timeline":"<str>","target2":<n>,"target2Pct":<n>,"target2Timeline":"<str>","confidence":<1-10>,"bullCase":"<1s>","bearCase":"<1s>","action":"<advice>","reasoning":"<2 sentences>","tradeType":"SHORT_TERM|LONG_TERM|BOTH"}`;
+Before recommending, explicitly penalise governance/pledging/accounting/debt/cash-flow red flags when data is missing or weak.
+Reply ONLY valid JSON: {"signal":"STRONG BUY|BUY MORE|HOLD|REDUCE|EXIT","urgency":"ACT TODAY|WATCH|STABLE","stopLoss":<n>,"stopLossPct":<n>,"target1":<n>,"target1Pct":<n>,"target1Timeline":"<str>","target2":<n>,"target2Pct":<n>,"target2Timeline":"<str>","confidence":<1-10>,"bullCase":"<1s>","bearCase":"<1s>","redFlags":["<max 3>"],"action":"<advice>","reasoning":"<2 sentences>","tradeType":"SHORT_TERM|LONG_TERM|BOTH"}`;
   try{
     const r=await claudeJSON(prompt);
     if(typeof r === 'string' && /^(⚠|AI error|OpenRouter error|⛔)/.test(r.trim())) {
@@ -6297,6 +6514,7 @@ Reply ONLY valid JSON: {"signal":"STRONG BUY|BUY MORE|HOLD|REDUCE|EXIT","urgency
     if(j.stopLossPct)h.stopLossPct=+j.stopLossPct.toFixed(1);if(j.target1Pct)h.target1Pct=+j.target1Pct.toFixed(1);if(j.target2Pct)h.target2Pct=+j.target2Pct.toFixed(1);
     if(j.target1Timeline)h.t1Timeline=j.target1Timeline;if(j.target2Timeline)h.t2Timeline=j.target2Timeline;
     if(j.confidence)h.confidence=j.confidence;if(j.bullCase)h.bullCase=j.bullCase;if(j.bearCase)h.bearCase=j.bearCase;
+    if(Array.isArray(j.redFlags))h.redFlags=j.redFlags.slice(0,3);
     if(j.action)h.aiAction=j.action;if(j.reasoning)h.aiReasoning=j.reasoning;if(j.urgency)h.urgency=j.urgency;if(j.tradeType)h.tradeType=j.tradeType;
     h.aiError = null;
   }catch(e){h.aiError=e.message||true;(window.D && D._aiErrors) && D._aiErrors.push(h.symbol+': '+(e.message||'error'));}
@@ -6922,7 +7140,7 @@ function renderTax() {
   }).join('');
 }
 function exportTaxCSV(){const fy=document.getElementById('tax-fy')?.value||'2025-26';let csv='Symbol,Qty,Buy Date,Sell Date,Hold Days,Buy Price,Sell Price,P&L,Tax Type\n';D.realised.forEach(r=>{csv+=`${r.symbol},${r.qty},${r.buyDate},${r.sellDate},${r.holdDays},${r.buyPrice},${r.sellPrice},${r.pl.toFixed(2)},${r.taxType}\n`;});const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='TaxPL_'+fy+'.csv';a.click();}
-async function genTaxAI(){const fy=document.getElementById('tax-fy')?.value||'2025-26';const box=document.getElementById('tax-ai');box.innerHTML='<div class="ai-ld"><div class="spin"></div> Generating tax advisory…</div>';const stcg=D.realised.filter(r=>r.taxType==='STCG').reduce((s,r)=>s+r.pl,0);const ltcg=D.realised.filter(r=>r.taxType==='LTCG').reduce((s,r)=>s+r.pl,0);const upcoming=D.holdings.map(h=>`${h.symbol}: held ${hDays(h.buyDate)||0}d, P&L ${(((h.ltp||h.avgPrice)-h.avgPrice)/h.avgPrice*100).toFixed(1)}%`).join('; ');const r=await claude(`Tax advisory FY ${fy} for aggressive Indian equity investor.\nSTCG (taxed @20%): ₹${fI(stcg)} | LTCG (taxed @12.5% above ₹1.25L): ₹${fI(ltcg)}\nOpen positions: ${upcoming||'None'}\nAdvise: (1) Tax-loss harvesting now, (2) Which holdings to delay exit past 12-month LTCG mark, (3) LTCG ₹1.25L exemption planning, (4) Dividend tax (taxed at slab). Current rates: STCG 20%, LTCG 12.5%. Be specific with stock names and timing.`);box.innerHTML=`<div class="ai-txt">${md2h(r)}</div>`;}
+async function genTaxAI(){const fy=document.getElementById('tax-fy')?.value||'2025-26';const box=document.getElementById('tax-ai');box.innerHTML='<div class="ai-ld"><div class="spin"></div> Generating tax advisory…</div>';const stcg=D.realised.filter(r=>r.taxType==='STCG').reduce((s,r)=>s+r.pl,0);const ltcg=D.realised.filter(r=>r.taxType==='LTCG').reduce((s,r)=>s+r.pl,0);const upcoming=D.holdings.map(h=>`${h.symbol}: held ${hDays(h.buyDate)||0}d, P&L ${(((h.ltp||h.avgPrice)-h.avgPrice)/h.avgPrice*100).toFixed(1)}%`).join('; ');const r=await claude(`Tax advisory FY ${fy} for an Indian equity investor. Educational estimate only; ask the user to confirm with a qualified tax professional before transacting.\nSTCG (generally @20% after 23 Jul 2024): ₹${fI(stcg)} | LTCG (generally @12.5% above ₹1.25L): ₹${fI(ltcg)}\nOpen positions: ${upcoming||'None'}\nAdvise: (1) Tax-loss harvesting opportunities, (2) Which holdings to delay exit past 12-month LTCG mark, (3) LTCG ₹1.25L exemption planning, (4) Dividend tax at slab rate, (5) Re-entry caution so harvesting is commercially justifiable and not superficial churn. Be specific with stock names and timing.`);box.innerHTML=`<div class="ai-txt">${md2h(r)}</div>`;}
 
 // ═══════════════════════════════════════════════════
 // RISK AI
@@ -7165,8 +7383,8 @@ function _sdHoldContent(h) {
         <div class="sd-stat-card" style="border-color:rgba(34,211,238,.3)"><div class="sd-stat-lbl">Target 1</div><div class="sd-stat-val" style="color:var(--cyn)">₹${f(h.target1)}</div><div style="font-size:10px;color:var(--t4);margin-top:2px">${h.target1Timeline||'~1-3 months'}</div></div>
         <div class="sd-stat-card" style="border-color:rgba(124,106,247,.3)"><div class="sd-stat-lbl">Target 2</div><div class="sd-stat-val" style="color:var(--ac2)">₹${f(h.target2)}</div><div style="font-size:10px;color:var(--t4);margin-top:2px">${h.target2Timeline||'~6-12 months'}</div></div>
       </div>
-      ${days<365&&h.buyDate?`<div style="margin-top:10px;padding:8px 12px;background:rgba(250,173,20,.08);border:1px solid rgba(250,173,20,.25);border-radius:6px;font-size:11px;color:var(--yel)">⏱ LTCG in <strong>${365-days} days</strong> — held ${days}/365 days. Avoid selling to save ~10% STCG tax.</div>`:''}
-      ${days>=365?`<div style="margin-top:10px;padding:8px 12px;background:rgba(45,211,111,.08);border:1px solid rgba(45,211,111,.25);border-radius:6px;font-size:11px;color:var(--grn)">✅ LTCG qualified — held ${days} days. Gains up to ₹1L/yr tax-free; beyond that taxed at 10%.</div>`:''}
+      ${days<365&&h.buyDate?`<div style="margin-top:10px;padding:8px 12px;background:rgba(250,173,20,.08);border:1px solid rgba(250,173,20,.25);border-radius:6px;font-size:11px;color:var(--yel)">⏱ LTCG in <strong>${365-days} days</strong> — held ${days}/365 days. Equity STCG is generally 20% after 23 Jul 2024; check tax impact before selling.</div>`:''}
+      ${days>=365?`<div style="margin-top:10px;padding:8px 12px;background:rgba(45,211,111,.08);border:1px solid rgba(45,211,111,.25);border-radius:6px;font-size:11px;color:var(--grn)">✅ LTCG qualified — held ${days} days. Listed equity LTCG is generally 12.5% above ₹1.25L annual exemption, plus applicable cess/surcharge.</div>`:''}
       ${h.notes?`<div style="margin-top:12px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:6px"><div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">📝 Investment Thesis</div><div style="font-size:12px;color:var(--t2);line-height:1.6;white-space:pre-wrap">${h.notes}</div></div>`:''}
     </div>
     <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
@@ -7203,6 +7421,7 @@ function _sdAiContent(h) {
       <div class="ai-txt"><strong style="color:var(--t1)">📋 Action:</strong> ${h.aiAction||'—'}</div>
     </div>
     ${h.aiReasoning?`<div class="ai-box" style="margin-bottom:12px"><div class="ai-txt">${h.aiReasoning}</div></div>`:''}
+    ${h.redFlags?.length?`<div style="margin-bottom:12px;padding:10px 12px;background:rgba(240,82,82,.07);border:1px solid rgba(240,82,82,.25);border-radius:8px"><div style="font-size:10px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Why-Not-Buy Flags</div><div style="display:flex;flex-direction:column;gap:5px">${h.redFlags.map(x=>`<div style="font-size:12px;color:var(--t2);line-height:1.45">• ${x}</div>`).join('')}</div></div>`:''}
     ${h.bullCase||h.bearCase?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
       ${h.bullCase?`<div class="sd-fund-section" style="border-color:rgba(45,211,111,.25)"><h4 style="color:var(--grn)">🐂 Bull Case</h4><p style="font-size:12px;line-height:1.6;color:var(--t2)">${h.bullCase}</p></div>`:''}
       ${h.bearCase?`<div class="sd-fund-section" style="border-color:rgba(240,82,82,.25)"><h4 style="color:var(--red)">🐻 Bear Case</h4><p style="font-size:12px;line-height:1.6;color:var(--t2)">${h.bearCase}</p></div>`:''}
@@ -7744,7 +7963,7 @@ async function loadStockAnalysis() {
 
   const ctx = D._marketCtx || {};
   const days = hDays(h.buyDate) || 0;
-  const prompt = `Comprehensive analysis of ${h.symbol} (${h.name||h.symbol}) on ${h.exchange||'NSE'} for Indian retail investor with ₹5L portfolio, mid/small cap focus, active monitor.
+  const prompt = `Comprehensive decision-support analysis of ${h.symbol} (${h.name||h.symbol}) on ${h.exchange||'NSE'} for an Indian retail investor with ₹5L portfolio, mid/small cap focus, active monitor. This is educational research, not SEBI-registered advice.
 
 LIVE DATA:
 - LTP: ₹${f(ltp)} | Avg Cost: ₹${f(h.avgPrice||0)} | Qty: ${h.qty||'N/A'} | P&L: ${h.avgPrice?((ltp-h.avgPrice)/h.avgPrice*100).toFixed(1)+'%':'N/A'}
@@ -7757,10 +7976,11 @@ Write a structured report with these exact sections:
 **1. Business Snapshot** (2 lines — what the company does and its moat)
 **2. Fundamental Rating** (valuation vs peers, profitability, balance sheet strength)
 **3. Technical Position** (where in 52W range, trend, key support/resistance)
-**4. Key Risks** (3 specific risks — be direct, not generic)
-**5. Upcoming Catalysts** (results date, sector tailwinds, policy events)
-**6. Price Targets** — Stop Loss / Target 1 / Target 2 with % from current price
-**7. VERDICT**: [STRONG BUY / BUY / HOLD / REDUCE / SELL] | Conviction: High/Medium/Low | Reasoning in 2 sentences
+**4. Why-Not-Buy Red Flags** (governance, pledging, accounting quality, debt, cash flow, valuation, liquidity — say "data unavailable" where needed)
+**5. Key Risks** (3 specific risks — be direct, not generic)
+**6. Upcoming Catalysts** (results date, sector tailwinds, policy events)
+**7. Price Targets** — Stop Loss / Target 1 / Target 2 with % from current price
+**8. VERDICT**: [STRONG BUY / BUY / HOLD / REDUCE / SELL] | Conviction: High/Medium/Low | Reasoning in 2 sentences
 
 Be specific and actionable. Mention actual price levels.`;
 
@@ -8085,6 +8305,65 @@ function renderDashInsights() {
   }
 }
 
+function renderInvestmentOS() {
+  const holdings = D.holdings || [];
+  const watchlist = D.watchlist || [];
+  const set = (id, text, cls) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    if (cls != null) el.className = 'ds-os-card-status ' + cls;
+  };
+
+  const totalVal = holdings.reduce((s,h)=>s + (+(h.ltp||h.avgPrice||0)) * (+(h.qty||0)), 0);
+  const health = calcHealthScore();
+
+  const oppRanked = watchlist.map(w => ({ w, sc: typeof _oppScore === 'function' ? _oppScore(w) : { total: 0 } }))
+    .sort((a,b)=>b.sc.total-a.sc.total);
+  const topOpp = oppRanked[0];
+  set('os-opp-status', watchlist.length ? (topOpp?.sc.total >= 70 ? 'READY' : 'WATCH') : 'EMPTY', watchlist.length ? (topOpp?.sc.total >= 70 ? 'ready' : 'warn') : '');
+  set('os-opp-val', topOpp ? topOpp.w.symbol : watchlist.length ? watchlist.length + ' stocks' : '0');
+  set('os-opp-note', topOpp ? `Top watchlist score ${topOpp.sc.total}/100 · ${topOpp.w.sector||'sector unknown'}` : 'Add watchlist stocks to rank opportunities.');
+
+  set('os-port-status', holdings.length ? (health >= 70 ? 'HEALTHY' : health >= 50 ? 'FAIR' : 'REVIEW') : 'EMPTY', holdings.length ? (health >= 70 ? 'ready' : health >= 50 ? 'warn' : 'risk') : '');
+  set('os-port-val', holdings.length ? health + '/100' : '0');
+  set('os-port-note', holdings.length ? `${holdings.length} holdings · ${new Set(holdings.map(h=>h.sector).filter(Boolean)).size} sectors tracked` : 'Add holdings to activate portfolio diagnostics.');
+
+  const topWeight = totalVal > 0 ? Math.max(...holdings.map(h => (+(h.ltp||h.avgPrice||0))*(+(h.qty||0))/totalVal*100)) : 0;
+  const slBreaches = holdings.filter(h => h.ltp && h.stopLoss && h.ltp <= h.stopLoss).length;
+  const riskFlag = slBreaches || topWeight > 25;
+  set('os-risk-status', holdings.length ? (riskFlag ? 'ACTION' : 'CONTROLLED') : 'EMPTY', holdings.length ? (riskFlag ? 'risk' : 'ready') : '');
+  set('os-risk-val', holdings.length ? (riskFlag ? slBreaches + ' breach' + (slBreaches===1?'':'es') : topWeight.toFixed(0) + '%') : '0');
+  set('os-risk-note', holdings.length ? (slBreaches ? 'Stop-loss breach needs review.' : `Largest position weight ${topWeight.toFixed(1)}%.`) : 'Risk console activates after holdings are added.');
+
+  const stcgGains = holdings.filter(h => (hDays(h.buyDate)||0) < 365).reduce((s,h)=>s + Math.max(0, ((h.ltp||h.avgPrice)-h.avgPrice)*h.qty), 0);
+  const nearLtcg = holdings.filter(h => {
+    const d = hDays(h.buyDate)||0;
+    return d < 365 && d >= 320 && ((h.ltp||h.avgPrice) > h.avgPrice);
+  }).length;
+  set('os-tax-status', nearLtcg ? 'TIMING' : stcgGains ? 'MONITOR' : 'CLEAR', nearLtcg ? 'warn' : 'ready');
+  set('os-tax-val', stcgGains ? '₹' + fI(stcgGains) : '₹0');
+  set('os-tax-note', nearLtcg ? `${nearLtcg} profitable lot(s) are near LTCG status.` : 'Equity STCG 20%; LTCG 12.5% above ₹1.25L, plus cess/surcharge.');
+
+  const journalCount = (D.realised||[]).filter(r => r.note || r.reason || r.strategy).length;
+  const realisedCount = (D.realised||[]).length;
+  set('os-journal-status', journalCount ? 'LEARNING' : realisedCount ? 'MISSING' : 'START', journalCount ? 'ready' : realisedCount ? 'warn' : '');
+  set('os-journal-val', journalCount ? journalCount + '/' + realisedCount : realisedCount ? '0/' + realisedCount : '0');
+  set('os-journal-note', journalCount ? 'Trade notes available for mistake analytics.' : 'Log thesis and exit reason before every trade.');
+
+  const whyNotFlags = holdings.filter(h => {
+    const pe = h.pe || h._pe || 0;
+    const de = h.de || h._de || 0;
+    const roe = h.roe ? h.roe*100 : h._roe ? h._roe*100 : 0;
+    const ltp = h.ltp || h.avgPrice;
+    const drawdown = h.h52 && ltp ? (h.h52-ltp)/h.h52*100 : 0;
+    return pe > 80 || de > 2 || (roe && roe < 8) || drawdown > 35 || h.signal === 'EXIT' || h.signal === 'REDUCE';
+  }).length;
+  set('os-wnb-status', whyNotFlags ? 'RED FLAGS' : holdings.length ? 'CLEAN' : 'EMPTY', whyNotFlags ? 'risk' : holdings.length ? 'ready' : '');
+  set('os-wnb-val', whyNotFlags ? whyNotFlags : holdings.length ? '0' : '—');
+  set('os-wnb-note', whyNotFlags ? 'Review valuation, leverage, weak ROE or drawdown flags before adding.' : 'No rule-based red flags from available local data.');
+}
+
 function renderAll() {
   renderSummary();
   renderDashHoldings();
@@ -8095,6 +8374,7 @@ function renderAll() {
   renderDashActionsV4();
   renderWatchlist();
   renderDashInsights();
+  renderInvestmentOS();
 }
 
 
@@ -8236,6 +8516,7 @@ function importBackup(input) {
 
 function init(){
   _storageCheck();
+  renderPfSwitcher();
   setupTopNavDropdowns();
   // Load saved AI provider settings
   const savedProvider = localStorage.getItem('aiProvider') || 'openrouter';
@@ -8313,7 +8594,7 @@ function toggleProviderFields() {
 // Unified claude() — routes to OpenRouter or Anthropic based on saved provider
 async function claude(prompt, sys) {
   const provider = localStorage.getItem('aiProvider') || 'openrouter';
-  const sysMsg = sys || "You are an expert Indian equity market analyst and aggressive investor's advisor with 20+ years experience covering NSE/BSE. Be concise, direct, specific and actionable. Back claims with data.";
+  const sysMsg = sys || "You are an expert Indian equity market analyst and investment research co-pilot with 20+ years of NSE/BSE experience. You are not a SEBI-registered advisor in this app. Be concise, direct, specific and actionable, but frame outputs as decision support. Separate facts from estimates, state uncertainty, flag why-not-buy risks, and remind that the human investor makes the final decision.";
   if (provider === 'openrouter') {
     const key   = localStorage.getItem('orKey') || '';
     // Resolve model — never send 'custom' literally to API
@@ -14643,7 +14924,7 @@ Days remaining in FY: ${daysLeft} (FY ends March 31)
 Holdings at loss:
 ${losses.join('\n')||'None'}
 
-Provide: 1) Priority order for harvesting, 2) STCG vs LTCG considerations, 3) Wash-sale caution (30-day rule), 4) Net benefit after tax on gains. Be specific.`;
+Provide: 1) Priority order for harvesting, 2) STCG vs LTCG considerations, 3) Re-entry caution so tax harvesting is commercially justifiable and not a superficial same-day churn, 4) Net benefit after tax on gains. Be specific.`;
   const result = await claude(prompt);
   el.innerHTML = md2h(result);
 }
@@ -15463,9 +15744,9 @@ async function _chatSend() {
 
   // Build system prompt with portfolio context
   const portfolioCtx = _chatGetPortfolioContext();
-  const sysPrompt = `You are an expert Indian equity market analyst and personal investment advisor with 20+ years of NSE/BSE experience. You have access to the user's live portfolio data below.
+  const sysPrompt = `You are an expert Indian equity market analyst and investment research co-pilot with 20+ years of NSE/BSE experience. You have access to the user's portfolio data below.
 
-Act as their trusted financial advisor — give specific, actionable advice tailored to Indian markets (NSE/BSE). Reference actual stock names and numbers from their portfolio when relevant. Be direct and avoid generic advice.
+Act as a disciplined decision-support analyst, not a SEBI-registered personal advisor. Give specific, actionable research tailored to Indian markets (NSE/BSE), but keep the human investor as final decision-maker. Reference actual stock names and numbers from their portfolio when relevant. Be direct, avoid generic advice, and always include the strongest why-not-buy risk before any buy/add suggestion.
 
 Format responses clearly using **bold** for key points. Keep replies focused (under 350 words unless more depth is needed). Use ₹ for prices.
 
