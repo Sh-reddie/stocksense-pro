@@ -7516,7 +7516,7 @@ function addTrade() {
   if(!sym||!qty||!bp||!sp||!bd||!sd){toast('Fill all fields','error');return;}
   if(isDupeR(sym,exch,bd,sd,bp,qty)){toast('Duplicate trade skipped','warn');closeM('addtrade');return;}
   const pl=(sp-bp)*qty, days=hDays(bd)||0;
-  D.realised.push({id:Date.now(),symbol:sym,name:sym,exchange:exch,qty,buyPrice:bp,sellPrice:sp,buyDate:bd,sellDate:sd,pl,plPct:(sp-bp)/bp*100,holdDays:days,taxType:taxType(days)});
+  D.realised.push({id:Date.now(),symbol:sym,name:sym,exchange:exch,qty,buyPrice:bp,sellPrice:sp,buyDate:bd,sellDate:sd,pl,plPct:(sp-bp)/bp*100,holdDays:days,taxType:taxT(days)});
   save('realised'); closeM('addtrade'); renderRealised(); renderSummary();
   toast(`${sym} trade logged — P&L ₹${fI(pl)}`);
 }
@@ -7565,7 +7565,7 @@ function shUpdatePL() {
   if (!qty || !bp || !sp) { prev.style.display='none'; return; }
   const pl = (sp - bp) * qty;
   const days = bd && sd ? Math.floor((new Date(sd)-new Date(bd))/864e5) : 0;
-  const tt = taxType(days);
+  const tt = taxT(days);
   const pct = (sp - bp) / bp * 100;
   const plText = `P&L: ${pl>=0?'+':''}₹${fI(Math.abs(pl))} (${fP(pct)})  ·  Hold: ${days}d`;
   document.getElementById('sh-pl-text').textContent = plText;
@@ -7587,7 +7587,7 @@ function executeSell() {
   if (qty > h.qty) { toast(`Can't sell more than held (${h.qty})`, 'error'); return; }
   const pl = (sp - bp) * qty;
   const days = bd && sd ? Math.floor((new Date(sd)-new Date(bd))/864e5) : 0;
-  D.realised.push({id:Date.now(),symbol:sym,name:h.name||sym,exchange:exch,qty,buyPrice:bp,sellPrice:sp,buyDate:bd,sellDate:sd,pl,plPct:(sp-bp)/bp*100,holdDays:days,taxType:taxType(days)});
+  D.realised.push({id:Date.now(),symbol:sym,name:h.name||sym,exchange:exch,qty,buyPrice:bp,sellPrice:sp,buyDate:bd,sellDate:sd,pl,plPct:(sp-bp)/bp*100,holdDays:days,taxType:taxT(days)});
   save('realised');
   // Reduce or remove holding
   if (qty >= h.qty) {
@@ -8034,7 +8034,7 @@ async function exportExcel() {
     const pl = cv-inv;
     const plp = inv>0?pl/inv*100:0;
     const days = hDays(h.buyDate)||0;
-    holdRows.push([h.symbol,h.name||h.symbol,h.exchange||'NSE',h.qty,h.avgPrice,ltp,inv,cv,+pl.toFixed(2),+plp.toFixed(2),days,taxType(days),h.buyDate||'',h.stopLoss||'',h.target1||'',h.target2||'']);
+    holdRows.push([h.symbol,h.name||h.symbol,h.exchange||'NSE',h.qty,h.avgPrice,ltp,inv,cv,+pl.toFixed(2),+plp.toFixed(2),days,taxT(days),h.buyDate||'',h.stopLoss||'',h.target1||'',h.target2||'']);
   });
   const wsH = XLSX.utils.aoa_to_sheet(holdRows);
   wsH['!cols'] = holdRows[0].map((_,i)=>({wch:[12,24,10,8,12,12,14,14,12,10,10,10,12,12,12,12][i]||12}));
@@ -8088,7 +8088,7 @@ function exportPDF() {
   // Holdings rows
   const holdRows = D.holdings.map(h=>{
     const ltp=h.ltp||h.avgPrice, hPL=(ltp-h.avgPrice)*h.qty, hPLp=(ltp-h.avgPrice)/h.avgPrice*100;
-    const days=hDays(h.buyDate)||0, tt=taxType(days);
+    const days=hDays(h.buyDate)||0, tt=taxT(days);
     return `<tr>
       <td><b>${h.symbol}</b><br><span style="color:#888;font-size:10px">${h.name||''}</span></td>
       <td>${h.qty}</td><td>₹${f(h.avgPrice)}</td><td>₹${f(ltp)}</td>
@@ -8295,7 +8295,7 @@ async function importHoldings(rows,hdrs){let added=0,dupes=0,skip=0;const symC=r
 for(const row of rows){const sym=(row[symC]||'').toUpperCase().replace(/\s+/g,'').replace(/NSE:|BSE:/gi,'');if(!sym||sym.length<2){skip++;continue;}const qty=parseFloat(row[qtyC])||null;const price=parseFloat(row[priceC])||null;const exch=(row[exchC]||'NSE').toUpperCase().includes('BSE')?'BSE':'NSE';const buyDate=row[dateC]||new Date().toISOString().split('T')[0];const ltpRaw=parseFloat(row[ltpC])||null;if(!qty||!price){ilog(`⚠ Skipped ${sym}: missing qty/price`,'warn');skip++;continue;}if(isDupe(sym,exch,buyDate,price,qty)){ilog(`↩ Duplicate: ${sym} ${buyDate} ₹${price}×${qty}`,'warn');dupes++;continue;}ilog(`⏳ Adding ${sym}…`);const [pd,fn]=await Promise.all([fetchPrice(sym,exch),fetchFund(sym,exch)]);const sl=+(price*(1-D.cfg.sl/100)).toFixed(2);const _dbEntry=STOCKS_DB.find(s=>s.sym===sym);const _sector=_dbEntry?.sector||'Others';D.holdings.push({id:Date.now()+Math.random(),symbol:sym,name:pd?.name||_dbEntry?.name||sym,exchange:exch,qty,avgPrice:price,buyDate,sector:_sector,ltp:pd?.ltp||ltpRaw||price,chg:pd?.chg||0,chgP:pd?.chgP||0,h52:pd?.h52||null,l52:pd?.l52||null,pe:fn?.pe||null,pb:fn?.pb||null,roe:fn?.roe||null,de:fn?.de||null,eps:fn?.eps||null,mcap:fn?.mcap||null,dy:fn?.dy||null,beta:fn?.beta||null,rg:fn?.rg||null,eg:fn?.eg||null,signal:fn?.rcm?rcmSig(fn.rcm):'HOLD',stopLoss:sl,target1:+(price*1.15).toFixed(2),target2:+(price*1.25).toFixed(2),addedAt:new Date().toISOString()});added++;ilog(`✓ ${sym} · LTP ₹${pd?.ltp||price}`);await new Promise(r=>setTimeout(r,400));}
 save('holdings');renderAll();ilog(`\n✅ ${added} added · ${dupes} duplicates skipped · ${skip} invalid`);toast(`✓ ${added} holdings imported, ${dupes} duplicates skipped`);}
 
-function importRealised(rows,hdrs){let added=0,dupes=0;const symC=resolveCol(hdrs,'symbol'),qtyC=resolveCol(hdrs,'qty'),bpC=resolveCol(hdrs,'avgPrice'),spC=resolveCol(hdrs,'sellPrice'),bdC=resolveCol(hdrs,'buyDate'),sdC=resolveCol(hdrs,'sellDate'),plC=resolveCol(hdrs,'pl'),exchC=resolveCol(hdrs,'exchange');if(!symC){ilog('⛔ Symbol column not found for P&L CSV','error');return;}for(const row of rows){const sym=(row[symC]||'').toUpperCase().replace(/\s+/g,'');if(!sym)continue;const qty=parseFloat(row[qtyC])||1;const bp=parseFloat(row[bpC])||0;const sp=parseFloat(row[spC])||0;const bd=row[bdC]||'';const sd=row[sdC]||new Date().toISOString().split('T')[0];const exch=(row[exchC]||'NSE').includes('BSE')?'BSE':'NSE';const plRaw=parseFloat(row[plC])||((sp-bp)*qty);const days=hDays(bd)||0;if(isDupeR(sym,exch,bd,sd,bp,qty)){dupes++;continue;}D.realised.push({id:Date.now()+Math.random(),symbol:sym,name:sym,exchange:exch,qty,buyPrice:bp,sellPrice:sp,buyDate:bd,sellDate:sd,pl:plRaw,plPct:bp?((sp-bp)/bp*100):0,holdDays:days,taxType:taxType(days)});added++;}save('realised');renderRealised();renderSummary();renderTax();ilog(`✅ Realised P&L: ${added} added · ${dupes} duplicates`);toast(`✓ ${added} trades imported`);}
+function importRealised(rows,hdrs){let added=0,dupes=0;const symC=resolveCol(hdrs,'symbol'),qtyC=resolveCol(hdrs,'qty'),bpC=resolveCol(hdrs,'avgPrice'),spC=resolveCol(hdrs,'sellPrice'),bdC=resolveCol(hdrs,'buyDate'),sdC=resolveCol(hdrs,'sellDate'),plC=resolveCol(hdrs,'pl'),exchC=resolveCol(hdrs,'exchange');if(!symC){ilog('⛔ Symbol column not found for P&L CSV','error');return;}for(const row of rows){const sym=(row[symC]||'').toUpperCase().replace(/\s+/g,'');if(!sym)continue;const qty=parseFloat(row[qtyC])||1;const bp=parseFloat(row[bpC])||0;const sp=parseFloat(row[spC])||0;const bd=row[bdC]||'';const sd=row[sdC]||new Date().toISOString().split('T')[0];const exch=(row[exchC]||'NSE').includes('BSE')?'BSE':'NSE';const plRaw=parseFloat(row[plC])||((sp-bp)*qty);const days=hDays(bd)||0;if(isDupeR(sym,exch,bd,sd,bp,qty)){dupes++;continue;}D.realised.push({id:Date.now()+Math.random(),symbol:sym,name:sym,exchange:exch,qty,buyPrice:bp,sellPrice:sp,buyDate:bd,sellDate:sd,pl:plRaw,plPct:bp?((sp-bp)/bp*100):0,holdDays:days,taxType:taxT(days)});added++;}save('realised');renderRealised();renderSummary();renderTax();ilog(`✅ Realised P&L: ${added} added · ${dupes} duplicates`);toast(`✓ ${added} trades imported`);}
 
 function importDividends(rows,hdrs){let added=0,dupes=0;const symC=resolveCol(hdrs,'symbol'),amtC=resolveCol(hdrs,'amtPerShare'),qtyC=resolveCol(hdrs,'qty'),exC=resolveCol(hdrs,'exDate'),payC=resolveCol(hdrs,'payDate');if(!symC||!amtC){ilog('⛔ Need Symbol and Amount/Share columns','error');return;}for(const row of rows){const sym=(row[symC]||'').toUpperCase();const amt=parseFloat(row[amtC])||0;const qty=parseFloat(row[qtyC])||null;const exDate=row[exC]||'';const payDate=row[payC]||'';if(!sym||!amt)continue;if(D.dividends.some(d=>d.symbol===sym&&d.exDate===exDate&&Math.abs(d.amtPerShare-amt)<0.001)){dupes++;continue;}D.dividends.push({id:Date.now()+Math.random(),symbol:sym,amtPerShare:amt,qty,total:qty?+(amt*qty).toFixed(2):null,exDate,payDate,type:'Imported',addedAt:new Date().toISOString()});added++;}save('dividends');renderDividends();ilog(`✅ Dividends: ${added} added · ${dupes} duplicates`);toast(`✓ ${added} dividends imported`);}
 
