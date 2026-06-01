@@ -8628,9 +8628,9 @@ function renderDashInsights() {
     holdings.forEach(h => {
       const val = (+(h.ltp||h.avgPrice||0)) * (+(h.qty||0));
       const dbEntry = STOCKS_DB.find(s => s.sym === h.symbol);
-      const mcapStr = dbEntry?.mcap || h.mcap || '';
+      const mcapStr = String(dbEntry?.mcap || h.mcap || '');
       let cap = 'Unknown';
-      if (mcapStr && mcapStr !== '—') {
+      if (mcapStr && mcapStr !== '—' && mcapStr !== 'undefined' && mcapStr !== 'null') {
         const m = mcapStr.replace(/[₹,\s]/g,'');
         const num = parseFloat(m);
         if (m.endsWith('LCr') || m.includes('L Cr')) { // lakhs of crores → very large
