@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StockSense Pro v3</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#4f8ef7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StockSense">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Clash+Display:wght@400;500;600;700&family=Cabinet+Grotesk:wght@300;400;500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -900,6 +905,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
     <div id="tn-actions">
       <span id="tn-lastref" style="font-size:10px;color:var(--t4)"></span>
+      <span id="auto-refresh-ind" style="font-size:10px;cursor:default" title="Auto-refresh status"></span>
       <div class="mkt-pill" style="margin-right:4px"><div class="dot" id="mktDot"></div><span id="mktTxt" style="font-family:var(--mono);font-size:10px">NSE</span></div>
       <div class="clock" id="clk"></div>
       <button class="btn btn-g btn-sm btn-refresh-mob" onclick="refreshAll()" title="Refresh prices">↻</button>
@@ -1434,6 +1440,11 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="sc c2"><div class="sc-lbl">Next Ex-Date</div><div class="sc-val" id="div-next">—</div><div class="sc-sub" id="div-nextl">—</div></div>
     </div>
     <div class="pn"><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Stock</th><th>₹/Share</th><th>Qty</th><th>Total</th><th>Ex-Date</th><th>Pay Date</th><th>Type</th><th>✕</th></tr></thead><tbody id="div-tbody"><tr><td colspan="8" style="text-align:center;padding:40px;color:var(--t4)">No dividends logged.</td></tr></tbody></table></div></div>
+    <!-- Upcoming dividend calendar auto-populated from holdings -->
+    <div class="pn" style="margin-top:12px">
+      <div class="pn-h"><div class="pn-t">📅 Upcoming Dividends (from your holdings)</div><button class="btn btn-g btn-sm" onclick="renderDividendCalendar()">↻ Refresh</button></div>
+      <div class="pn-b" id="div-calendar"><div style="color:var(--t4);font-size:12px">Refresh to see upcoming dividends from your holdings.</div></div>
+    </div>
   </div>
 
   <!-- ═══ TAX ═══════════════════════════════════════ -->
@@ -1447,6 +1458,8 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="sc c1"><div class="sc-lbl">Est. Tax Liability</div><div class="sc-val" id="tax-liab">₹0</div><div class="sc-sub" style="color:var(--t4)">Estimate only</div></div>
         <div class="sc c5"><div class="sc-lbl">Dividend Income</div><div class="sc-val" id="tax-div">₹0</div><div class="sc-sub" style="color:var(--t4)">At slab rate</div></div>
       </div>
+      <!-- FY-by-FY summary -->
+      <div class="pn" style="margin-bottom:12px" id="fy-summary"><div style="color:var(--t4);font-size:12px;padding:12px">No realised trades yet.</div></div>
       <div class="ai-box gap" id="tax-ai"><div class="ai-txt" style="color:var(--t4)">Click "Tax Advisory" for AI-powered STCG/LTCG optimisation, loss harvesting and exit timing advice.</div></div>
       <div class="pn"><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Stock</th><th>Qty</th><th>Buy Date</th><th>Sell Date</th><th>Days</th><th>Buy Value</th><th>Sell Value</th><th>P&L</th><th>Type</th><th>Est. Tax</th></tr></thead><tbody id="tax-tbody"><tr><td colspan="10" style="text-align:center;padding:40px;color:var(--t4)">No trades for selected FY.</td></tr></tbody></table></div></div>
     </div>
@@ -1718,6 +1731,11 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="pn">
       <div class="pn-h"><div class="pn-t">Stock-by-Stock Contribution</div></div>
       <div class="pn-b" style="padding:0"><div id="bm-contrib"></div></div>
+    </div>
+    <!-- Nifty XIRR benchmark comparison -->
+    <div class="pn" style="margin-top:14px">
+      <div class="pn-h"><div class="pn-t">📊 Portfolio XIRR vs Nifty 50 (Shadow Investment)</div><button class="btn btn-g btn-sm" onclick="renderNiftyBenchmark()">Calculate</button></div>
+      <div class="pn-b" id="nifty-benchmark-card"><div style="color:var(--t4);font-size:12px">Click Calculate to compare your actual XIRR against what you'd have earned in Nifty 50 index.</div></div>
     </div>
   </div>
 
@@ -3333,7 +3351,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="pn">
       <div style="overflow-x:auto">
         <table class="tbl">
-          <thead><tr><th>Stock</th><th>Frequency</th><th>Amount/SIP</th><th>Start Date</th><th>Instalments</th><th>Total Invested</th><th>Current Value</th><th>P&amp;L</th><th>XIRR</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Stock</th><th>Frequency</th><th>Amount/SIP</th><th>Start Date</th><th>Next SIP</th><th>Instalments</th><th>Total Invested</th><th>Current Value</th><th>P&amp;L</th><th>XIRR</th><th>Actions</th></tr></thead>
           <tbody id="sip-tbody"><tr><td colspan="10" style="text-align:center;padding:40px;color:var(--t4)">No SIPs added yet. Click "+ Add SIP" to start tracking.</td></tr></tbody>
         </table>
       </div>
@@ -5551,6 +5569,7 @@ async function refreshAll() {
   checkStopLosses();
   checkAlerts();
   if(typeof checkCustomAlerts==='function') checkCustomAlerts();
+  checkTargetHits();
   const elapsed=((Date.now()-t0)/1000).toFixed(1);
   const now=new Date().toLocaleTimeString('en-IN');
   const lastEl=document.getElementById('lastRef');
@@ -7432,9 +7451,351 @@ function renderDividends() {
 function rmDiv(id){D.dividends=D.dividends.filter(d=>d.id!==id);save('dividends');renderDividends();}
 
 // ═══════════════════════════════════════════════════
+// DIVIDEND INCOME CALENDAR (auto-populate from holdings)
+// ═══════════════════════════════════════════════════
+// Known dividend-paying NSE stocks with typical ex-date month and per-share amount
+const DIV_CALENDAR_DB = {
+  INFY:{name:'Infosys',months:[1,5,10],perShare:21,freq:'Quarterly'},
+  TCS:{name:'TCS',months:[1,4,7,10],perShare:10,freq:'Quarterly'},
+  HDFCBANK:{name:'HDFC Bank',months:[5],perShare:19.5,freq:'Annual'},
+  WIPRO:{name:'Wipro',months:[1,7],perShare:5,freq:'Semi-annual'},
+  RELIANCE:{name:'Reliance',months:[7],perShare:10,freq:'Annual'},
+  ITC:{name:'ITC',months:[6],perShare:7.5,freq:'Annual'},
+  BAJFINANCE:{name:'Bajaj Finance',months:[7],perShare:36,freq:'Annual'},
+  KOTAKBANK:{name:'Kotak Mahindra Bank',months:[7],perShare:2,freq:'Annual'},
+  AXISBANK:{name:'Axis Bank',months:[7],perShare:1,freq:'Annual'},
+  ICICIBANK:{name:'ICICI Bank',months:[7],perShare:10,freq:'Annual'},
+  SBIN:{name:'SBI',months:[5],perShare:13.7,freq:'Annual'},
+  HAL:{name:'HAL',months:[3,9],perShare:35,freq:'Semi-annual'},
+  BEL:{name:'BEL',months:[2,8],perShare:2.9,freq:'Semi-annual'},
+  ONGC:{name:'ONGC',months:[1,8],perShare:8,freq:'Semi-annual'},
+  COALINDIA:{name:'Coal India',months:[2,11],perShare:15,freq:'Semi-annual'},
+  POWERGRID:{name:'Power Grid',months:[2,9],perShare:7,freq:'Semi-annual'},
+  NTPC:{name:'NTPC',months:[2,11],perShare:4.25,freq:'Semi-annual'},
+  HINDUNILVR:{name:'HUL',months:[1,6],perShare:24,freq:'Semi-annual'},
+  NESTLEIND:{name:'Nestle India',months:[5,10],perShare:140,freq:'Semi-annual'},
+  BRITANNIA:{name:'Britannia',months:[7],perShare:72,freq:'Annual'},
+  DIVISLAB:{name:"Divi's Labs",months:[7],perShare:30,freq:'Annual'},
+  SUNPHARMA:{name:'Sun Pharma',months:[2],perShare:5,freq:'Annual'},
+  DRREDDY:{name:'Dr Reddy',months:[7],perShare:40,freq:'Annual'},
+  BAJAJFINSV:{name:'Bajaj Finserv',months:[6],perShare:1,freq:'Annual'},
+  HDFCLIFE:{name:'HDFC Life',months:[7],perShare:2,freq:'Annual'},
+  SBILIFE:{name:'SBI Life',months:[3],perShare:2.5,freq:'Annual'},
+  TITAN:{name:'Titan',months:[7],perShare:10,freq:'Annual'},
+  ASIANPAINT:{name:'Asian Paints',months:[2,10],perShare:21,freq:'Semi-annual'},
+  PIDILITIND:{name:'Pidilite',months:[7],perShare:15,freq:'Annual'},
+  HEROMOTOCO:{name:'Hero MotoCorp',months:[2,7],perShare:100,freq:'Semi-annual'},
+  BAJAJ_AUTO:{name:'Bajaj Auto',months:[3,9],perShare:80,freq:'Semi-annual'},
+  EICHERMOT:{name:'Eicher Motors',months:[5],perShare:51,freq:'Annual'},
+  MARUTI:{name:'Maruti Suzuki',months:[8],perShare:125,freq:'Annual'},
+  M_M:{name:'Mahindra & Mahindra',months:[7],perShare:21.1,freq:'Annual'},
+  LT:{name:'L&T',months:[5],perShare:22,freq:'Annual'},
+  TECHM:{name:'Tech Mahindra',months:[6],perShare:28,freq:'Annual'},
+  HCLTECH:{name:'HCL Tech',months:[1,4,7,10],perShare:18,freq:'Quarterly'},
+  TATASTEEL:{name:'Tata Steel',months:[7],perShare:3.6,freq:'Annual'},
+  HINDALCO:{name:'Hindalco',months:[8],perShare:6,freq:'Annual'},
+  JSWSTEEL:{name:'JSW Steel',months:[7],perShare:8.85,freq:'Annual'},
+};
+
+function renderDividendCalendar() {
+  const el = document.getElementById('div-calendar');
+  if (!el) return;
+  const today = new Date();
+  const curMonth = today.getMonth() + 1;
+  const curYear = today.getFullYear();
+
+  // Build upcoming events from holdings that match DIV_CALENDAR_DB
+  const upcoming = [];
+  D.holdings.forEach(h => {
+    const db = DIV_CALENDAR_DB[h.symbol];
+    if (!db) return;
+    const qty = h.qty || 0;
+    db.months.forEach(m => {
+      // Find next occurrence
+      let year = curYear;
+      if (m < curMonth) year = curYear + 1;
+      else if (m === curMonth && today.getDate() > 20) year = curYear + 1;
+      const exDate = new Date(year, m-1, 15); // approx 15th of ex-date month
+      const daysAway = Math.round((exDate - today) / 864e5);
+      upcoming.push({
+        symbol: h.symbol,
+        name: db.name,
+        month: m,
+        year,
+        exDate: `${year}-${String(m).padStart(2,'0')}-15 (est.)`,
+        perShare: db.perShare,
+        total: +(db.perShare * qty).toFixed(2),
+        qty,
+        daysAway,
+        freq: db.freq
+      });
+    });
+  });
+
+  upcoming.sort((a,b) => a.daysAway - b.daysAway);
+  const next12 = upcoming.filter(u => u.daysAway >= -7 && u.daysAway <= 365);
+
+  if (!next12.length) {
+    el.innerHTML = '<div style="color:var(--t4);font-size:12px;padding:16px">No upcoming dividends found for your holdings. Dividend dates are estimated.</div>';
+    return;
+  }
+
+  // Monthly income projection
+  const monthMap = {};
+  next12.forEach(u => {
+    const key = `${u.year}-${String(u.month).padStart(2,'0')}`;
+    monthMap[key] = (monthMap[key]||0) + u.total;
+  });
+  const annualTotal = next12.reduce((s,u) => s + u.total, 0);
+
+  el.innerHTML = `
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;color:var(--t3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">UPCOMING DIVIDEND INCOME (estimated)</div>
+      <table class="tbl">
+        <thead><tr><th>Stock</th><th>Ex-Date (est.)</th><th>Per Share</th><th>Your Qty</th><th>Est. Income</th><th>Days Away</th><th>Freq</th></tr></thead>
+        <tbody>${next12.map(u=>`<tr>
+          <td><div class="sym">${u.symbol}</div><div class="snm">${u.name}</div></td>
+          <td style="font-size:11px">${u.exDate}</td>
+          <td class="mn">₹${f(u.perShare,2)}</td>
+          <td class="mn">${u.qty}</td>
+          <td class="mn up">₹${f(u.total,2)}</td>
+          <td class="mn" style="color:${u.daysAway<=30?'var(--yel)':'var(--t3)'}">${u.daysAway<=0?'⚠ Past/Due':u.daysAway+'d'}</td>
+          <td><span class="tag" style="background:var(--s3);color:var(--t2);font-size:9px">${u.freq}</span></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div class="sc c3"><div class="sc-lbl">Est. Annual Dividends</div><div class="sc-val up">₹${fI(annualTotal)}</div><div class="sc-sub">from your holdings</div></div>
+      <div class="sc c1"><div class="sc-lbl">Next Dividend</div><div class="sc-val">${next12[0]?.symbol||'—'}</div><div class="sc-sub">in ${next12[0]?.daysAway||'?'}d · ₹${f(next12[0]?.total||0,0)}</div></div>
+      <div class="sc c2"><div class="sc-lbl">Covered Holdings</div><div class="sc-val">${new Set(next12.map(u=>u.symbol)).size}</div><div class="sc-sub">dividend-paying stocks</div></div>
+    </div>
+    <div style="font-size:10px;color:var(--t4);margin-top:10px">⚠ Dates and amounts are estimates based on historical patterns. Always verify on NSE/BSE before making decisions.</div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════
+// TARGET PRICE HIT ALERTS
+// ═══════════════════════════════════════════════════
+const _targetHitFired = new Set(); // prevent repeated alerts
+
+function checkTargetHits() {
+  D.holdings.forEach(h => {
+    const ltp = h.ltp || h.avgPrice;
+    const key1 = `${h.id}-t1`;
+    const key2 = `${h.id}-t2`;
+    if (h.target1 && ltp >= h.target1 && !_targetHitFired.has(key1)) {
+      _targetHitFired.add(key1);
+      toast(`🎯 ${h.symbol} hit Target 1: ₹${f(h.target1)} — consider booking partial profits`, 'success');
+      addNotif(`🎯 ${h.symbol} reached Target 1 (₹${f(h.target1)}) — LTP ₹${f(ltp)}`, 'target');
+    }
+    if (h.target2 && ltp >= h.target2 && !_targetHitFired.has(key2)) {
+      _targetHitFired.add(key2);
+      toast(`🎯🎯 ${h.symbol} hit Target 2: ₹${f(h.target2)} — strong consider full exit`, 'success');
+      addNotif(`🎯 ${h.symbol} reached Target 2 (₹${f(h.target2)}) — LTP ₹${f(ltp)}`, 'target');
+    }
+  });
+}
+
+function addNotif(msg, type='info') {
+  const arr = JSON.parse(localStorage.getItem('ss_notifs')||'[]');
+  arr.unshift({ msg, type, ts: new Date().toISOString() });
+  localStorage.setItem('ss_notifs', JSON.stringify(arr.slice(0,100)));
+  if(typeof renderNotifs==='function') renderNotifs();
+}
+
+// ═══════════════════════════════════════════════════
+// NIFTY 50 BENCHMARK XIRR
+// ═══════════════════════════════════════════════════
+function calcNiftyBenchmarkXIRR() {
+  // Nifty 50 historical approximate levels for XIRR shadow calculation
+  // We use a simplified approach: for each buy date, estimate Nifty level using
+  // known reference points and compute shadow XIRR
+  const NIFTY_REF = [
+    {date:'2019-01-01',val:10831},{date:'2020-01-01',val:12168},
+    {date:'2020-04-01',val:8598},{date:'2021-01-01',val:13982},
+    {date:'2022-01-01',val:17354},{date:'2022-07-01',val:15753},
+    {date:'2023-01-01',val:17890},{date:'2023-07-01',val:19322},
+    {date:'2024-01-01',val:21571},{date:'2024-07-01',val:23465},
+    {date:'2025-01-01',val:23645},{date:'2025-07-01',val:24800},
+    {date:'2026-01-01',val:23500},{date:'2026-06-01',val:24500},
+  ];
+
+  function niftyAtDate(dateStr) {
+    const d = new Date(dateStr).getTime();
+    // Find surrounding ref points
+    let lo = NIFTY_REF[0], hi = NIFTY_REF[NIFTY_REF.length-1];
+    for (let i=0; i<NIFTY_REF.length-1; i++) {
+      if (new Date(NIFTY_REF[i].date).getTime() <= d && new Date(NIFTY_REF[i+1].date).getTime() >= d) {
+        lo = NIFTY_REF[i]; hi = NIFTY_REF[i+1]; break;
+      }
+    }
+    const t0=new Date(lo.date).getTime(), t1=new Date(hi.date).getTime();
+    const frac = t1>t0 ? (d-t0)/(t1-t0) : 0;
+    return lo.val + (hi.val-lo.val)*frac;
+  }
+
+  const today = new Date();
+  const niftyNow = niftyAtDate(today.toISOString().split('T')[0]);
+
+  // Build shadow cash flows: for each holding buy, simulate buying ₹(cost) of Nifty
+  const cfs = [];
+  D.holdings.forEach(h => {
+    if (!h.buyDate) return;
+    const cost = h.qty * h.avgPrice;
+    const niftyThen = niftyAtDate(h.buyDate);
+    if (!niftyThen) return;
+    const shadowUnits = cost / niftyThen;
+    const shadowCurrent = shadowUnits * niftyNow;
+    cfs.push({ amount: -cost, date: new Date(h.buyDate) });
+    // We'll add the current shadow value at end
+    h._shadowCurrent = shadowCurrent;
+    h._shadowCost = cost;
+  });
+
+  const totalShadowCurrent = D.holdings.reduce((s,h) => s+(h._shadowCurrent||0), 0);
+  const totalInvested = D.holdings.reduce((s,h) => s+h.qty*h.avgPrice, 0);
+  const totalCurrent = D.holdings.reduce((s,h) => s+h.qty*(h.ltp||h.avgPrice), 0);
+
+  if (cfs.length === 0) return null;
+  cfs.push({ amount: totalShadowCurrent, date: today });
+
+  let niftyXirr = null;
+  try { niftyXirr = xirr(cfs); } catch(e) {}
+
+  // Portfolio XIRR
+  const portCfs = [];
+  D.holdings.forEach(h => {
+    if (!h.buyDate) return;
+    portCfs.push({ amount: -(h.qty*h.avgPrice), date: new Date(h.buyDate) });
+  });
+  portCfs.push({ amount: totalCurrent, date: today });
+  let portXirr = null;
+  try { portXirr = xirr(portCfs); } catch(e) {}
+
+  return {
+    niftyXirr: niftyXirr ? niftyXirr*100 : null,
+    portXirr: portXirr ? portXirr*100 : null,
+    totalInvested, totalCurrent, totalShadowCurrent,
+    niftyGain: totalShadowCurrent - totalInvested,
+    portGain: totalCurrent - totalInvested,
+    outperform: portXirr && niftyXirr ? (portXirr - niftyXirr)*100 : null
+  };
+}
+
+function renderNiftyBenchmark() {
+  const el = document.getElementById('nifty-benchmark-card');
+  if (!el) return;
+  if (!D.holdings.length) { el.innerHTML='<div style="color:var(--t4);font-size:12px">Add holdings to see benchmark comparison.</div>'; return; }
+  const r = calcNiftyBenchmarkXIRR();
+  if (!r) { el.innerHTML='<div style="color:var(--t4);font-size:12px">Insufficient data.</div>'; return; }
+  const beat = r.portXirr !== null && r.niftyXirr !== null && r.portXirr > r.niftyXirr;
+  const diff = r.portXirr !== null && r.niftyXirr !== null ? r.portXirr - r.niftyXirr : null;
+  el.innerHTML = `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+      <div class="sc ${beat?'c3':'c4'}">
+        <div class="sc-lbl">Your Portfolio XIRR</div>
+        <div class="sc-val ${r.portXirr>=0?'up':'dn'}">${r.portXirr!==null?f(r.portXirr,1)+'%':'—'}</div>
+        <div class="sc-sub">actual return rate</div>
+      </div>
+      <div class="sc c2">
+        <div class="sc-lbl">Nifty 50 XIRR</div>
+        <div class="sc-val" style="color:var(--cyn)">${r.niftyXirr!==null?f(r.niftyXirr,1)+'%':'—'}</div>
+        <div class="sc-sub">if you'd bought index</div>
+      </div>
+      <div class="sc ${diff!==null&&diff>0?'c3':'c4'}">
+        <div class="sc-lbl">Alpha (vs Nifty)</div>
+        <div class="sc-val ${diff!==null&&diff>0?'up':'dn'}">${diff!==null?(diff>0?'+':'')+f(diff,1)+'%':'—'}</div>
+        <div class="sc-sub">${beat?'🏆 beating index':'📉 underperforming'}</div>
+      </div>
+      <div class="sc c1">
+        <div class="sc-lbl">Nifty Shadow P&L</div>
+        <div class="sc-val ${r.niftyGain>=0?'up':'dn'}">${r.niftyGain>=0?'+':''}₹${fI(Math.abs(r.niftyGain))}</div>
+        <div class="sc-sub">vs your ₹${fI(r.portGain>=0?r.portGain:-r.portGain)} actual</div>
+      </div>
+    </div>
+    <div style="font-size:11px;line-height:1.7;color:var(--t2);background:var(--s2);padding:10px 14px;border-radius:8px;border-left:3px solid ${beat?'var(--grn)':'var(--red)'}">
+      ${beat
+        ? `✅ You are <strong style="color:var(--grn)">outperforming</strong> Nifty 50 by ${f(diff,1)}% XIRR. Your active stock selection is adding alpha over passive index investing.`
+        : `⚠ You are <strong style="color:var(--red)">underperforming</strong> Nifty 50 by ${diff!==null?f(Math.abs(diff),1):'?'}% XIRR. Consider if a low-cost Nifty index fund would serve you better.`
+      }
+    </div>
+    <div style="font-size:10px;color:var(--t4);margin-top:8px">Nifty levels estimated from reference data points. Not financial advice.</div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════
+// P&L BY FINANCIAL YEAR SUMMARY
+// ═══════════════════════════════════════════════════
+function renderFYSummary() {
+  const el = document.getElementById('fy-summary');
+  if (!el || !D.realised.length) {
+    if(el) el.innerHTML='<div style="color:var(--t4);font-size:12px;padding:12px">No realised trades yet.</div>';
+    return;
+  }
+  // Group trades by Indian FY (Apr–Mar)
+  const fyMap = {};
+  D.realised.forEach(r => {
+    if (!r.sellDate) return;
+    const [y,m] = r.sellDate.split('-').map(Number);
+    const fy = m >= 4 ? `${y}-${String(y+1).slice(-2)}` : `${y-1}-${String(y).slice(-2)}`;
+    if (!fyMap[fy]) fyMap[fy] = { stcg:0, ltcg:0, trades:0, wins:0 };
+    const entry = fyMap[fy];
+    if (r.taxType === 'STCG') entry.stcg += r.pl;
+    else entry.ltcg += r.pl;
+    entry.trades++;
+    if (r.pl > 0) entry.wins++;
+  });
+
+  const fys = Object.keys(fyMap).sort().reverse();
+  el.innerHTML = `
+    <div style="font-size:11px;color:var(--t3);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">REALISED P&L BY FINANCIAL YEAR</div>
+    <table class="tbl">
+      <thead><tr><th>Financial Year</th><th>STCG</th><th>LTCG</th><th>Total P&L</th><th>Est. Tax</th><th>Trades</th><th>Win Rate</th></tr></thead>
+      <tbody>${fys.map(fy => {
+        const d = fyMap[fy];
+        const total = d.stcg + d.ltcg;
+        const tax = Math.max(0,(d.ltcg-125000))*0.125 + (d.stcg>0?d.stcg*0.20:0);
+        const wr = d.trades > 0 ? Math.round(d.wins/d.trades*100) : 0;
+        return `<tr>
+          <td><strong>FY ${fy}</strong></td>
+          <td class="mn ${d.stcg>=0?'up':'dn'}">${d.stcg>=0?'+':''}₹${fI(Math.abs(d.stcg))}</td>
+          <td class="mn ${d.ltcg>=0?'up':'dn'}">${d.ltcg>=0?'+':''}₹${fI(Math.abs(d.ltcg))}</td>
+          <td class="mn ${total>=0?'up':'dn'}"><strong>${total>=0?'+':''}₹${fI(Math.abs(total))}</strong></td>
+          <td class="mn dn">${tax>0?'₹'+fI(tax):'—'}</td>
+          <td class="mn">${d.trades}</td>
+          <td class="mn" style="color:${wr>=60?'var(--grn)':wr>=40?'var(--yel)':'var(--red)'}">${wr}%</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+  `;
+}
+
+// ═══════════════════════════════════════════════════
+// SIP NEXT DATE HELPER
+// ═══════════════════════════════════════════════════
+function sipNextDate(s) {
+  const start = new Date(s.startDate);
+  const today = new Date();
+  if (s.freq === 'One-time') return '—';
+  const daysSinceStart = Math.max(0, (today - start) / 864e5);
+  let instDone = s.freq === 'Monthly'
+    ? Math.floor(daysSinceStart / 30) + 1
+    : Math.floor(daysSinceStart / 7) + 1;
+  instDone = Math.min(instDone, s.instalments);
+  if (instDone >= s.instalments) return 'Completed ✓';
+  const nextD = new Date(start);
+  if (s.freq === 'Monthly') nextD.setMonth(nextD.getMonth() + instDone);
+  else nextD.setDate(nextD.getDate() + instDone * 7);
+  const daysAway = Math.round((nextD - today) / 864e5);
+  const fmt = nextD.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+  return `${fmt} <span style="font-size:9px;color:${daysAway<=3?'var(--yel)':'var(--t4)'}">(${daysAway<=0?'TODAY':daysAway+'d'})</span>`;
+}
+
+// ═══════════════════════════════════════════════════
 // TAX
 // ═══════════════════════════════════════════════════
 function renderTax() {
+  renderFYSummary();
   const fy=document.getElementById('tax-fy')?.value||'2025-26';
   const [ys,ye]=[fy.split('-')[0],'20'+fy.split('-')[1]];
   const [fs,fe]=[ys+'-04-01',ye+'-03-31'];
@@ -8180,7 +8541,69 @@ function saveSettings(){
   if(res) res.textContent = '✓ Saved · AI: ' + modelName;
   toast('Settings saved ✓');
 }
-function setupRefresh(){if(refreshTimer)clearInterval(refreshTimer);refreshTimer=setInterval(refreshAll,(D.cfg.ref||60)*1000);}
+// ── Market-hours aware auto-refresh ─────────────────────────────
+let _autoRefreshCountdown = 0;
+const MARKET_OPEN_MIN  = 9*60+15;   // 9:15 IST
+const MARKET_CLOSE_MIN = 15*60+30;  // 15:30 IST
+const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+function isMarketOpen() {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun,6=Sat
+  if (day === 0 || day === 6) return false;
+  // Convert UTC to IST (UTC+5:30)
+  const istMs = now.getTime() + (5*60+30)*60000;
+  const ist = new Date(istMs);
+  const minOfDay = ist.getUTCHours()*60 + ist.getUTCMinutes();
+  return minOfDay >= MARKET_OPEN_MIN && minOfDay < MARKET_CLOSE_MIN;
+}
+
+function updateAutoRefreshIndicator() {
+  const el = document.getElementById('auto-refresh-ind');
+  if (!el) return;
+  if (isMarketOpen()) {
+    const mins = Math.ceil(_autoRefreshCountdown / 60);
+    el.innerHTML = `<span style="color:var(--grn);font-size:10px">● AUTO ${mins}m</span>`;
+    el.title = `Market open · next refresh in ${mins} min`;
+  } else {
+    const now = new Date();
+    const istMs = now.getTime() + (5*60+30)*60000;
+    const ist = new Date(istMs);
+    const minOfDay = ist.getUTCHours()*60 + ist.getUTCMinutes();
+    const day = now.getDay();
+    let nextOpen = '';
+    if (day === 6) nextOpen = 'Mon 9:15 AM';
+    else if (day === 0) nextOpen = 'Mon 9:15 AM';
+    else if (minOfDay < MARKET_OPEN_MIN) nextOpen = 'Today 9:15 AM';
+    else nextOpen = 'Tomorrow 9:15 AM';
+    el.innerHTML = `<span style="color:var(--t4);font-size:10px">● CLOSED · ${nextOpen}</span>`;
+    el.title = `Market closed · opens ${nextOpen} IST`;
+  }
+}
+
+function setupRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  let countdownTimer = null;
+
+  const tick = () => {
+    if (_autoRefreshCountdown > 0) {
+      _autoRefreshCountdown--;
+      updateAutoRefreshIndicator();
+    } else {
+      if (isMarketOpen()) {
+        refreshAll();
+        _autoRefreshCountdown = AUTO_REFRESH_INTERVAL_MS / 1000;
+      } else {
+        updateAutoRefreshIndicator();
+        _autoRefreshCountdown = 60; // check again in 1 min
+      }
+    }
+  };
+
+  _autoRefreshCountdown = isMarketOpen() ? AUTO_REFRESH_INTERVAL_MS/1000 : 60;
+  updateAutoRefreshIndicator();
+  refreshTimer = setInterval(tick, 1000);
+}
 
 // renderAll duplicate removed
 
@@ -8750,6 +9173,8 @@ function renderAll() {
   renderAllocation();
   renderRealised();
   renderDividends();
+  renderDividendCalendar();
+  renderFYSummary();
   renderDashActionsV4();
   renderWatchlist();
   renderDashInsights();
@@ -11082,6 +11507,7 @@ function renderSipTracker() {
       <td><span class="tag" style="background:var(--s3);color:var(--t2)">${s.freq}</span></td>
       <td class="mn">₹${fI(s.amt)}</td>
       <td class="mn">${s.startDate}</td>
+      <td class="mn" style="font-size:11px">${sipNextDate(s)}</td>
       <td class="mn">${instDone}/${s.instalments}</td>
       <td class="mn">₹${fI(invested)}</td>
       <td class="mn">₹${fI(currentEst)}</td>
@@ -16718,5 +17144,15 @@ document.addEventListener('DOMContentLoaded', function(){
   </div>
 </div>
 
+<script>
+// ── PWA Service Worker Registration ──────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('[SW] Registered:', reg.scope))
+      .catch(err => console.warn('[SW] Registration failed:', err));
+  });
+}
+</script>
 </body>
 </html>
