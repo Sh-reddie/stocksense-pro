@@ -1399,8 +1399,9 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div class="sec" id="sec-watchlist">
     <div class="sec-head">
       <div class="sec-title">Watchlist</div>
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span style="font-size:11px;color:var(--t4)">Press <kbd style="background:var(--s3);border:1px solid var(--b2);border-radius:3px;padding:1px 5px;font-family:var(--mono)">/</kbd> to search</span>
+        <button class="btn btn-g btn-sm" onclick="rankAllWatchlist()" title="AI-score all watchlist stocks and sort by opportunity (1-10)">🏆 AI Rank All</button>
         <button class="btn btn-red btn-sm" onclick="clearSection('watchlist')">🗑 Clear</button>
         <button class="btn btn-p" onclick="openSpotlight('watchlist')">+ Watch Stock</button>
       </div>
@@ -3339,6 +3340,7 @@ textarea.fi{resize:vertical;min-height:70px;}
               <input type="file" accept=".json" style="display:none" onchange="importBackup(this)">
             </label>
             <button class="btn btn-g btn-sm" onclick="exportExcel()" title="Export full portfolio to Excel for CA / tax filing">📊 Export Excel (CA)</button>
+            <button class="btn btn-g btn-sm" onclick="exportPDF()" title="Open portfolio PDF report in new tab — use browser Print to save">🖨 PDF Report</button>
           </div>
           <div id="storage-status" style="margin-top:10px;font-size:11px;color:var(--t4)"></div>
         </div>
@@ -7035,6 +7037,33 @@ Reply ONLY compact JSON no markdown: {"decision":"ENTER NOW|WAIT|AVOID","entrySc
 }
 
 // Single-stock watchlist AI analysis (called from per-card button)
+async function rankAllWatchlist() {
+  if (!D.watchlist.length) { toast('Watchlist is empty — add stocks first', 'warn'); return; }
+  const total = D.watchlist.length;
+  toast(`🏆 AI ranking ${total} watchlist stock${total>1?'s':''}…`);
+  // Show progress in sec-head
+  const btn = document.querySelector('[onclick="rankAllWatchlist()"]');
+  if (btn) { btn.disabled = true; btn.textContent = `⏳ Ranking (0/${total})…`; }
+  const ctx = D._marketCtx || await getMarketContext();
+  D._marketCtx = ctx;
+  let done = 0;
+  // Batch 3 at a time
+  for (let i = 0; i < D.watchlist.length; i += 3) {
+    const batch = D.watchlist.slice(i, i+3);
+    await Promise.allSettled(batch.map(async w => {
+      try { await analyseWatchStock(w, ctx); } catch(e) {}
+      done++;
+      if (btn) btn.textContent = `⏳ Ranking (${done}/${total})…`;
+    }));
+  }
+  save('watchlist');
+  if (btn) { btn.disabled = false; btn.textContent = '🏆 AI Rank All'; }
+  renderWatchlist();
+  // Show summary
+  const enterNow = D.watchlist.filter(w=>w.wlDecision==='ENTER NOW').length;
+  const avoid    = D.watchlist.filter(w=>w.wlDecision==='AVOID').length;
+  toast(`✅ Ranking done — ${enterNow} ENTER NOW · ${avoid} AVOID · rest WAIT`, 'success');
+}
 async function _wlAnalyseSingle(id) {
   const w = D.watchlist.find(x => x.id === id);
   if (!w) return;
@@ -8038,6 +8067,98 @@ async function exportExcel() {
   XLSX.writeFile(wb, `StockSense_${today}.xlsx`);
   toast('✅ Excel exported — StockSense_'+today+'.xlsx');
 }
+function exportPDF() {
+  const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const inv = D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0);
+  const cv  = D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
+  const pl  = cv - inv;
+  const plp = inv>0?pl/inv*100:0;
+  const rpl = D.realised.reduce((s,r)=>s+r.pl,0);
+  const divIncome = (D.dividends||[]).reduce((s,d)=>s+(d.amtPerShare||0)*(d.shares||0),0);
+
+  // Sector allocation
+  const sectorMap = {};
+  D.holdings.forEach(h=>{
+    const sec = h.sector||'Other';
+    sectorMap[sec]=(sectorMap[sec]||0)+h.qty*(h.ltp||h.avgPrice);
+  });
+  const sectorRows = Object.entries(sectorMap).sort((a,b)=>b[1]-a[1])
+    .map(([s,v])=>`<tr><td>${s}</td><td>₹${fI(v)}</td><td>${(v/cv*100).toFixed(1)}%</td></tr>`).join('');
+
+  // Holdings rows
+  const holdRows = D.holdings.map(h=>{
+    const ltp=h.ltp||h.avgPrice, hPL=(ltp-h.avgPrice)*h.qty, hPLp=(ltp-h.avgPrice)/h.avgPrice*100;
+    const days=hDays(h.buyDate)||0, tt=taxType(days);
+    return `<tr>
+      <td><b>${h.symbol}</b><br><span style="color:#888;font-size:10px">${h.name||''}</span></td>
+      <td>${h.qty}</td><td>₹${f(h.avgPrice)}</td><td>₹${f(ltp)}</td>
+      <td style="color:${hPL>=0?'#16a34a':'#dc2626'}">${hPL>=0?'+':''}₹${fI(Math.abs(hPL))}</td>
+      <td style="color:${hPLp>=0?'#16a34a':'#dc2626'}">${fP(hPLp)}</td>
+      <td>${days}d</td>
+      <td><span style="background:${tt==='LTCG'?'#dcfce7':'#fef9c3'};color:${tt==='LTCG'?'#166534':'#854d0e'};padding:2px 6px;border-radius:4px;font-size:10px">${tt}</span></td>
+    </tr>`;
+  }).join('');
+
+  // LTCG approaching alerts
+  const ltcgAlerts = D.holdings.filter(h=>{
+    const days=hDays(h.buyDate)||0; return days>=335 && days<365;
+  }).map(h=>`<li>${h.symbol} — ${365-(hDays(h.buyDate)||0)} days to LTCG (hold until ${new Date(new Date(h.buyDate).getTime()+365*864e5).toLocaleDateString('en-IN')})</li>`).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>StockSense Portfolio Report — ${today}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#1a1a2e;background:#fff;padding:24px}
+  h1{font-size:20px;font-weight:800;color:#1a1a2e}
+  h2{font-size:13px;font-weight:700;color:#1a1a2e;margin:20px 0 8px;border-bottom:2px solid #e5e7eb;padding-bottom:4px}
+  .hero{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:16px 0}
+  .card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px}
+  .card .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:3px}
+  .card .val{font-size:16px;font-weight:800;font-family:monospace}
+  .up{color:#16a34a}.dn{color:#dc2626}
+  table{width:100%;border-collapse:collapse;margin-bottom:8px}
+  th{background:#f1f5f9;font-size:10px;font-weight:700;padding:5px 8px;text-align:left;border-bottom:1px solid #e2e8f0}
+  td{padding:5px 8px;border-bottom:1px solid #f1f5f9;font-size:11px;vertical-align:middle}
+  .alert-box{background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:10px 14px;margin:8px 0;font-size:11px}
+  .footer{margin-top:24px;font-size:9px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:8px}
+  @media print{body{padding:0} .no-print{display:none}}
+</style></head><body>
+<div style="display:flex;justify-content:space-between;align-items:center">
+  <div><h1>📊 StockSense Portfolio Report</h1><div style="font-size:11px;color:#64748b;margin-top:2px">Generated: ${today}</div></div>
+  <button class="no-print" onclick="window.print()" style="padding:8px 16px;background:#4f8ef7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px">🖨 Print / Save PDF</button>
+</div>
+
+<div class="hero">
+  <div class="card"><div class="lbl">Invested</div><div class="val">₹${fI(inv)}</div></div>
+  <div class="card"><div class="lbl">Current Value</div><div class="val">₹${fI(cv)}</div></div>
+  <div class="card"><div class="lbl">Unrealised P&L</div><div class="val ${pl>=0?'up':'dn'}">${pl>=0?'+':''}₹${fI(Math.abs(pl))}</div></div>
+  <div class="card"><div class="lbl">P&L %</div><div class="val ${plp>=0?'up':'dn'}">${fP(plp)}</div></div>
+  <div class="card"><div class="lbl">Realised P&L</div><div class="val ${rpl>=0?'up':'dn'}">${rpl>=0?'+':''}₹${fI(Math.abs(rpl))}</div></div>
+</div>
+<div class="hero" style="grid-template-columns:repeat(3,1fr)">
+  <div class="card"><div class="lbl">Positions</div><div class="val">${D.holdings.length}</div></div>
+  <div class="card"><div class="lbl">Closed Trades</div><div class="val">${D.realised.length}</div></div>
+  <div class="card"><div class="lbl">Dividend Income</div><div class="val up">₹${fI(divIncome)}</div></div>
+</div>
+
+${ltcgAlerts?`<div class="alert-box">⏳ <b>LTCG Countdown — hold these to save tax:</b><ul style="margin-top:4px;padding-left:16px">${ltcgAlerts}</ul></div>`:''}
+
+<h2>Holdings</h2>
+<table><thead><tr><th>Stock</th><th>Qty</th><th>Avg Buy</th><th>LTP</th><th>P&L</th><th>P&L%</th><th>Hold</th><th>Tax</th></tr></thead>
+<tbody>${holdRows}</tbody></table>
+
+<h2>Sector Allocation</h2>
+<table><thead><tr><th>Sector</th><th>Value</th><th>Weight</th></tr></thead>
+<tbody>${sectorRows}</tbody></table>
+
+<div class="footer">⚠ This report is for informational purposes only. Not SEBI-registered financial advice. Consult a registered advisor before making any investment decisions. | StockSense Pro</div>
+</body></html>`;
+
+  const win = window.open('','_blank','width=900,height=700');
+  if (!win) { toast('Pop-up blocked — allow pop-ups and try again','error'); return; }
+  win.document.write(html);
+  win.document.close();
+}
 function exportTaxCSV(){const fy=document.getElementById('tax-fy')?.value||'2025-26';let csv='Symbol,Qty,Buy Date,Sell Date,Hold Days,Buy Price,Sell Price,P&L,Tax Type\n';D.realised.forEach(r=>{csv+=`${r.symbol},${r.qty},${r.buyDate},${r.sellDate},${r.holdDays},${r.buyPrice},${r.sellPrice},${r.pl.toFixed(2)},${r.taxType}\n`;});const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='TaxPL_'+fy+'.csv';a.click();}
 async function genTaxAI(){const fy=document.getElementById('tax-fy')?.value||'2025-26';const box=document.getElementById('tax-ai');box.innerHTML='<div class="ai-ld"><div class="spin"></div> Generating tax advisory…</div>';const stcg=D.realised.filter(r=>r.taxType==='STCG').reduce((s,r)=>s+r.pl,0);const ltcg=D.realised.filter(r=>r.taxType==='LTCG').reduce((s,r)=>s+r.pl,0);const upcoming=D.holdings.map(h=>`${h.symbol}: held ${hDays(h.buyDate)||0}d, P&L ${(((h.ltp||h.avgPrice)-h.avgPrice)/h.avgPrice*100).toFixed(1)}%`).join('; ');const r=await claude(`Tax advisory FY ${fy} for an Indian equity investor. Educational estimate only; ask the user to confirm with a qualified tax professional before transacting.\nSTCG (generally @20% after 23 Jul 2024): ₹${fI(stcg)} | LTCG (generally @12.5% above ₹1.25L): ₹${fI(ltcg)}\nOpen positions: ${upcoming||'None'}\nAdvise: (1) Tax-loss harvesting opportunities, (2) Which holdings to delay exit past 12-month LTCG mark, (3) LTCG ₹1.25L exemption planning, (4) Dividend tax at slab rate, (5) Re-entry caution so harvesting is commercially justifiable and not superficial churn. Be specific with stock names and timing.`);box.innerHTML=`<div class="ai-txt">${md2h(r)}</div>`;}
 
@@ -8049,13 +8170,118 @@ async function genRiskAI(){const box=document.getElementById('risk-ai');box.inne
 // ═══════════════════════════════════════════════════
 // NEWS
 // ═══════════════════════════════════════════════════
-function renderNews(){const NEWS=[{t:'HAL secures ₹12,000 Cr order for Advanced Light Helicopters from Indian Army',s:'Business Standard',ago:'2h',imp:'Positive',ic:'t-buy',stocks:['HAL']},{t:'RBI holds repo rate at 6.5%; MPC signals data-dependent cuts post-monsoon season',s:'Economic Times',ago:'3h',imp:'Neutral',ic:'t-neu',stocks:['HDFCBANK','SBIN','KOTAKBANK']},{t:'Nifty IT down 1.8% as US Fed minutes signal higher-for-longer; TCS, Infosys fall',s:'Moneycontrol',ago:'4h',imp:'Negative',ic:'t-sell',stocks:['TCS','INFY','WIPRO','HCLTECH']},{t:'FII inflows ₹18,400 Cr in May so far — strongest since Feb; DII also net buyers',s:'CNBC TV18',ago:'5h',imp:'Positive',ic:'t-buy',stocks:[]},{t:'Reliance Jio 6G trials announced; to cover 100 cities by Q4 FY27',s:'ET Telecom',ago:'6h',imp:'Positive',ic:'t-buy',stocks:['RELIANCE']},{t:'SEBI proposes algo trading guardrails for retail investors; industry divided',s:'Mint',ago:'8h',imp:'Neutral',ic:'t-neu',stocks:[]},{t:'Adani Ports wins $2.1B Sri Lanka terminal contract; stock up 3.2%',s:'Bloomberg',ago:'1d',imp:'Positive',ic:'t-buy',stocks:['ADANIPORTS']},{t:'Q4 FY26 preview: Nifty 50 earnings expected to grow 12% YoY; IT weakest link',s:'ET Markets',ago:'1d',imp:'Neutral',ic:'t-neu',stocks:[]},{t:'Pharma sector under FDA scanner: 3 Indian plants get import alerts',s:'LiveMint',ago:'2d',imp:'Negative',ic:'t-sell',stocks:['SUNPHARMA','DRREDDY','CIPLA']},{t:'Defence stocks rally — HAL, BEL hit 52W highs on budget allocation boost',s:'Business Today',ago:'2d',imp:'Positive',ic:'t-buy',stocks:['HAL','BEL']},];
-const mk=n=>`<div style="padding:11px 0;border-bottom:1px solid rgba(30,37,64,.4);cursor:pointer" class="news-item"><div style="font-size:12.5px;font-weight:500;line-height:1.45;margin-bottom:4px">${n.t}</div><div style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>${n.s}</span><span>${n.ago} ago</span><span class="tag ${n.ic}" style="font-size:9px">${n.imp}</span>${n.stocks.length?`<span style="color:var(--ac);font-size:10px">${n.stocks.slice(0,4).join(' · ')}</span>`:''}</div></div>`;
-document.getElementById('n-all-c').innerHTML=NEWS.map(mk).join('');
-const myS=D.holdings.map(h=>h.symbol);
-document.getElementById('n-port-c').innerHTML=NEWS.filter(n=>n.stocks.some(s=>myS.includes(s))).map(mk).join('')||'<div style="color:var(--t4);font-size:12px;padding:20px">No relevant news for your holdings.</div>';
-document.getElementById('n-res-c').innerHTML=`<table class="tbl"><thead><tr><th>Company</th><th>Date</th><th>Est.</th><th>In Portfolio</th></tr></thead><tbody>${[{c:'HDFC Bank',s:'HDFCBANK',d:'May 18',e:'PAT ₹16,800Cr'},{c:'Infosys',s:'INFY',d:'May 22',e:'Rev $4.72B'},{c:'HAL',s:'HAL',d:'May 26',e:'PAT ₹4,100Cr'},{c:'Reliance',s:'RELIANCE',d:'May 30',e:'PAT ₹22,000Cr'}].map(r=>`<tr><td><strong>${r.c}</strong></td><td>${r.d}</td><td style="color:var(--t3);font-size:11px">${r.e}</td><td>${D.holdings.find(h=>h.symbol===r.s)?'<span class="tag t-buy">YES</span>':'<span style="color:var(--t4);font-size:11px">No</span>'}</td></tr>`).join('')}</tbody></table>`;
-document.getElementById('n-corp-c').innerHTML=`<table class="tbl"><thead><tr><th>Stock</th><th>Action</th><th>Ex-Date</th><th>Details</th></tr></thead><tbody><tr><td class="sym">INFY</td><td><span class="tag t-buy">DIVIDEND</span></td><td>May 20</td><td>₹21/share Final</td></tr><tr><td class="sym">TCS</td><td><span class="tag t-sbuy">BUYBACK</span></td><td>May 30</td><td>₹4,500/sh · ₹4,150Cr</td></tr><tr><td class="sym">HAL</td><td><span class="tag t-buy">DIVIDEND</span></td><td>Jun 3</td><td>₹35/share Interim</td></tr><tr><td class="sym">BAJFINANCE</td><td><span class="tag t-hold">SPLIT</span></td><td>Jun 15</td><td>2:1 stock split</td></tr></tbody></table>`;}
+const _newsCache = {ts:0, items:[]};
+const NEWS_QUERIES = [
+  {q:'Indian stock market NSE BSE Nifty Sensex',label:'Market'},
+  {q:'SEBI RBI India economy monetary policy',label:'Macro'},
+  {q:'Nifty 50 earnings results India quarterly',label:'Earnings'},
+];
+async function fetchRSSFeed(rssUrl) {
+  const proxies = [
+    u => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,{signal:AbortSignal.timeout(7000)}).then(r=>r.json()).then(j=>j.contents||''),
+    u => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,{signal:AbortSignal.timeout(7000)}).then(r=>r.text()),
+  ];
+  for (const proxy of proxies) {
+    try {
+      const xml = await proxy(rssUrl);
+      if (!xml || !xml.includes('<item>')) continue;
+      return xml;
+    } catch(e) {}
+  }
+  return '';
+}
+function parseRSSItems(xml, sourceLabel) {
+  const items = [];
+  const blocks = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
+  blocks.slice(0, 15).forEach(block => {
+    const getTag = (tag, fallback='') => {
+      const m = block.match(new RegExp(`<${tag}(?:[^>]*)><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`))||
+                block.match(new RegExp(`<${tag}(?:[^>]*)>([\\s\\S]*?)<\\/${tag}>`));
+      return m ? m[1].replace(/<[^>]+>/g,'').trim() : fallback;
+    };
+    const title = getTag('title');
+    const link  = getTag('link')||getTag('guid');
+    const pubDate = getTag('pubDate');
+    const source = getTag('source', sourceLabel);
+    if (!title || title.length < 10) return;
+    // Parse relative time
+    let ago = '';
+    if (pubDate) {
+      const diff = (Date.now()-new Date(pubDate).getTime())/60000;
+      if (diff < 60) ago = Math.round(diff)+'m';
+      else if (diff < 1440) ago = Math.round(diff/60)+'h';
+      else ago = Math.round(diff/1440)+'d';
+    }
+    // Basic sentiment from title keywords
+    const lc = title.toLowerCase();
+    let imp='Neutral', ic='t-neu';
+    if (/surges?|rallies?|gain|rise|hits?\s+high|up\s+\d|record|strong|buy|wins?|order|profit|growth/i.test(title)) { imp='Positive'; ic='t-buy'; }
+    else if (/falls?|drops?|plunges?|sell|crash|low|decline|loss|weak|warns?|cut|probe|alert/i.test(title)) { imp='Negative'; ic='t-sell'; }
+    // Detect mentioned stocks from our STOCKS_DB
+    const mentioned = (STOCKS_DB||[]).filter(s => {
+      const sym = s.sym||'', name = (s.name||'').split(' ')[0];
+      return sym.length>=3 && (new RegExp(`\\b${sym}\\b`,'i').test(title) || (name.length>=4 && title.toLowerCase().includes(name.toLowerCase())));
+    }).map(s=>s.sym).slice(0,4);
+    items.push({t:title, link, s:source, ago, imp, ic, stocks:mentioned, ts: pubDate ? new Date(pubDate).getTime() : 0});
+  });
+  return items;
+}
+async function renderNews() {
+  const allC = document.getElementById('n-all-c');
+  const portC = document.getElementById('n-port-c');
+  if (!allC) return;
+  // Cache for 10 minutes
+  if (_newsCache.ts && Date.now()-_newsCache.ts < 600000 && _newsCache.items.length) {
+    _renderNewsItems(_newsCache.items);
+    return;
+  }
+  allC.innerHTML='<div style="padding:20px;color:var(--t4);font-size:12px"><div class="spin" style="display:inline-block;margin-right:8px"></div> Fetching live news from Google News RSS…</div>';
+  const allItems = [];
+  const portSyms = D.holdings.map(h=>h.symbol);
+  // Fetch market-wide news
+  await Promise.allSettled(NEWS_QUERIES.map(async ({q,label}) => {
+    const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-IN&gl=IN&ceid=IN:en`;
+    const xml = await fetchRSSFeed(rssUrl);
+    if (xml) allItems.push(...parseRSSItems(xml, label));
+  }));
+  // Fetch news for up to 5 portfolio stocks
+  const topStocks = portSyms.slice(0,5);
+  await Promise.allSettled(topStocks.map(async sym => {
+    const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(sym+' NSE India stock')}&hl=en-IN&gl=IN&ceid=IN:en`;
+    const xml = await fetchRSSFeed(rssUrl);
+    if (xml) allItems.push(...parseRSSItems(xml, sym));
+  }));
+  // Dedupe by title prefix and sort by time
+  const seen = new Set();
+  const unique = allItems.filter(item => {
+    const key = item.t.slice(0,60).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  }).sort((a,b) => b.ts-a.ts);
+  _newsCache.items = unique.length ? unique : allItems;
+  _newsCache.ts = Date.now();
+  if (!unique.length) {
+    allC.innerHTML='<div style="color:var(--t4);font-size:12px;padding:20px">⚠ Could not fetch live news (CORS / network). Try refreshing.</div>';
+    return;
+  }
+  _renderNewsItems(unique);
+}
+function _renderNewsItems(items) {
+  const allC = document.getElementById('n-all-c');
+  const portC = document.getElementById('n-port-c');
+  if (!allC) return;
+  const portSyms = D.holdings.map(h=>h.symbol);
+  const mk = n => `<div style="padding:11px 0;border-bottom:1px solid rgba(30,37,64,.4);cursor:pointer" onclick="${n.link?`window.open('${n.link.replace(/'/g,'%27')}','_blank')`:''}">
+    <div style="font-size:12.5px;font-weight:500;line-height:1.45;margin-bottom:4px">${n.t}</div>
+    <div style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span>${n.s||''}</span>${n.ago?`<span>${n.ago} ago</span>`:''}
+      <span class="tag ${n.ic}" style="font-size:9px">${n.imp}</span>
+      ${n.stocks.length?`<span style="color:var(--ac);font-size:10px">${n.stocks.slice(0,4).join(' · ')}</span>`:''}
+    </div></div>`;
+  allC.innerHTML = items.slice(0,30).map(mk).join('') || '<div style="color:var(--t4);font-size:12px;padding:20px">No news fetched.</div>';
+  const portNews = items.filter(n => n.stocks.some(s=>portSyms.includes(s)) || portSyms.some(sym => n.t.toLowerCase().includes(sym.toLowerCase())));
+  if (portC) portC.innerHTML = portNews.slice(0,20).map(mk).join('') || '<div style="color:var(--t4);font-size:12px;padding:20px">No relevant news for your holdings yet — try refreshing.</div>';
+}
 
 // ═══════════════════════════════════════════════════
 // CSV IMPORT
