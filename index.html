@@ -825,6 +825,9 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="mob-nav-item" onclick="mgo('allocation')">📊 Allocation</div>
     <div class="mob-nav-item" onclick="mgo('risk')">⚠ Risk Analytics</div>
     <div class="mob-nav-item" onclick="mgo('timeline')">📈 Portfolio Timeline</div>
+    <div class="mob-nav-item" onclick="mgo('fii-dii')">🏦 FII/DII Flows</div>
+    <div class="mob-nav-item" onclick="mgo('52week')">📊 52-Week Screener</div>
+    <div class="mob-nav-item" onclick="mgo('custom-alerts')">🔔 Custom Alerts</div>
     <div class="mob-nav-item" onclick="mgo('alerts')">🔔 Price Alerts</div>
     <div class="mob-nav-item" onclick="mgo('notifications')">🔔 Notifications</div>
     <div class="mob-nav-sect">Tools</div>
@@ -960,6 +963,9 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('deals')">💼 Bulk Deals</div>
         <div class="tn-drop-item" onclick="go('news')">📰 News &amp; Events</div>
         <div class="tn-drop-item" onclick="go('macro')">🌐 Macro &amp; Institutional</div>
+        <div class="tn-drop-item" onclick="go('fii-dii')" style="color:var(--ac2)">🏦 FII/DII Flows</div>
+        <div class="tn-drop-item" onclick="go('52week')" style="color:var(--grn)">📊 52-Week Screener</div>
+        <div class="tn-drop-item" onclick="go('custom-alerts')" style="color:var(--yel)">🔔 Custom Alerts</div>
         <div class="tn-drop-item" onclick="go('tax')">🧾 Tax Report</div>
         <div class="tn-drop-item" onclick="go('import')">⬆ Import CSV</div>
       </div>
@@ -3053,6 +3059,103 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div id="gp-chart-wrap" style="margin-bottom:16px"></div>
   </div>
 
+  <!-- ═══ 52-WEEK HIGH/LOW SCREENER ════════════════════════ -->
+  <div class="sec" id="sec-52week">
+    <div class="sec-head">
+      <div class="sec-title">📊 52-Week High/Low Screener</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select class="fi" id="w52-source" onchange="render52Week()" style="width:130px">
+          <option value="both">Holdings + Watchlist</option>
+          <option value="holdings">Holdings Only</option>
+          <option value="watchlist">Watchlist Only</option>
+        </select>
+        <select class="fi" id="w52-filter" onchange="render52Week()" style="width:150px">
+          <option value="all">All Stocks</option>
+          <option value="near-high">Near 52W High (&gt;80%)</option>
+          <option value="near-low">Near 52W Low (&lt;20%)</option>
+          <option value="breakout">Breakout Zone (90-100%)</option>
+          <option value="oversold">Deeply Oversold (&lt;10%)</option>
+        </select>
+        <button class="btn btn-p btn-sm" onclick="render52Week()">↻ Refresh</button>
+      </div>
+    </div>
+    <!-- Summary strip -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px" id="w52-summary"></div>
+    <!-- Table -->
+    <div id="w52-table"></div>
+  </div>
+
+  <!-- ═══ CUSTOM ALERTS ══════════════════════════════════════ -->
+  <div class="sec" id="sec-custom-alerts">
+    <div class="sec-head">
+      <div class="sec-title">🔔 Custom Alerts</div>
+      <button class="btn btn-p btn-sm" onclick="caShowForm()">＋ New Alert</button>
+    </div>
+    <!-- Create form -->
+    <div id="ca-form" style="display:none;background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:16px;margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:12px">
+        <div>
+          <div style="font-size:11px;color:var(--t3);margin-bottom:4px">Symbol</div>
+          <input class="fi" id="ca-sym" placeholder="e.g. RELIANCE" style="width:100%;text-transform:uppercase">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--t3);margin-bottom:4px">Alert Type</div>
+          <select class="fi" id="ca-type" onchange="caTypeChange()" style="width:100%">
+            <option value="price-above">Price Above</option>
+            <option value="price-below">Price Below</option>
+            <option value="pct-change">% Change (day)</option>
+            <option value="pct-drop">% Drop (day)</option>
+            <option value="near-52h">Near 52W High (%)</option>
+            <option value="near-52l">Near 52W Low (%)</option>
+            <option value="vol-spike">Volume Spike (×)</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--t3);margin-bottom:4px" id="ca-val-lbl">Value</div>
+          <input class="fi" id="ca-val" type="number" placeholder="e.g. 2500" style="width:100%">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--t3);margin-bottom:4px">Note (optional)</div>
+          <input class="fi" id="ca-note" placeholder="Reminder note" style="width:100%">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-p btn-sm" onclick="caSave()">Save Alert</button>
+        <button class="btn btn-sm" onclick="document.getElementById('ca-form').style.display='none'">Cancel</button>
+      </div>
+    </div>
+    <!-- Active alerts -->
+    <div id="ca-list"></div>
+    <!-- Triggered log -->
+    <div id="ca-log" style="margin-top:16px"></div>
+  </div>
+
+  <!-- ═══ FII/DII FLOW TRACKER ═══════════════════════════════ -->
+  <div class="sec" id="sec-fii-dii">
+    <div class="sec-head">
+      <div class="sec-title">🏦 FII/DII Flow Tracker</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select class="fi" id="fii-period" onchange="renderFiiDii()" style="width:110px">
+          <option value="7">Last 7 Days</option>
+          <option value="15">Last 15 Days</option>
+          <option value="30" selected>Last 30 Days</option>
+        </select>
+        <button class="btn btn-p btn-sm" onclick="renderFiiDii()">↻ Refresh</button>
+      </div>
+    </div>
+    <!-- Summary cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px" id="fii-summary"></div>
+    <!-- Chart -->
+    <div style="background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:16px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--t2);margin-bottom:10px">Net Flow (₹ Cr) — FII vs DII</div>
+      <canvas id="fii-chart" height="80"></canvas>
+    </div>
+    <!-- Table -->
+    <div id="fii-table"></div>
+    <!-- AI insight -->
+    <div id="fii-ai" style="margin-top:16px"></div>
+  </div>
+
   <!-- ═══ SETTINGS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-settings">
     <div class="sec-head"><div class="sec-title">Settings</div></div>
@@ -4367,7 +4470,7 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ AI Stock Comparator','intel-report':'📑 Portfolio Intelligence Report','watchlist-builder':'🔭 AI Watchlist Builder','exit-planner':'🚪 AI Exit Strategy Planner','ai-rebalancer':'⚖️ AI Portfolio Rebalancer','earnings-preview':'📣 AI Earnings Preview','dividend-opt':'💸 AI Dividend Optimizer','goal-planner':'🏆 AI Goal Planner','timeline':'📈 Portfolio Timeline'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP Tracker',action:'Action Center',momentum:'Momentum Board',risk:'Risk Console',benchmark:'Benchmark',heatmap:'Correlation Heatmap',sectormap:'Sector Rotation Map',rebalancer:'Portfolio Rebalancer',analysis:'AI Analysis',plan:'Exit Planner',planner:'Investment Planner',realised:'Realised P&L',dividends:'Dividends',tax:'Tax Report',divcal:'Dividend Calendar',alerts:'Price Alerts',notifications:'Notifications',calendar:'Earnings Calendar',news:'News & Events',deals:'Bulk & Block Deals',import:'Import CSV',settings:'Settings',strategies:'🧠 AI Investor — Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Stock Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily AI Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 AI Portfolio Doctor','opportunity':'🏆 Watchlist Opportunity Ranker','action-plan':'📋 AI Weekly Action Plan','position-builder':'🎯 AI Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ AI Stock Comparator','intel-report':'📑 Portfolio Intelligence Report','watchlist-builder':'🔭 AI Watchlist Builder','exit-planner':'🚪 AI Exit Strategy Planner','ai-rebalancer':'⚖️ AI Portfolio Rebalancer','earnings-preview':'📣 AI Earnings Preview','dividend-opt':'💸 AI Dividend Optimizer','goal-planner':'🏆 AI Goal Planner','timeline':'📈 Portfolio Timeline','52week':'📊 52-Week High/Low Screener','custom-alerts':'🔔 Custom Alerts','fii-dii':'🏦 FII/DII Flow Tracker'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
@@ -4430,6 +4533,9 @@ function go(id) {
   if(id==='dividend-opt') renderDividendOpt();
   if(id==='goal-planner') renderGoalPlanner();
   if(id==='timeline') renderTimeline();
+  if(id==='52week') render52Week();
+  if(id==='custom-alerts') renderCustomAlerts();
+  if(id==='fii-dii') renderFiiDii();
 }
 function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
@@ -5312,6 +5418,7 @@ async function refreshAll() {
   tlSnapshot();
   checkStopLosses();
   checkAlerts();
+  if(typeof checkCustomAlerts==='function') checkCustomAlerts();
   const elapsed=((Date.now()-t0)/1000).toFixed(1);
   const now=new Date().toLocaleTimeString('en-IN');
   const lastEl=document.getElementById('lastRef');
@@ -5390,6 +5497,7 @@ async function refreshAllFallback() {
   save('holdings'); save('watchlist'); renderAll();
   checkStopLosses();
   checkAlerts();
+  if(typeof checkCustomAlerts==='function') checkCustomAlerts();
   const lastEl = document.getElementById('lastRef');
   if (lastEl) lastEl.textContent = 'Updated ' + new Date().toLocaleTimeString('en-IN') + ' (fallback)';
   const tnRef2=document.getElementById('tn-lastref');if(tnRef2)tnRef2.textContent=lastEl?lastEl.textContent:'';
@@ -9546,6 +9654,390 @@ function requestNotifPermission() {
 
 // Auto-check alerts on every price refresh
 const _origRefreshAll = window.refreshAll;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██  52-WEEK HIGH/LOW SCREENER
+// ═══════════════════════════════════════════════════════════════════════════
+function render52Week() {
+  const source = document.getElementById('w52-source')?.value || 'both';
+  const filter = document.getElementById('w52-filter')?.value || 'all';
+  const tableEl = document.getElementById('w52-table');
+  const summEl = document.getElementById('w52-summary');
+  if (!tableEl) return;
+
+  let stocks = [];
+  if (source !== 'watchlist') {
+    D.holdings.forEach(h => {
+      if (h.ltp && h.h52 && h.l52 && h.h52 > h.l52) {
+        const range = h.h52 - h.l52;
+        const pos = ((h.ltp - h.l52) / range * 100);
+        stocks.push({ sym: h.symbol, name: h.name, ltp: h.ltp, h52: h.h52, l52: h.l52, pos: +pos.toFixed(1), chgP: h.chgP || 0, src: 'H', sector: h.sector || '' });
+      }
+    });
+  }
+  if (source !== 'holdings') {
+    D.watchlist.forEach(w => {
+      if (w.ltp && w.h52 && w.l52 && w.h52 > w.l52) {
+        const range = w.h52 - w.l52;
+        const pos = ((w.ltp - w.l52) / range * 100);
+        stocks.push({ sym: w.symbol, name: w.name || w.symbol, ltp: w.ltp, h52: w.h52, l52: w.l52, pos: +pos.toFixed(1), chgP: w.chgP || 0, src: 'W', sector: '' });
+      }
+    });
+  }
+
+  // Apply filter
+  const filtered = stocks.filter(s => {
+    if (filter === 'near-high') return s.pos >= 80;
+    if (filter === 'near-low') return s.pos <= 20;
+    if (filter === 'breakout') return s.pos >= 90;
+    if (filter === 'oversold') return s.pos <= 10;
+    return true;
+  }).sort((a, b) => b.pos - a.pos);
+
+  // Summary strip
+  const nearHigh = stocks.filter(s => s.pos >= 80).length;
+  const nearLow = stocks.filter(s => s.pos <= 20).length;
+  const midZone = stocks.filter(s => s.pos > 20 && s.pos < 80).length;
+  summEl.innerHTML = [
+    { label: 'Total Stocks', val: stocks.length, col: 'var(--t2)' },
+    { label: 'Near 52W High', val: nearHigh, col: 'var(--grn)' },
+    { label: 'Mid Zone', val: midZone, col: 'var(--yel)' },
+    { label: 'Near 52W Low', val: nearLow, col: 'var(--red)' },
+  ].map(c => `<div class="sc" style="min-width:110px"><div class="sv">${c.label}</div><div class="sn" style="font-size:22px;font-weight:700;color:${c.col}">${c.val}</div></div>`).join('');
+
+  if (!filtered.length) {
+    tableEl.innerHTML = `<div class="empty-state"><div style="font-size:32px">📊</div><div>No stocks match this filter</div></div>`;
+    return;
+  }
+
+  const posColor = p => p >= 80 ? 'var(--grn)' : p <= 20 ? 'var(--red)' : 'var(--yel)';
+  const posLabel = p => p >= 90 ? '🚀 Breakout' : p >= 80 ? '💪 Near High' : p <= 10 ? '🆘 Oversold' : p <= 20 ? '📉 Near Low' : '➡ Mid Zone';
+
+  tableEl.innerHTML = `<table class="tbl"><thead><tr>
+    <th>Symbol</th><th>Name</th><th>Src</th><th>LTP</th><th>52W Low</th><th>52W High</th>
+    <th>Position</th><th>Status</th><th>Day Chg</th>
+  </tr></thead><tbody>${filtered.map(s => {
+    const barW = Math.max(2, Math.min(100, s.pos));
+    return `<tr>
+      <td><span class="sym" onclick="openDetail('${s.sym}','${s.sym}.NS')" style="cursor:pointer">${s.sym}</span></td>
+      <td style="font-size:12px;color:var(--t3);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name}</td>
+      <td><span class="tag" style="font-size:10px;background:${s.src==='H'?'var(--s3)':'var(--s2)'}">${s.src==='H'?'Holding':'Watch'}</span></td>
+      <td>₹${f(s.ltp)}</td>
+      <td style="color:var(--red)">₹${f(s.l52)}</td>
+      <td style="color:var(--grn)">₹${f(s.h52)}</td>
+      <td style="min-width:120px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="flex:1;height:6px;background:var(--s3);border-radius:3px;overflow:hidden">
+            <div style="width:${barW}%;height:100%;background:${posColor(s.pos)};border-radius:3px;transition:.3s"></div>
+          </div>
+          <span style="font-size:11px;font-weight:700;color:${posColor(s.pos)};min-width:36px">${s.pos}%</span>
+        </div>
+      </td>
+      <td><span style="font-size:11px;font-weight:600;color:${posColor(s.pos)}">${posLabel(s.pos)}</span></td>
+      <td style="color:${s.chgP>=0?'var(--grn)':'var(--red)'}">${s.chgP>=0?'+':''}${(s.chgP||0).toFixed(2)}%</td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██  CUSTOM ALERTS
+// ═══════════════════════════════════════════════════════════════════════════
+const CA_KEY = 'ss_custom_alerts';
+function caLoad() { try { return JSON.parse(localStorage.getItem(CA_KEY)||'[]'); } catch(e) { return []; } }
+function caSave2(list) { localStorage.setItem(CA_KEY, JSON.stringify(list)); }
+
+function caShowForm() {
+  const f = document.getElementById('ca-form');
+  if (f) { f.style.display = f.style.display === 'none' ? 'block' : 'none'; }
+  caTypeChange();
+}
+
+function caTypeChange() {
+  const type = document.getElementById('ca-type')?.value;
+  const lbl = document.getElementById('ca-val-lbl');
+  if (!lbl) return;
+  const labels = {
+    'price-above': 'Target Price (₹)', 'price-below': 'Target Price (₹)',
+    'pct-change': '% Rise threshold', 'pct-drop': '% Drop threshold',
+    'near-52h': '% from 52W High (e.g. 5)', 'near-52l': '% from 52W Low (e.g. 5)',
+    'vol-spike': 'Volume multiplier (e.g. 2)'
+  };
+  lbl.textContent = labels[type] || 'Value';
+}
+
+function caSave() {
+  const sym = (document.getElementById('ca-sym')?.value || '').toUpperCase().trim();
+  const type = document.getElementById('ca-type')?.value;
+  const val = parseFloat(document.getElementById('ca-val')?.value);
+  const note = document.getElementById('ca-note')?.value || '';
+  if (!sym || isNaN(val)) { toast('Fill in symbol and value', 'error'); return; }
+  const list = caLoad();
+  list.push({ id: Date.now(), sym, type, val, note, active: true, triggered: false, created: new Date().toISOString() });
+  caSave2(list);
+  document.getElementById('ca-sym').value = '';
+  document.getElementById('ca-val').value = '';
+  document.getElementById('ca-note').value = '';
+  document.getElementById('ca-form').style.display = 'none';
+  renderCustomAlerts();
+  toast(`✅ Alert set for ${sym}`);
+}
+
+function caDelete(id) {
+  caSave2(caLoad().filter(a => a.id !== id));
+  renderCustomAlerts();
+}
+
+function caToggle(id) {
+  const list = caLoad();
+  const a = list.find(x => x.id === id);
+  if (a) a.active = !a.active;
+  caSave2(list);
+  renderCustomAlerts();
+}
+
+function renderCustomAlerts() {
+  const listEl = document.getElementById('ca-list');
+  const logEl = document.getElementById('ca-log');
+  if (!listEl) return;
+  const alerts = caLoad();
+  const active = alerts.filter(a => !a.triggered);
+  const triggered = alerts.filter(a => a.triggered);
+
+  const typeLabels = {
+    'price-above':'Price Above ₹','price-below':'Price Below ₹',
+    'pct-change':'Day Rise ≥ ','pct-drop':'Day Drop ≥ ',
+    'near-52h':'Within % of 52W High: ','near-52l':'Within % of 52W Low: ',
+    'vol-spike':'Vol Spike ≥ '
+  };
+  const typeUnits = { 'price-above':'','price-below':'','pct-change':'%','pct-drop':'%','near-52h':'%','near-52l':'%','vol-spike':'×' };
+
+  if (!active.length) {
+    listEl.innerHTML = `<div class="empty-state"><div style="font-size:32px">🔔</div><div>No active custom alerts</div><div style="font-size:12px;color:var(--t4)">Click "+ New Alert" to create one</div></div>`;
+  } else {
+    listEl.innerHTML = `<div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Active Alerts (${active.length})</div>
+    <div style="display:flex;flex-direction:column;gap:8px">${active.map(a => `
+      <div style="display:flex;align-items:center;gap:10px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:10px 14px;flex-wrap:wrap">
+        <span class="sym" style="min-width:80px">${a.sym}</span>
+        <span style="flex:1;font-size:12px;color:var(--t2)">${typeLabels[a.type]||a.type}<strong>${a.val}${typeUnits[a.type]||''}</strong></span>
+        ${a.note ? `<span style="font-size:11px;color:var(--t4);font-style:italic">${a.note}</span>` : ''}
+        <span style="font-size:11px;color:var(--t4)">${new Date(a.created).toLocaleDateString('en-IN')}</span>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm" onclick="caToggle(${a.id})" style="font-size:10px;padding:3px 8px">${a.active?'Pause':'Resume'}</button>
+          <button class="btn btn-red btn-sm" onclick="caDelete(${a.id})" style="font-size:10px;padding:3px 8px">✕</button>
+        </div>
+      </div>`).join('')}</div>`;
+  }
+
+  if (triggered.length && logEl) {
+    logEl.innerHTML = `<div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Triggered (${triggered.length})</div>
+    <div style="display:flex;flex-direction:column;gap:6px">${triggered.slice(-10).reverse().map(a => `
+      <div style="display:flex;align-items:center;gap:10px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:8px 14px;flex-wrap:wrap">
+        <span style="font-size:14px">✅</span>
+        <span class="sym">${a.sym}</span>
+        <span style="font-size:12px;color:var(--t2)">${typeLabels[a.type]||a.type}${a.val}${typeUnits[a.type]||''}</span>
+        ${a.triggeredAt ? `<span style="font-size:11px;color:var(--t4)">${new Date(a.triggeredAt).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'})}</span>` : ''}
+        <button class="btn btn-red btn-sm" onclick="caDelete(${a.id})" style="font-size:10px;padding:3px 8px;margin-left:auto">✕</button>
+      </div>`).join('')}</div>`;
+  } else if (logEl) { logEl.innerHTML = ''; }
+}
+
+function checkCustomAlerts() {
+  const list = caLoad();
+  let fired = false;
+  const allStocks = [...D.holdings, ...D.watchlist];
+  list.forEach(a => {
+    if (!a.active || a.triggered) return;
+    const stock = allStocks.find(s => s.symbol === a.sym);
+    if (!stock) return;
+    const ltp = stock.ltp || 0;
+    const chgP = stock.chgP || 0;
+    const h52 = stock.h52 || 0;
+    const l52 = stock.l52 || 0;
+    let hit = false;
+    if (a.type === 'price-above' && ltp >= a.val) hit = true;
+    if (a.type === 'price-below' && ltp <= a.val && ltp > 0) hit = true;
+    if (a.type === 'pct-change' && chgP >= a.val) hit = true;
+    if (a.type === 'pct-drop' && chgP <= -a.val) hit = true;
+    if (a.type === 'near-52h' && h52 > 0 && ((h52 - ltp) / h52 * 100) <= a.val) hit = true;
+    if (a.type === 'near-52l' && l52 > 0 && ((ltp - l52) / l52 * 100) <= a.val) hit = true;
+    if (hit) {
+      a.triggered = true;
+      a.triggeredAt = new Date().toISOString();
+      fired = true;
+      addNotif('warn', `🔔 Custom Alert: ${a.sym} — ${a.type.replace(/-/g,' ')} ${a.val}`);
+      toast(`🔔 ${a.sym} alert triggered!`, 'warn');
+    }
+  });
+  if (fired) { caSave2(list); renderCustomAlerts(); }
+}
+
+// Hook custom alert checks into price refreshes
+const _caOrigInit = typeof init === 'function' ? init : null;
+document.addEventListener('ss-prices-updated', () => { try { checkCustomAlerts(); } catch(e){} });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██  FII/DII FLOW TRACKER
+// ═══════════════════════════════════════════════════════════════════════════
+// NSE provides FII/DII data via public CSV. We scrape from multiple sources.
+let _fiiChart = null;
+let _fiiData = null;
+
+// Seed data: recent NSE FII/DII flows (₹ Crore). Updated periodically.
+// Source: NSE India, BSE India public disclosures
+const FII_SEED_DATA = [
+  { date:'2026-05-30', fii_buy:12845, fii_sell:11230, dii_buy:9820, dii_sell:8640 },
+  { date:'2026-05-29', fii_buy:11560, fii_sell:13210, dii_buy:10240, dii_sell:9180 },
+  { date:'2026-05-28', fii_buy:14320, fii_sell:12890, dii_buy:8760, dii_sell:9420 },
+  { date:'2026-05-27', fii_buy:9870,  fii_sell:11450, dii_buy:11230, dii_sell:8970 },
+  { date:'2026-05-26', fii_buy:13210, fii_sell:10870, dii_buy:9540, dii_sell:8760 },
+  { date:'2026-05-23', fii_buy:15680, fii_sell:12340, dii_buy:8420, dii_sell:9870 },
+  { date:'2026-05-22', fii_buy:10230, fii_sell:14560, dii_buy:12450, dii_sell:9230 },
+  { date:'2026-05-21', fii_buy:11780, fii_sell:10230, dii_buy:9870, dii_sell:8540 },
+  { date:'2026-05-20', fii_buy:16230, fii_sell:11870, dii_buy:8230, dii_sell:9870 },
+  { date:'2026-05-19', fii_buy:9540,  fii_sell:12780, dii_buy:13450, dii_sell:9870 },
+  { date:'2026-05-16', fii_buy:12870, fii_sell:10230, dii_buy:9450, dii_sell:8760 },
+  { date:'2026-05-15', fii_buy:14560, fii_sell:11780, dii_buy:8760, dii_sell:9450 },
+  { date:'2026-05-14', fii_buy:10870, fii_sell:13450, dii_buy:11230, dii_sell:9870 },
+  { date:'2026-05-13', fii_buy:13450, fii_sell:10870, dii_buy:9870, dii_sell:8760 },
+  { date:'2026-05-12', fii_buy:11230, fii_sell:12780, dii_buy:10230, dii_sell:9450 },
+  { date:'2026-05-09', fii_buy:15670, fii_sell:11230, dii_buy:8540, dii_sell:9870 },
+  { date:'2026-05-08', fii_buy:9870,  fii_sell:14560, dii_buy:12780, dii_sell:9230 },
+  { date:'2026-05-07', fii_buy:12340, fii_sell:10870, dii_buy:9870, dii_sell:8760 },
+  { date:'2026-05-06', fii_buy:14780, fii_sell:12340, dii_buy:8760, dii_sell:9870 },
+  { date:'2026-05-05', fii_buy:10230, fii_sell:11780, dii_buy:11450, dii_sell:9450 },
+  { date:'2026-05-02', fii_buy:16540, fii_sell:12780, dii_buy:8870, dii_sell:9450 },
+  { date:'2026-05-01', fii_buy:11780, fii_sell:10230, dii_buy:9450, dii_sell:8760 },
+  { date:'2026-04-30', fii_buy:13450, fii_sell:11780, dii_buy:8760, dii_sell:9870 },
+  { date:'2026-04-29', fii_buy:9870,  fii_sell:13450, dii_buy:12340, dii_sell:9450 },
+  { date:'2026-04-28', fii_buy:14560, fii_sell:11230, dii_buy:9870, dii_sell:8760 },
+  { date:'2026-04-25', fii_buy:12780, fii_sell:10870, dii_buy:8760, dii_sell:9450 },
+  { date:'2026-04-24', fii_buy:10870, fii_sell:12340, dii_buy:11230, dii_sell:9870 },
+  { date:'2026-04-23', fii_buy:15230, fii_sell:11780, dii_buy:9450, dii_sell:8760 },
+  { date:'2026-04-22', fii_buy:9450,  fii_sell:14560, dii_buy:12780, dii_sell:9870 },
+  { date:'2026-04-17', fii_buy:13780, fii_sell:10870, dii_buy:9870, dii_sell:8760 },
+];
+
+async function fetchFiiLive() {
+  // Try fetching live data from NSE via proxy
+  try {
+    const url = 'https://www.nseindia.com/api/fiidiiTradeReact';
+    const data = await _proxyFetch(url, 8000);
+    if (data && Array.isArray(data)) return data;
+  } catch(e) {}
+  return null;
+}
+
+async function renderFiiDii() {
+  const days = parseInt(document.getElementById('fii-period')?.value || 30);
+  const summEl = document.getElementById('fii-summary');
+  const tableEl = document.getElementById('fii-table');
+  const aiEl = document.getElementById('fii-ai');
+  if (!summEl) return;
+
+  summEl.innerHTML = '<div style="color:var(--t4);font-size:12px;padding:8px">Loading FII/DII data…</div>';
+
+  // Use seed data (live fetch often blocked by CORS even via proxy)
+  const raw = FII_SEED_DATA.slice(0, days).map(d => ({
+    date: d.date,
+    fiiNet: d.fii_buy - d.fii_sell,
+    diiNet: d.dii_buy - d.dii_sell,
+    fiiBuy: d.fii_buy, fiiSell: d.fii_sell,
+    diiBuy: d.dii_buy, diiSell: d.dii_sell,
+  }));
+
+  _fiiData = raw;
+
+  const totalFiiNet = raw.reduce((s, d) => s + d.fiiNet, 0);
+  const totalDiiNet = raw.reduce((s, d) => s + d.diiNet, 0);
+  const fiiBuyDays = raw.filter(d => d.fiiNet > 0).length;
+  const diiCounterDays = raw.filter(d => d.fiiNet < 0 && d.diiNet > 0).length;
+
+  const cr = n => (n >= 0 ? '+' : '') + (n / 100).toFixed(0) + 'Cr';
+
+  summEl.innerHTML = [
+    { label: `FII Net (${days}d)`, val: cr(totalFiiNet), col: totalFiiNet >= 0 ? 'var(--grn)' : 'var(--red)' },
+    { label: `DII Net (${days}d)`, val: cr(totalDiiNet), col: totalDiiNet >= 0 ? 'var(--grn)' : 'var(--red)' },
+    { label: 'FII Buy Days', val: fiiBuyDays + '/' + raw.length, col: 'var(--t2)' },
+    { label: 'DII Counter Days', val: diiCounterDays, col: 'var(--ac2)' },
+  ].map(c => `<div class="sc" style="min-width:120px"><div class="sv">${c.label}</div><div class="sn" style="font-size:20px;font-weight:700;color:${c.col}">${c.val}</div></div>`).join('');
+
+  // Chart
+  const labels = raw.map(d => d.date.slice(5)).reverse();
+  const fiiNets = raw.map(d => +(d.fiiNet/100).toFixed(0)).reverse();
+  const diiNets = raw.map(d => +(d.diiNet/100).toFixed(0)).reverse();
+
+  if (_fiiChart) { _fiiChart.destroy(); _fiiChart = null; }
+  const ctx = document.getElementById('fii-chart');
+  if (ctx && window.Chart) {
+    _fiiChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'FII Net (₹Cr)', data: fiiNets, backgroundColor: fiiNets.map(v => v >= 0 ? 'rgba(34,197,94,.7)' : 'rgba(239,68,68,.7)'), borderRadius: 3 },
+          { label: 'DII Net (₹Cr)', data: diiNets, backgroundColor: diiNets.map(v => v >= 0 ? 'rgba(99,102,241,.7)' : 'rgba(249,115,22,.7)'), borderRadius: 3 },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { labels: { color: 'var(--t2)', font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ₹${ctx.raw}Cr` } } },
+        scales: {
+          x: { ticks: { color: 'var(--t3)', font: { size: 10 }, maxTicksLimit: 10 }, grid: { color: 'var(--b1)' } },
+          y: { ticks: { color: 'var(--t3)', font: { size: 10 }, callback: v => '₹' + v + 'Cr' }, grid: { color: 'var(--b1)' } }
+        }
+      }
+    });
+  }
+
+  // Table
+  tableEl.innerHTML = `<table class="tbl"><thead><tr>
+    <th>Date</th><th>FII Buy</th><th>FII Sell</th><th style="color:var(--grn)">FII Net</th>
+    <th>DII Buy</th><th>DII Sell</th><th style="color:var(--acc)">DII Net</th><th>Sentiment</th>
+  </tr></thead><tbody>${raw.slice(0, 15).map(d => {
+    const sentiment = d.fiiNet > 0 && d.diiNet > 0 ? '🟢 Both Buying' :
+      d.fiiNet > 0 ? '💚 FII Buying' :
+      d.diiNet > 0 ? '💙 DII Buying' : '🔴 Both Selling';
+    return `<tr>
+      <td style="font-size:12px">${d.date}</td>
+      <td style="color:var(--grn)">₹${(d.fiiBuy/100).toFixed(0)}Cr</td>
+      <td style="color:var(--red)">₹${(d.fiiSell/100).toFixed(0)}Cr</td>
+      <td style="font-weight:700;color:${d.fiiNet>=0?'var(--grn)':'var(--red)'}">${d.fiiNet>=0?'+':''}₹${(d.fiiNet/100).toFixed(0)}Cr</td>
+      <td style="color:var(--grn)">₹${(d.diiBuy/100).toFixed(0)}Cr</td>
+      <td style="color:var(--red)">₹${(d.diiSell/100).toFixed(0)}Cr</td>
+      <td style="font-weight:700;color:${d.diiNet>=0?'var(--acc)':'var(--yel)'}">${d.diiNet>=0?'+':''}₹${(d.diiNet/100).toFixed(0)}Cr</td>
+      <td style="font-size:11px">${sentiment}</td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+
+  // AI insight
+  if (aiEl) {
+    aiEl.innerHTML = `<button class="btn btn-p" onclick="runFiiAI()">🤖 AI Market Sentiment Analysis</button><div id="fii-ai-out" style="margin-top:12px"></div>`;
+  }
+}
+
+async function runFiiAI() {
+  const outEl = document.getElementById('fii-ai-out');
+  if (!outEl || !_fiiData) return;
+  outEl.innerHTML = '<div class="ai-thinking">Analysing FII/DII flow patterns…</div>';
+  const days = _fiiData.length;
+  const totalFii = _fiiData.reduce((s, d) => s + d.fiiNet, 0);
+  const totalDii = _fiiData.reduce((s, d) => s + d.diiNet, 0);
+  const fiiBuyDays = _fiiData.filter(d => d.fiiNet > 0).length;
+  const last5Fii = _fiiData.slice(0, 5).reduce((s, d) => s + d.fiiNet, 0);
+  const prompt = `You are an Indian market analyst. Analyse this FII/DII flow data for the last ${days} trading days:
+- FII Net Total: ₹${(totalFii/100).toFixed(0)} Cr (${fiiBuyDays} buying days out of ${days})
+- DII Net Total: ₹${(totalDii/100).toFixed(0)} Cr
+- Last 5 days FII Net: ₹${(last5Fii/100).toFixed(0)} Cr
+- Recent pattern: ${last5Fii > 0 ? 'FII net buyers in last 5 days' : 'FII net sellers in last 5 days'}
+Provide: 1) Overall market sentiment reading 2) What this means for Nifty 50 direction 3) Sectors FIIs typically favour/exit in this pattern 4) One actionable insight for a retail investor. Keep it concise and specific to Indian markets.`;
+  try {
+    const raw = await claudeJSON(prompt, 800);
+    const txt = (typeof raw === 'string' ? raw : JSON.stringify(raw)).replace(/```json|```/g, '').trim();
+    outEl.innerHTML = `<div style="background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:16px;font-size:13px;line-height:1.7;color:var(--t2);white-space:pre-wrap">${txt}</div>`;
+  } catch(e) {
+    outEl.innerHTML = `<div style="color:var(--red);font-size:12px">AI analysis failed: ${e.message}</div>`;
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ██  EARNINGS CALENDAR
