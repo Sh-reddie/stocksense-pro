@@ -1635,7 +1635,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="sg sg-4" style="margin-bottom:16px">
       <div class="sc c1"><div class="sv">My Portfolio</div><div class="sn" id="bm-port-ret" style="font-size:22px">—</div><div class="sv">total return</div></div>
       <div class="sc c2"><div class="sv">Nifty 50</div><div class="sn" id="bm-n50-ret" style="font-size:22px">—</div><div class="sv">^NSEI</div></div>
-      <div class="sc c3"><div class="sv">Nifty Midcap 100</div><div class="sn" id="bm-nsc-ret" style="font-size:22px">—</div><div class="sv">^CNXMID</div></div>
+      <div class="sc c3"><div class="sv">Nifty Midcap 50</div><div class="sn" id="bm-nsc-ret" style="font-size:22px">—</div><div class="sv">^NSMIDCP</div></div>
       <div class="sc"><div class="sv">Alpha (vs Nifty 50)</div><div class="sn" id="bm-alpha" style="font-size:22px">—</div><div class="sv">excess return</div></div>
     </div>
     <div class="pn" style="margin-bottom:14px">
@@ -1644,7 +1644,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="bm-legend">
           <span style="display:flex;align-items:center;gap:5px"><span class="bm-legend-dot" style="background:var(--ac)"></span><span class="bm-legend-lbl">My Portfolio</span></span>
           <span style="display:flex;align-items:center;gap:5px"><span class="bm-legend-dot" style="background:var(--grn)"></span><span class="bm-legend-lbl">Nifty 50</span></span>
-          <span style="display:flex;align-items:center;gap:5px"><span class="bm-legend-dot" style="background:var(--yel)"></span><span class="bm-legend-lbl">Midcap 100</span></span>
+          <span style="display:flex;align-items:center;gap:5px"><span class="bm-legend-dot" style="background:var(--yel)"></span><span class="bm-legend-lbl">Midcap 50</span></span>
         </div>
       </div>
       <div class="pn-b"><canvas id="bm-chart" height="220" style="width:100%"></canvas></div>
@@ -9704,7 +9704,7 @@ async function loadBenchmark() {
 
   const [n50Data, nscData] = await Promise.all([
     fetchIndexPrice('^NSEI'),
-    fetchIndexPrice('^CNXMID').then(d => d || fetchIndexPrice('^CNXSC')) // NIFTY MIDCAP 100 (SmallCap has no YF history)
+    fetchIndexPrice('^NSMIDCP').then(d => d || fetchIndexPrice('^CNXMID')) // NIFTY MIDCAP 50
   ]);
 
   const calcReturn = data => {
@@ -9736,7 +9736,7 @@ async function loadBenchmark() {
   } else {
     nscEl.textContent = 'N/A';
     nscEl.style.color = 'var(--t4)';
-    nscEl.title = 'Midcap 100 data unavailable from Yahoo Finance for this period.';
+    nscEl.title = 'Midcap 50 data unavailable from Yahoo Finance for this period.';
   }
 
   // Draw chart
@@ -9782,7 +9782,7 @@ function drawBmChart(n50Data, nscData, portRet, n50Ret, nscRet) {
   }
   if(nscData && nscData.length>1) {
     const baseNsc = nscData[0].v;
-    datasets.push({ label:'Midcap 100', data: nscData.map(p=>+(p.v/baseNsc*100).toFixed(2)), borderColor:'#fbbf24', backgroundColor:'rgba(251,191,36,.07)', borderWidth:2, pointRadius:0, tension:0.3, fill:false });
+    datasets.push({ label:'Midcap 50', data: nscData.map(p=>+(p.v/baseNsc*100).toFixed(2)), borderColor:'#fbbf24', backgroundColor:'rgba(251,191,36,.07)', borderWidth:2, pointRadius:0, tension:0.3, fill:false });
   }
   // Portfolio straight line
   const pts = (n50Data||[{t:new Date()}]).map((_,i,arr)=>100 + (portRet||0)*(i/(arr.length-1||1)));
