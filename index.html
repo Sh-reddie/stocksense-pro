@@ -3748,6 +3748,43 @@ textarea.fi{resize:vertical;min-height:70px;}
   </div>
 </div>
 
+<!-- SELL FROM HOLDINGS MODAL -->
+<div class="mb" id="m-sellhold">
+  <div class="md">
+    <div class="md-h"><div class="md-title">🟡 Sell Holding</div><button class="x-btn" onclick="closeM('sellhold')">✕</button></div>
+    <div class="md-b">
+      <div class="fr gap">
+        <div class="fg" style="margin-bottom:0"><label class="fl">Symbol</label><input type="text" class="fi" id="sh-sym" readonly style="opacity:.6"></div>
+        <div class="fg" style="margin-bottom:0"><label class="fl">Exchange</label><input type="text" class="fi" id="sh-ex" readonly style="opacity:.6"></div>
+      </div>
+      <div class="fr3 gap" style="margin-top:8px">
+        <div class="fg" style="margin-bottom:0">
+          <label class="fl">Sell Qty *</label>
+          <input type="number" class="fi" id="sh-qty" min="1" oninput="shUpdatePL()">
+          <div style="font-size:10px;color:var(--t4);margin-top:2px">Held: <span id="sh-held">—</span></div>
+        </div>
+        <div class="fg" style="margin-bottom:0"><label class="fl">Avg Buy ₹</label><input type="number" class="fi" id="sh-bp" readonly style="opacity:.6" step="0.01"></div>
+        <div class="fg" style="margin-bottom:0">
+          <label class="fl">Sell Price ₹ *</label>
+          <input type="number" class="fi" id="sh-sp" step="0.01" oninput="shUpdatePL()">
+        </div>
+      </div>
+      <div class="fr gap" style="margin-top:8px">
+        <div class="fg"><label class="fl">Buy Date</label><input type="date" class="fi" id="sh-bd" readonly style="opacity:.6"></div>
+        <div class="fg"><label class="fl">Sell Date *</label><input type="date" class="fi" id="sh-sd"></div>
+      </div>
+      <div id="sh-pl-preview" style="margin-top:10px;padding:10px;border-radius:8px;background:var(--bg3);font-size:13px;display:none">
+        <span id="sh-pl-text"></span>
+        <span id="sh-tax-tag" style="margin-left:8px"></span>
+      </div>
+    </div>
+    <div class="md-f">
+      <button class="btn btn-g" onclick="closeM('sellhold')">Cancel</button>
+      <button class="btn btn-yel" onclick="executeSell()">Log Sell</button>
+    </div>
+  </div>
+</div>
+
 <!-- ADD DIVIDEND MODAL -->
 <div class="mb" id="m-adddiv">
   <div class="md">
@@ -6288,7 +6325,7 @@ function renderHoldings() {
             </div>
           </td>`;
         }
-        case 'act':return`<td style="white-space:nowrap"><button class="btn btn-g btn-xs" onclick="openDetail(${h.id})" style="margin-right:4px">Detail</button><button class="btn btn-red btn-xs" onclick="rmHolding(${h.id})">✕</button></td>`;
+        case 'act':return`<td style="white-space:nowrap"><button class="btn btn-g btn-xs" onclick="openDetail(${h.id})" style="margin-right:4px">Detail</button><button class="btn btn-yel btn-xs" onclick="openSellModal(${h.id})" style="margin-right:4px" title="Log a sell trade">Sell</button><button class="btn btn-red btn-xs" onclick="rmHolding(${h.id})">✕</button></td>`;
         default:return'<td>—</td>';
       }
     }
@@ -7418,6 +7455,71 @@ function renderRealised() {
   document.getElementById('rpl-bs').textContent=best.symbol;
 }
 function rmTrade(id){D.realised=D.realised.filter(r=>r.id!==id);save('realised');renderRealised();renderSummary();}
+
+let _sellHoldId = null;
+function openSellModal(id) {
+  const h = D.holdings.find(x => x.id === id);
+  if (!h) return;
+  _sellHoldId = id;
+  document.getElementById('sh-sym').value  = h.symbol || '';
+  document.getElementById('sh-ex').value   = h.exchange || 'NSE';
+  document.getElementById('sh-qty').value  = h.qty || 1;
+  document.getElementById('sh-held').textContent = h.qty || '—';
+  document.getElementById('sh-bp').value   = h.avgPrice || '';
+  document.getElementById('sh-sp').value   = h.ltp || h.avgPrice || '';
+  document.getElementById('sh-bd').value   = h.buyDate || '';
+  document.getElementById('sh-sd').value   = new Date().toISOString().slice(0,10);
+  document.getElementById('sh-pl-preview').style.display = 'none';
+  shUpdatePL();
+  openM('sellhold');
+}
+function shUpdatePL() {
+  const qty = parseFloat(document.getElementById('sh-qty').value);
+  const bp  = parseFloat(document.getElementById('sh-bp').value);
+  const sp  = parseFloat(document.getElementById('sh-sp').value);
+  const bd  = document.getElementById('sh-bd').value;
+  const sd  = document.getElementById('sh-sd').value;
+  const prev = document.getElementById('sh-pl-preview');
+  if (!qty || !bp || !sp) { prev.style.display='none'; return; }
+  const pl = (sp - bp) * qty;
+  const days = bd && sd ? Math.floor((new Date(sd)-new Date(bd))/864e5) : 0;
+  const tt = taxType(days);
+  const pct = (sp - bp) / bp * 100;
+  const plText = `P&L: ${pl>=0?'+':''}₹${fI(Math.abs(pl))} (${fP(pct)})  ·  Hold: ${days}d`;
+  document.getElementById('sh-pl-text').textContent = plText;
+  document.getElementById('sh-pl-text').style.color = pl >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('sh-tax-tag').innerHTML = `<span class="tag ${tt==='LTCG'?'t-ltcg':'t-stcg'}">${tt}</span>`;
+  prev.style.display = 'block';
+}
+function executeSell() {
+  const h = D.holdings.find(x => x.id === _sellHoldId);
+  if (!h) { toast('Holding not found','error'); return; }
+  const sym  = document.getElementById('sh-sym').value.toUpperCase();
+  const exch = document.getElementById('sh-ex').value;
+  const qty  = parseFloat(document.getElementById('sh-qty').value);
+  const bp   = parseFloat(document.getElementById('sh-bp').value);
+  const sp   = parseFloat(document.getElementById('sh-sp').value);
+  const bd   = document.getElementById('sh-bd').value;
+  const sd   = document.getElementById('sh-sd').value;
+  if (!qty || !sp || !sd) { toast('Fill sell qty, price and date','error'); return; }
+  if (qty > h.qty) { toast(`Can't sell more than held (${h.qty})`, 'error'); return; }
+  const pl = (sp - bp) * qty;
+  const days = bd && sd ? Math.floor((new Date(sd)-new Date(bd))/864e5) : 0;
+  D.realised.push({id:Date.now(),symbol:sym,name:h.name||sym,exchange:exch,qty,buyPrice:bp,sellPrice:sp,buyDate:bd,sellDate:sd,pl,plPct:(sp-bp)/bp*100,holdDays:days,taxType:taxType(days)});
+  save('realised');
+  // Reduce or remove holding
+  if (qty >= h.qty) {
+    D.holdings = D.holdings.filter(x => x.id !== _sellHoldId);
+    toast(`${sym} sold completely — P&L ₹${fI(pl)}`, pl>=0?'success':'warn');
+  } else {
+    h.qty -= qty;
+    h.invested = h.avgPrice * h.qty;
+    toast(`${sym} partial sell (${qty} units) — P&L ₹${fI(pl)}`, pl>=0?'success':'warn');
+  }
+  save('holdings');
+  closeM('sellhold');
+  renderAll();
+}
 
 // ═══════════════════════════════════════════════════
 // DIVIDENDS
