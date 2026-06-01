@@ -36,7 +36,7 @@ export async function onRequestGet({ request }) {
       );
       if (r.ok) {
         const data = await r.json();
-        if (data?.chart?.result?.[0]?.meta?.regularMarketPrice) {
+        if (data?.chart?.result?.[0]) {
           return new Response(JSON.stringify(data), {
             headers: { ...CORS, 'Content-Type': 'application/json' },
           });
