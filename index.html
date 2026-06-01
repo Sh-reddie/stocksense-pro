@@ -3150,6 +3150,8 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div style="font-size:12px;font-weight:600;color:var(--t2);margin-bottom:10px">Net Flow (₹ Cr) — FII vs DII</div>
       <canvas id="fii-chart" height="80"></canvas>
     </div>
+    <!-- Data note -->
+    <div id="fii-note"></div>
     <!-- Table -->
     <div id="fii-table"></div>
     <!-- AI insight -->
@@ -9131,7 +9133,9 @@ async function handleFile(file, type) {
     const firstLine=txt.split('\n')[0];
     const delim=firstLine.split('\t').length>firstLine.split(',').length?'\t':',';
     ilog('🔍 Delimiter: '+(delim==='\t'?'TAB':'COMMA'));
-    const rows2d=txt.trim().split('\n').map(line=>line.split(delim).map(c=>c.replace(/^"|"$/g,'').trim()));
+    // RFC 4180 compliant row parser — handles quoted fields containing delimiters/newlines
+    const parseCSVRow=(line,d)=>{const fields=[];let cur='',inQ=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++;}else{inQ=!inQ;}}else if(ch===d&&!inQ){fields.push(cur.trim());cur='';}else{cur+=ch;}}fields.push(cur.trim());return fields;};
+    const rows2d=txt.trim().split('\n').map(line=>parseCSVRow(line,delim));
     ilog('📊 '+rows2d.length+' rows');
     if(type==='holdings')await importHoldingsV2(rows2d);
     if(type==='realised')importRealisedV2(rows2d);
@@ -9705,8 +9709,18 @@ function render52Week() {
     { label: 'Near 52W Low', val: nearLow, col: 'var(--red)' },
   ].map(c => `<div class="sc" style="min-width:110px"><div class="sv">${c.label}</div><div class="sn" style="font-size:22px;font-weight:700;color:${c.col}">${c.val}</div></div>`).join('');
 
+  if (!stocks.length) {
+    tableEl.innerHTML = `<div class="empty-state" style="padding:40px;text-align:center">
+      <div style="font-size:36px;margin-bottom:12px">📉</div>
+      <div style="font-weight:600;color:var(--t2);margin-bottom:8px">No 52-week data available yet</div>
+      <div style="color:var(--t4);font-size:13px">Add stocks to your holdings or watchlist, then refresh prices to populate 52W high/low data.</div>
+      <button class="btn btn-p btn-sm" style="margin-top:16px" onclick="refreshAll().then(()=>render52Week())">↻ Refresh Prices</button>
+    </div>`;
+    summEl.innerHTML = '';
+    return;
+  }
   if (!filtered.length) {
-    tableEl.innerHTML = `<div class="empty-state"><div style="font-size:32px">📊</div><div>No stocks match this filter</div></div>`;
+    tableEl.innerHTML = `<div class="empty-state" style="padding:40px;text-align:center"><div style="font-size:32px">🔍</div><div style="margin-top:8px;color:var(--t3)">No stocks match this filter</div></div>`;
     return;
   }
 
@@ -10013,6 +10027,10 @@ async function renderFiiDii() {
     </tr>`;
   }).join('')}</tbody></table>`;
 
+  // Data source note
+  const noteEl = document.getElementById('fii-note');
+  if (noteEl) noteEl.innerHTML = `<div style="font-size:11px;color:var(--t4);margin-bottom:8px">📌 Historical seed data (30 days). Live NSE API data fetched when available.</div>`;
+
   // AI insight
   if (aiEl) {
     aiEl.innerHTML = `<button class="btn btn-p" onclick="runFiiAI()">🤖 AI Market Sentiment Analysis</button><div id="fii-ai-out" style="margin-top:12px"></div>`;
@@ -10219,12 +10237,11 @@ async function loadBenchmark() {
     alphaEl.textContent = (alpha>=0?'+':'')+alpha.toFixed(2)+'%';
     alphaEl.style.color = alpha>=0?'var(--grn)':'var(--red)';
   } else {
-    n50El.textContent = 'Proxy err';
+    n50El.innerHTML = '<span title="Yahoo Finance data temporarily unavailable. Click Refresh to retry." style="cursor:pointer;text-decoration:underline dotted" onclick="renderBenchmark()">Unavailable ↻</span>';
     n50El.style.color = 'var(--yel)';
-    n50El.title = 'Yahoo Finance blocked by proxy. Try refreshing or use a local server.';
     alphaEl.textContent = '—';
     alphaEl.style.color = 'var(--t4)';
-    toast('⚠ Nifty 50 fetch failed — proxy may be rate-limited. Retry in 30s.', 'warn');
+    toast('⚠ Nifty 50 data unavailable — tap the cell to retry.', 'warn');
   }
   if(nscRet !== null) {
     nscEl.textContent = (nscRet>=0?'+':'')+nscRet.toFixed(2)+'%';
