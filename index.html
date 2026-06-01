@@ -9967,6 +9967,10 @@ async function renderFiiDii() {
   const diiNets = raw.map(d => +(d.diiNet/100).toFixed(0)).reverse();
 
   if (_fiiChart) { _fiiChart.destroy(); _fiiChart = null; }
+  // Load Chart.js dynamically if not present
+  if (!window.Chart) {
+    await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+  }
   const ctx = document.getElementById('fii-chart');
   if (ctx && window.Chart) {
     _fiiChart = new Chart(ctx, {
