@@ -1059,6 +1059,18 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="dsh-val" id="ds-cagr">—</div>
       </div>
       <div class="dsh-div"></div>
+      <div class="dsh-stat" title="Annualised Sharpe ratio (excess return / volatility). >1 is good, >2 is excellent.">
+        <div class="dsh-lbl">Sharpe Ratio</div>
+        <div class="dsh-val" id="ds-sharpe">—</div>
+        <div class="dsh-sub" id="ds-sharpe-lbl">—</div>
+      </div>
+      <div class="dsh-div"></div>
+      <div class="dsh-stat" title="Max Drawdown: worst peak-to-trough loss across holdings">
+        <div class="dsh-lbl">Max Drawdown</div>
+        <div class="dsh-val" id="ds-drawdown">—</div>
+        <div class="dsh-sub" id="ds-drawdown-lbl">—</div>
+      </div>
+      <div class="dsh-div"></div>
       <div class="dsh-stat" style="cursor:pointer" onclick="go('risk')">
         <div class="dsh-lbl">Health Score</div>
         <div class="dsh-val" id="ds-health">—</div>
@@ -1449,7 +1461,7 @@ textarea.fi{resize:vertical;min-height:70px;}
 
   <!-- ═══ TAX ═══════════════════════════════════════ -->
   <div class="sec" id="sec-tax">
-    <div class="sec-head"><div class="sec-title">Tax P&L Report</div><div style="display:flex;gap:8px"><select class="fi" id="tax-fy" style="width:150px" onchange="renderTax()"><option value="2025-26">FY 2025-26</option><option value="2024-25">FY 2024-25</option></select><button class="btn btn-g" onclick="exportTaxCSV()">⬇ Export</button><button class="btn btn-p" onclick="genTaxAI()">🤖 Tax Advisory</button></div></div>
+    <div class="sec-head"><div class="sec-title">Tax P&L Report</div><div style="display:flex;gap:8px"><select class="fi" id="tax-fy" style="width:150px" onchange="renderTax()"><option value="2025-26">FY 2025-26</option><option value="2024-25">FY 2024-25</option></select><button class="btn btn-g" onclick="exportTaxCSV()">⬇ CSV</button><button class="btn btn-g" onclick="exportExcel()" title="Full portfolio Excel for CA">📊 Excel</button><button class="btn btn-p" onclick="genTaxAI()">🤖 Tax Advisory</button></div></div>
     <div class="tabs"><div class="tab on" onclick="stab('tx','tax-main')">📊 P&amp;L Report</div><div class="tab" onclick="stab('tx','tax-harvest');renderTaxHarvesting()">🌾 Harvesting</div><div class="tab" onclick="stab('tx','tax-optimizer');renderTaxOptimizer()" style="font-weight:600;color:var(--ac)">🧮 AI Optimizer</div></div>
     <div id="tax-main" class="tp on">
       <div class="sg sg-4 gap">
@@ -3326,6 +3338,7 @@ textarea.fi{resize:vertical;min-height:70px;}
               ⬆ Import Backup
               <input type="file" accept=".json" style="display:none" onchange="importBackup(this)">
             </label>
+            <button class="btn btn-g btn-sm" onclick="exportExcel()" title="Export full portfolio to Excel for CA / tax filing">📊 Export Excel (CA)</button>
           </div>
           <div id="storage-status" style="margin-top:10px;font-size:11px;color:var(--t4)"></div>
         </div>
@@ -6466,6 +6479,46 @@ function renderSummary() {
     } else { el_cagr.textContent = '< 1M'; el_cagr.className='dsh-val'; }
   } else if(el_cagr) { el_cagr.textContent = '—'; }
 
+  // Sharpe ratio: (portfolio return - risk-free rate) / std dev of individual returns
+  // Approximation: use weighted avg return of each holding vs portfolio avg, rf=6%
+  const sharpeEl = document.getElementById('ds-sharpe');
+  const sharpeLblEl = document.getElementById('ds-sharpe-lbl');
+  if (sharpeEl && D.holdings.length >= 2 && inv > 0) {
+    const rf = 0.06; // 6% risk-free rate (approx Indian 10yr bond)
+    const returns = D.holdings.map(h => (h.ltp||h.avgPrice) / h.avgPrice - 1);
+    const weights = D.holdings.map(h => (h.qty*h.avgPrice)/inv);
+    const portReturn = returns.reduce((s,r,i) => s + r*weights[i], 0);
+    const mean = returns.reduce((s,r) => s+r, 0) / returns.length;
+    const variance = returns.reduce((s,r) => s + Math.pow(r-mean,2), 0) / returns.length;
+    const stddev = Math.sqrt(variance);
+    if (stddev > 0.001) {
+      const annualPortReturn = portReturn; // already total return, annualise approx
+      const avgDays2 = D.holdings.reduce((s,h)=>s+(hDays(h.buyDate)||365),0)/D.holdings.length;
+      const years2 = Math.max(avgDays2/365, 0.1);
+      const annualReturn = Math.pow(1+portReturn, 1/years2) - 1;
+      const annualStd = stddev * Math.sqrt(252/Math.max(avgDays2,1));
+      const sharpe = annualStd > 0 ? (annualReturn - rf) / annualStd : 0;
+      sharpeEl.textContent = f(sharpe,2);
+      sharpeEl.className = 'dsh-val ' + (sharpe>=1?'up':sharpe>=0?'':'dn');
+      if(sharpeLblEl) sharpeLblEl.textContent = sharpe>=2?'Excellent':sharpe>=1?'Good':sharpe>=0?'Fair':'Poor';
+    } else { sharpeEl.textContent='—'; if(sharpeLblEl) sharpeLblEl.textContent='—'; }
+  } else if(sharpeEl) { sharpeEl.textContent='—'; if(sharpeLblEl) sharpeLblEl.textContent='need ≥2 stocks'; }
+
+  // Max Drawdown: max peak-to-trough loss across all holdings (each stock's own drawdown from avg price to ltp)
+  const ddEl = document.getElementById('ds-drawdown');
+  const ddLblEl = document.getElementById('ds-drawdown-lbl');
+  if (ddEl && D.holdings.length) {
+    const drawdowns = D.holdings.map(h => {
+      const ltp = h.ltp || h.avgPrice;
+      return (ltp - h.avgPrice) / h.avgPrice * 100;
+    });
+    const maxDD = Math.min(...drawdowns); // most negative
+    ddEl.textContent = (maxDD>=0?'+':'')+f(maxDD,1)+'%';
+    ddEl.className = 'dsh-val ' + (maxDD >= 0 ? 'up' : 'dn');
+    const worstStock = D.holdings[drawdowns.indexOf(maxDD)];
+    if(ddLblEl) ddLblEl.textContent = worstStock ? worstStock.symbol : '—';
+  } else if(ddEl) { ddEl.textContent='—'; }
+
   // Health score
   const healthScore = calcHealthScore();
   const el_h = document.getElementById('ds-health');
@@ -7788,6 +7841,19 @@ function renderNiftyBenchmark() {
   const el = document.getElementById('nifty-benchmark-card');
   if (!el) return;
   if (!D.holdings.length) { el.innerHTML='<div style="color:var(--t4);font-size:12px">Add holdings to see benchmark comparison.</div>'; return; }
+  // Guard: if no holding has a live LTP yet, results are meaningless — warn instead
+  const pricesLoaded = D.holdings.some(h => h.ltp && h.ltp !== h.avgPrice);
+  if (!pricesLoaded) {
+    el.innerHTML=`<div style="display:flex;align-items:center;gap:10px;padding:14px;background:var(--s2);border-radius:8px;border-left:3px solid var(--ylw)">
+      <span style="font-size:20px">⏳</span>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--t1)">Live prices not loaded yet</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:2px">Please wait for price refresh to complete, then click <strong>Calculate</strong> again for an accurate XIRR comparison.</div>
+        <button class="btn btn-g btn-sm" style="margin-top:8px" onclick="refreshAll().then(renderNiftyBenchmark)">↻ Refresh Prices &amp; Calculate</button>
+      </div>
+    </div>`;
+    return;
+  }
   const r = calcNiftyBenchmarkXIRR();
   if (!r) { el.innerHTML='<div style="color:var(--t4);font-size:12px">Insufficient data.</div>'; return; }
   const beat = r.portXirr !== null && r.niftyXirr !== null && r.portXirr > r.niftyXirr;
@@ -7916,6 +7982,61 @@ function renderTax() {
     const tax=r.taxType==='LTCG'?Math.max(0,(r.pl-125000/trades.length))*0.125:r.pl>0?r.pl*0.20:0;
     return`<tr><td class="sym">${r.symbol}</td><td class="mn">${r.qty}</td><td style="font-size:11px">${r.buyDate}</td><td style="font-size:11px">${r.sellDate}</td><td class="mn">${r.holdDays}d</td><td class="mn">₹${fI(r.qty*r.buyPrice)}</td><td class="mn">₹${fI(r.qty*r.sellPrice)}</td><td class="mn ${cls(r.pl)}">${r.pl>=0?'+':''}₹${fI(Math.abs(r.pl))}</td><td><span class="tag ${r.taxType==='LTCG'?'t-ltcg':'t-stcg'}">${r.taxType}</span></td><td class="mn ${tax>0?'dn':''}">${tax>0?'₹'+fI(tax):'—'}</td></tr>`;
   }).join('');
+}
+async function exportExcel() {
+  // Load SheetJS from CDN if not already loaded
+  if (!window.XLSX) {
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload=res; s.onerror=rej;
+      document.head.appendChild(s);
+    });
+  }
+  const wb = XLSX.utils.book_new();
+  const today = new Date().toISOString().split('T')[0];
+
+  // Sheet 1: Holdings
+  const holdRows = [['Symbol','Name','Exchange','Qty','Avg Price','LTP','Invested','Current Value','P&L','P&L %','Days Held','Tax Type','Buy Date','Stop Loss','Target 1','Target 2']];
+  D.holdings.forEach(h => {
+    const ltp = h.ltp||h.avgPrice;
+    const inv = h.qty*h.avgPrice;
+    const cv = h.qty*ltp;
+    const pl = cv-inv;
+    const plp = inv>0?pl/inv*100:0;
+    const days = hDays(h.buyDate)||0;
+    holdRows.push([h.symbol,h.name||h.symbol,h.exchange||'NSE',h.qty,h.avgPrice,ltp,inv,cv,+pl.toFixed(2),+plp.toFixed(2),days,taxType(days),h.buyDate||'',h.stopLoss||'',h.target1||'',h.target2||'']);
+  });
+  const wsH = XLSX.utils.aoa_to_sheet(holdRows);
+  wsH['!cols'] = holdRows[0].map((_,i)=>({wch:[12,24,10,8,12,12,14,14,12,10,10,10,12,12,12,12][i]||12}));
+  XLSX.utils.book_append_sheet(wb, wsH, 'Holdings');
+
+  // Sheet 2: Realised P&L
+  const rplRows = [['Symbol','Exchange','Qty','Buy Price','Sell Price','Buy Date','Sell Date','Hold Days','P&L','P&L %','Tax Type']];
+  D.realised.forEach(r => rplRows.push([r.symbol,r.exchange||'NSE',r.qty,r.buyPrice,r.sellPrice,r.buyDate||'',r.sellDate||'',r.holdDays||0,+r.pl.toFixed(2),+r.plPct.toFixed(2),r.taxType]));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rplRows), 'Realised P&L');
+
+  // Sheet 3: Dividends
+  const divRows = [['Symbol','Date','Amount/Share','Shares','Total','Type']];
+  (D.dividends||[]).forEach(d => divRows.push([d.symbol,d.exDate||d.date||'',d.amtPerShare||d.amount||0,d.shares||0,+((d.amtPerShare||d.amount||0)*(d.shares||0)).toFixed(2),d.type||'']));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(divRows), 'Dividends');
+
+  // Sheet 4: Summary
+  const inv2 = D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0);
+  const cv2  = D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
+  const rpl  = D.realised.reduce((s,r)=>s+r.pl,0);
+  const sumRows = [
+    ['StockSense Pro — Portfolio Export','','Generated: '+today],[''],
+    ['Metric','Value'],
+    ['Invested',+inv2.toFixed(2)],['Current Value',+cv2.toFixed(2)],
+    ['Unrealised P&L',+(cv2-inv2).toFixed(2)],['Unrealised %',inv2>0?+((cv2-inv2)/inv2*100).toFixed(2):0],
+    ['Realised P&L',+rpl.toFixed(2)],['Total P&L',+(cv2-inv2+rpl).toFixed(2)],
+    ['Holdings Count',D.holdings.length],['Closed Trades',D.realised.length],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sumRows), 'Summary');
+
+  XLSX.writeFile(wb, `StockSense_${today}.xlsx`);
+  toast('✅ Excel exported — StockSense_'+today+'.xlsx');
 }
 function exportTaxCSV(){const fy=document.getElementById('tax-fy')?.value||'2025-26';let csv='Symbol,Qty,Buy Date,Sell Date,Hold Days,Buy Price,Sell Price,P&L,Tax Type\n';D.realised.forEach(r=>{csv+=`${r.symbol},${r.qty},${r.buyDate},${r.sellDate},${r.holdDays},${r.buyPrice},${r.sellPrice},${r.pl.toFixed(2)},${r.taxType}\n`;});const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='TaxPL_'+fy+'.csv';a.click();}
 async function genTaxAI(){const fy=document.getElementById('tax-fy')?.value||'2025-26';const box=document.getElementById('tax-ai');box.innerHTML='<div class="ai-ld"><div class="spin"></div> Generating tax advisory…</div>';const stcg=D.realised.filter(r=>r.taxType==='STCG').reduce((s,r)=>s+r.pl,0);const ltcg=D.realised.filter(r=>r.taxType==='LTCG').reduce((s,r)=>s+r.pl,0);const upcoming=D.holdings.map(h=>`${h.symbol}: held ${hDays(h.buyDate)||0}d, P&L ${(((h.ltp||h.avgPrice)-h.avgPrice)/h.avgPrice*100).toFixed(1)}%`).join('; ');const r=await claude(`Tax advisory FY ${fy} for an Indian equity investor. Educational estimate only; ask the user to confirm with a qualified tax professional before transacting.\nSTCG (generally @20% after 23 Jul 2024): ₹${fI(stcg)} | LTCG (generally @12.5% above ₹1.25L): ₹${fI(ltcg)}\nOpen positions: ${upcoming||'None'}\nAdvise: (1) Tax-loss harvesting opportunities, (2) Which holdings to delay exit past 12-month LTCG mark, (3) LTCG ₹1.25L exemption planning, (4) Dividend tax at slab rate, (5) Re-entry caution so harvesting is commercially justifiable and not superficial churn. Be specific with stock names and timing.`);box.innerHTML=`<div class="ai-txt">${md2h(r)}</div>`;}
