@@ -216,6 +216,14 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 .ds-ic-sub { font-size:11px; color:var(--t4); margin-top:4px; }
 
 /* ── Investment OS Control Tower ─────────────────────────── */
+/* Smart LTCG alert */
+#ds-ltcg-alert { background:linear-gradient(135deg,rgba(251,191,36,.08),rgba(34,197,94,.06)); border:1px solid rgba(251,191,36,.35); border-radius:12px; padding:14px 18px; }
+.ltcg-alert-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.ltcg-alert-title { font-size:13px; font-weight:700; color:var(--yel); }
+.ltcg-alert-row { display:flex; align-items:center; gap:10px; padding:7px 0; border-top:1px solid var(--b2); flex-wrap:wrap; }
+.ltcg-chip { font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px; background:rgba(251,191,36,.15); color:var(--yel); border:1px solid rgba(251,191,36,.3); white-space:nowrap; }
+.ltcg-save { font-size:11px; font-weight:700; color:var(--grn); }
+
 /* Quick Actions strip */
 #ds-quick-actions { display:flex; gap:8px; margin-bottom:14px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
 #ds-quick-actions::-webkit-scrollbar { display:none; }
@@ -1040,6 +1048,11 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="dsh-val" id="ds-xirr">—</div>
       </div>
       <div class="dsh-div"></div>
+      <div class="dsh-stat" title="Simple CAGR based on average holding period">
+        <div class="dsh-lbl">CAGR (p.a.)</div>
+        <div class="dsh-val" id="ds-cagr">—</div>
+      </div>
+      <div class="dsh-div"></div>
       <div class="dsh-stat" style="cursor:pointer" onclick="go('risk')">
         <div class="dsh-lbl">Health Score</div>
         <div class="dsh-val" id="ds-health">—</div>
@@ -1065,6 +1078,9 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div style="color:var(--t4);font-size:12px;padding:8px 0">Run AI Analysis to get your daily market brief and stock signals →</div>
       </div>
     </div>
+
+    <!-- ── Smart LTCG Alert ───────────────────────────────── -->
+    <div id="ds-ltcg-alert" style="display:none;margin-bottom:14px"></div>
 
     <!-- ── Quick Actions ──────────────────────────────────── -->
     <div id="ds-quick-actions">
@@ -1139,6 +1155,8 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="ds-ic" id="ds-ic-winner"><div class="ds-ic-lbl">🏆 Top Winner</div><div class="ds-ic-val" style="color:var(--t4)">—</div></div>
         <div class="ds-ic" id="ds-ic-loser"><div class="ds-ic-lbl">📉 Biggest Drag</div><div class="ds-ic-val" style="color:var(--t4)">—</div></div>
         <div class="ds-ic" id="ds-ic-conc"><div class="ds-ic-lbl">📊 Concentration</div><div class="ds-ic-val" style="color:var(--t4)">—</div></div>
+        <div class="ds-ic" id="ds-ic-capalloc"><div class="ds-ic-lbl">🏢 Cap Allocation</div><div id="ds-capalloc-bars" style="margin-top:6px"></div></div>
+        <div class="ds-ic" id="ds-ic-ltcg"><div class="ds-ic-lbl">🧾 Tax Split</div><div id="ds-tax-split" style="color:var(--t4);font-size:12px">—</div></div>
       </div>
     </div>
 
@@ -1161,10 +1179,10 @@ textarea.fi{resize:vertical;min-height:70px;}
                 <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--t4);font-weight:600">STOCK</th>
                 <th style="padding:8px 12px;text-align:right;font-size:11px;color:var(--t4);font-weight:600">LTP</th>
                 <th style="padding:8px 12px;text-align:right;font-size:11px;color:var(--t4);font-weight:600">TODAY</th>
-                <th style="padding:8px 12px;text-align:right;font-size:11px;color:var(--t4);font-weight:600">P&amp;L</th>
                 <th style="padding:8px 12px;text-align:right;font-size:11px;color:var(--t4);font-weight:600">P&amp;L%</th>
+                <th style="padding:8px 12px;text-align:center;font-size:11px;color:var(--t4);font-weight:600">TAX</th>
+                <th style="padding:8px 12px;text-align:right;font-size:11px;color:var(--t4);font-weight:600">SL DIST</th>
                 <th style="padding:8px 12px;text-align:center;font-size:11px;color:var(--t4);font-weight:600">SIGNAL</th>
-                <th style="padding:8px 12px;text-align:right;font-size:11px;color:var(--t4);font-weight:600">TARGET</th>
               </tr></thead>
               <tbody id="dash-htbl"></tbody>
             </table>
@@ -6262,6 +6280,53 @@ function renderHoldings() {
 // ═══════════════════════════════════════════════════
 // DASHBOARD HOLDINGS MINI
 // ═══════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+// SMART LTCG ALERT — tax countdown for Indian investors
+// Shows holdings within 45 days of crossing the 1-year
+// LTCG threshold, with estimated tax savings.
+// ═══════════════════════════════════════════════════
+function renderLtcgAlert() {
+  const el = document.getElementById('ds-ltcg-alert');
+  if (!el) return;
+  const WINDOW = 45; // days before 1-year mark to start showing alert
+  const STCG_RATE = 0.20, LTCG_RATE = 0.125, LTCG_EXEMPT = 125000;
+  const near = D.holdings.filter(h => {
+    const days = hDays(h.buyDate) || 0;
+    return days >= (365 - WINDOW) && days < 365;
+  }).map(h => {
+    const days = hDays(h.buyDate) || 0;
+    const daysLeft = 365 - days;
+    const ltp = h.ltp || h.avgPrice;
+    const gain = (ltp - h.avgPrice) * h.qty;
+    // Tax saved = difference between STCG and LTCG on gains above exemption
+    const taxableGain = Math.max(0, gain - LTCG_EXEMPT);
+    const taxSavedEst = gain > 0 ? Math.round(gain * (STCG_RATE - LTCG_RATE)) : 0;
+    return { ...h, days, daysLeft, gain, taxSavedEst };
+  }).filter(h => h.gain > 0).sort((a, b) => a.daysLeft - b.daysLeft);
+
+  if (!near.length) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  const totalSaving = near.reduce((s, h) => s + h.taxSavedEst, 0);
+  el.innerHTML = `
+    <div class="ltcg-alert-hd">
+      <div class="ltcg-alert-title">⏳ Tax Smart Alert — LTCG Countdown</div>
+      <div style="font-size:12px;color:var(--t3)">Hold these to save <strong style="color:var(--grn)">~₹${fI(totalSaving)}</strong> in tax</div>
+    </div>
+    <div style="font-size:11px;color:var(--t4);margin-bottom:8px">These holdings cross the 1-year LTCG threshold soon. <strong>Don't sell yet</strong> — STCG tax (20%) becomes LTCG (12.5%) after the date shown.</div>
+    ${near.map(h => {
+      const ltcgDate = new Date(new Date(h.buyDate).getTime() + 365*864e5);
+      const dateStr = ltcgDate.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+      return `<div class="ltcg-alert-row">
+        <div style="min-width:90px"><strong style="font-size:13px">${h.symbol}</strong><div style="font-size:10px;color:var(--t4)">${h.name||''}</div></div>
+        <span class="ltcg-chip">⏳ ${h.daysLeft}d to go</span>
+        <div style="font-size:11px;color:var(--t3)">LTCG on <strong>${dateStr}</strong></div>
+        <div class="ltcg-save" style="margin-left:auto">Save ~₹${fI(h.taxSavedEst)}</div>
+        <div style="font-size:10px;color:var(--t4);min-width:80px">Gain: ₹${fI(Math.round(h.gain))}</div>
+      </div>`;
+    }).join('')}
+    <div style="font-size:10px;color:var(--t4);margin-top:8px">* Estimated saving vs STCG @ 20%. LTCG exemption of ₹1.25L/year not factored per stock. Consult your CA.</div>`;
+}
+
 function renderDashHoldings() {
   const tbody = document.getElementById('dash-htbl');
   const emptyEl = document.getElementById('ds-empty-hold');
@@ -6273,19 +6338,31 @@ function renderDashHoldings() {
   if(emptyEl) emptyEl.style.display = 'none';
   tbody.innerHTML = D.holdings.map(h => {
     const ltp = h.ltp || h.avgPrice;
-    const pl = (ltp - h.avgPrice) * h.qty;
     const plp = ((ltp - h.avgPrice) / h.avgPrice * 100);
-    const tgt = h.target1 || +(ltp * 1.15).toFixed(2);
-    const tgtUp = ((tgt - ltp) / ltp * 100);
+    const days = hDays(h.buyDate) || 0;
+    const isLtcg = days >= 365;
+    const daysToLtcg = 365 - days;
+    const nearLtcg = !isLtcg && daysToLtcg <= 45;
+    // Tax badge
+    const taxBadge = isLtcg
+      ? `<span class="tag t-ltcg" style="font-size:9px">LTCG</span>`
+      : nearLtcg
+        ? `<span class="tag" style="font-size:9px;background:rgba(251,191,36,.15);color:var(--yel);border:1px solid rgba(251,191,36,.3)">${daysToLtcg}d</span>`
+        : `<span class="tag t-stcg" style="font-size:9px">STCG</span>`;
+    // SL distance
+    const sl = h.stopLoss || h.avgPrice * 0.92;
+    const slDist = ((ltp - sl) / ltp * 100);
+    const slColor = slDist <= 5 ? 'var(--red)' : slDist <= 10 ? 'var(--yel)' : 'var(--t3)';
+    const slIcon = slDist <= 5 ? '🔴' : slDist <= 10 ? '⚠' : '';
     const sigClass = h.signal?.includes('BUY') ? 'tag t-buy' : h.signal === 'HOLD' ? 'tag t-hold' : 'tag t-sell';
     return `<tr onclick="openDetail(${h.id})" style="cursor:pointer;border-bottom:1px solid var(--b2)" onmouseover="this.style.background='var(--s2)'" onmouseout="this.style.background=''">
-      <td style="padding:9px 12px"><div class="sym">${h.symbol}</div><div class="snm">${h.name||''}</div></td>
-      <td style="padding:9px 12px;text-align:right;font-family:var(--mono);font-size:13px;font-weight:600">₹${f(ltp)}${h.ltpStale?` <span title="Live price unavailable — showing avg buy price" style="color:var(--yel);font-size:10px;cursor:help">⚠</span>`:''}</td>
-      <td style="padding:9px 12px;text-align:right" class="mn ${cls(h.chgP||0)}">${fP(h.chgP||0)}</td>
-      <td style="padding:9px 12px;text-align:right" class="mn ${cls(pl)}">${pl>=0?'+':''}₹${fI(Math.abs(pl))}</td>
-      <td style="padding:9px 12px;text-align:right" class="mn ${cls(plp)}">${fP(plp)}</td>
-      <td style="padding:9px 12px;text-align:center"><span class="${sigClass}">${h.signal||'HOLD'}</span></td>
-      <td style="padding:9px 12px;text-align:right"><div style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--grn)">₹${f(tgt)}</div><div style="font-size:9.5px;color:var(--t4)">${fP(tgtUp)}</div></td>
+      <td style="padding:8px 12px"><div class="sym">${h.symbol}</div><div class="snm" style="font-size:10px;color:var(--t4)">${days}d · ${h.name||''}</div></td>
+      <td style="padding:8px 12px;text-align:right;font-family:var(--mono);font-size:13px;font-weight:600">₹${f(ltp)}${h.ltpStale?` <span title="Stale price" style="color:var(--yel);font-size:10px">⚠</span>`:''}</td>
+      <td style="padding:8px 12px;text-align:right" class="mn ${cls(h.chgP||0)}">${fP(h.chgP||0)}</td>
+      <td style="padding:8px 12px;text-align:right" class="mn ${cls(plp)}">${fP(plp)}</td>
+      <td style="padding:8px 12px;text-align:center">${taxBadge}</td>
+      <td style="padding:8px 12px;text-align:right;font-family:var(--mono);font-size:12px;color:${slColor}" title="Stop Loss: ₹${f(sl)}">${slIcon} ${fP(slDist)}</td>
+      <td style="padding:8px 12px;text-align:center"><span class="${sigClass}">${h.signal||'HOLD'}</span></td>
     </tr>`;
   }).join('');
 }
@@ -6319,6 +6396,19 @@ function renderSummary() {
     const el_x = document.getElementById('ds-xirr');
     if(el_x) el_x.className = 'dsh-val ' + (xirrRate>=0?'up':'dn');
   } else { set('ds-xirr', '—'); }
+  // Simple CAGR = (cv/inv)^(1/years) - 1, using avg holding period
+  const el_cagr = document.getElementById('ds-cagr');
+  if(el_cagr && inv > 0 && cv > 0) {
+    const avgDays = D.holdings.length
+      ? D.holdings.reduce((s,h)=>(s+(hDays(h.buyDate)||0)),0)/D.holdings.length
+      : 0;
+    const years = avgDays / 365;
+    if(years >= 0.1) {
+      const cagr = (Math.pow(cv/inv, 1/years) - 1) * 100;
+      el_cagr.textContent = (cagr>=0?'+':'')+f(cagr,1)+'%';
+      el_cagr.className = 'dsh-val ' + (cagr>=0?'up':'dn');
+    } else { el_cagr.textContent = '< 1M'; el_cagr.className='dsh-val'; }
+  } else if(el_cagr) { el_cagr.textContent = '—'; }
 
   // Health score
   const healthScore = calcHealthScore();
@@ -6335,6 +6425,8 @@ function renderSummary() {
   const elRpl=document.getElementById('ds-rpl'); if(elRpl){elRpl.textContent=(rpl>=0?'+':'')+'₹'+fI(Math.abs(rpl));elRpl.className='sc-val '+cls(rpl);}
   set('ds-rc', D.realised.length+' trades');
   set('ds-pos', D.holdings.length+' positions');
+  // LTCG alert
+  if(typeof renderLtcgAlert==='function') renderLtcgAlert();
   const el_sent = document.getElementById('ds-sent'); if(el_sent) el_sent.textContent = '—';
 
   // Holdings strip for holdings page
@@ -8525,6 +8617,70 @@ function renderDashInsights() {
       <div class="ds-ic-val" style="color:${warn ? 'var(--red)' : 'var(--grn)'}">${topPct.toFixed(1)}%</div>
       <div class="ds-ic-sub">${warn ? 'Over-concentrated' : 'Well diversified'}</div>`;
     concEl.style.borderColor = warn ? 'rgba(239,68,68,.45)' : '';
+  }
+
+  // Market-cap allocation
+  const capBarsEl = document.getElementById('ds-capalloc-bars');
+  if (capBarsEl && totalVal > 0) {
+    // Classify each holding by market cap from STOCKS_DB mcap field
+    // Large: >₹20K Cr, Mid: ₹5K–₹20K Cr, Small: <₹5K Cr, Unknown
+    const capMap = { Large:0, Mid:0, Small:0, Unknown:0 };
+    holdings.forEach(h => {
+      const val = (+(h.ltp||h.avgPrice||0)) * (+(h.qty||0));
+      const dbEntry = STOCKS_DB.find(s => s.sym === h.symbol);
+      const mcapStr = dbEntry?.mcap || h.mcap || '';
+      let cap = 'Unknown';
+      if (mcapStr && mcapStr !== '—') {
+        const m = mcapStr.replace(/[₹,\s]/g,'');
+        const num = parseFloat(m);
+        if (m.endsWith('LCr') || m.includes('L Cr')) { // lakhs of crores → very large
+          cap = 'Large';
+        } else if (m.includes('L')) {
+          const v = num; // e.g. 1.2L = 1.2 lakh crore
+          cap = v >= 0.2 ? 'Large' : v >= 0.05 ? 'Mid' : 'Small'; // >₹20K Cr, >₹5K Cr
+        } else if (m.includes('K')) {
+          const v = num * 1000; // convert K Cr to Cr
+          cap = v >= 20000 ? 'Large' : v >= 5000 ? 'Mid' : 'Small';
+        }
+      }
+      capMap[cap] = (capMap[cap]||0) + val;
+    });
+    const capDefs = [
+      { k:'Large', label:'Large', color:'#3b82f6' },
+      { k:'Mid',   label:'Mid',   color:'#8b5cf6' },
+      { k:'Small', label:'Small', color:'#f59e0b' },
+      { k:'Unknown', label:'N/A', color:'#64748b' },
+    ].filter(c => capMap[c.k] > 0);
+    capBarsEl.innerHTML = capDefs.map(c => {
+      const pct = (capMap[c.k]/totalVal*100).toFixed(1);
+      return `<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
+        <div style="width:8px;height:8px;border-radius:50%;background:${c.color};flex-shrink:0"></div>
+        <div style="flex:1;height:4px;background:var(--s3);border-radius:2px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${c.color};border-radius:2px"></div>
+        </div>
+        <span style="font-size:10px;font-weight:600;color:var(--t2);min-width:28px">${pct}%</span>
+        <span style="font-size:10px;color:var(--t4);min-width:32px">${c.label}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // Tax split (STCG vs LTCG unrealised value)
+  const taxSplitEl = document.getElementById('ds-tax-split');
+  if (taxSplitEl && totalVal > 0) {
+    const ltcgVal = holdings.filter(h => (hDays(h.buyDate)||0) >= 365)
+      .reduce((s,h) => s + (+(h.ltp||h.avgPrice||0))*(+(h.qty||0)), 0);
+    const stcgVal = totalVal - ltcgVal;
+    const ltcgPct = (ltcgVal/totalVal*100).toFixed(0);
+    const stcgPct = (stcgVal/totalVal*100).toFixed(0);
+    const nearCount = holdings.filter(h => { const d=hDays(h.buyDate)||0; return d>=320 && d<365 && (h.ltp||h.avgPrice) > h.avgPrice; }).length;
+    taxSplitEl.innerHTML = `
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <span style="font-size:13px;font-weight:700;color:var(--cyn)">${ltcgPct}%</span>
+        <span style="font-size:11px;color:var(--t4)">LTCG</span>
+        <span style="font-size:13px;font-weight:700;color:var(--orn)">${stcgPct}%</span>
+        <span style="font-size:11px;color:var(--t4)">STCG</span>
+      </div>
+      ${nearCount ? `<div style="font-size:10px;color:var(--yel);margin-top:3px">⏳ ${nearCount} near LTCG</div>` : ''}`;
   }
 }
 
