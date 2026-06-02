@@ -10424,14 +10424,15 @@ async function claude(prompt, sys) {
                 signal: AbortSignal.timeout(60000)
               });
               const d2 = await r2.json();
-              if(!d2.error) return d2.choices?.[0]?.message?.content || 'Analysis unavailable.';
+              if(!d2.error) { const _m2=d2.choices?.[0]?.message; return (_m2?.content||_m2?.reasoning||'').replace(/<think>[\s\S]*?<\/think>/gi,'').trim() || 'Analysis unavailable.'; }
             } catch(e2) { /* try next */ }
           }
           return '⚠ All AI models are temporarily unavailable on OpenRouter. Please try again in a few minutes.';
         }
         return '⚠ OpenRouter error ['+r.status+']: '+errMsg;
       }
-      let content = d.choices?.[0]?.message?.content || '';
+      const _m = d.choices?.[0]?.message;
+      let content = (_m?.content || _m?.reasoning || '');
       // Strip <think>…</think> reasoning blocks from reasoning models
       content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
       const finishReason = d.choices?.[0]?.finish_reason;
@@ -10447,7 +10448,8 @@ async function claude(prompt, sys) {
         });
         const d3 = await r3.json();
         if(!d3.error) {
-          let c3 = d3.choices?.[0]?.message?.content || '';
+          const _m3 = d3.choices?.[0]?.message;
+          let c3 = (_m3?.content || _m3?.reasoning || '');
           c3 = c3.replace(/<think>[\s\S]*?<\/think>/gi,'').trim();
           return c3 || 'Analysis unavailable.';
         }
@@ -10519,7 +10521,8 @@ async function claudeJSON(prompt, sys) {
         ilog && ilog('⚠ claudeJSON: "'+model+'" failed ('+((d.error.message||'').slice(0,40))+'), trying next...', 'warn');
         continue;
       }
-      const content = d.choices?.[0]?.message?.content;
+      const _msg = d.choices?.[0]?.message;
+      const content = _msg?.content || _msg?.reasoning || '';
       const finishReason = d.choices?.[0]?.finish_reason;
       // Skip if empty, truncated (any length-limited finish), or clearly too short to be valid JSON
       if (!content || content.length < 50 || finishReason === 'length') {
@@ -18100,6 +18103,7 @@ async function _chatCallAI(sysPrompt, messages) {
   // Fallback cascade tried automatically if primary is unavailable
   const CHAT_FALLBACKS = [
     'meta-llama/llama-3.3-70b-instruct:free',
+    'z-ai/glm-4.5-air:free',
     'google/gemma-3-27b-it:free',
     'mistralai/mistral-7b-instruct:free',
     'nousresearch/hermes-3-llama-3.1-405b:free'
@@ -18116,7 +18120,7 @@ async function _chatCallAI(sysPrompt, messages) {
 
   // Attempt a single model — returns content or throws with coded prefix
   async function _tryModel(m) {
-    const reasoningModels = ['nemotron', 'deepseek-r1', 'qwq', 'flash-thinking', 'o1', 'o3'];
+    const reasoningModels = ['nemotron', 'deepseek-r1', 'qwq', 'flash-thinking', 'o1', 'o3', 'glm', 'r1t', 'chimera'];
     const isReasoning = reasoningModels.some(kw => m.toLowerCase().includes(kw));
     const timeoutMs = isReasoning ? 90000 : 30000;
     const controller = new AbortController();
@@ -18150,7 +18154,8 @@ async function _chatCallAI(sysPrompt, messages) {
         throw new Error(`UNAVAIL:${m}`);
       throw new Error(msg);
     }
-    let content = (d.choices?.[0]?.message?.content || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    const msg = d.choices?.[0]?.message;
+    let content = (msg?.content || msg?.reasoning || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
     if (!content) throw new Error(`EMPTY:${m}`);
     return { content, usedModel: m };
   }
