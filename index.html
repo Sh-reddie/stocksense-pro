@@ -7146,9 +7146,14 @@ async function getMarketContext() {
   const today=new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
   const sectors=[...new Set(D.holdings.map(h=>h.sector).filter(Boolean))].join(', ');
   const holdSummary=D.holdings.map(h=>`${h.symbol}(${h.sector})`).join(', ');
-  const prompt=`Indian equity market analyst. Date: ${today}. Sectors: ${sectors}. Holdings: ${holdSummary}.
-Act as an educational investment co-pilot, not a SEBI-registered advisor. Separate facts, estimates and uncertainty. Human investor makes the final decision.
-Reply ONLY valid JSON: {"sentimentScore":<0-100>,"sentimentLabel":"Strongly Bullish|Bullish|Cautiously Bullish|Neutral|Cautiously Bearish|Bearish","niftyOutlook":"<phrase>","fiiDii":"<stance>","topRisks":["r1","r2","r3"],"hotSectors":["s1","s2"],"weakSectors":["s1","s2"],"brief":"<3 sentence summary>","actionBias":"AGGRESSIVE_BUY|BUY_SELECTIVELY|HOLD|REDUCE|DEFENSIVE"}`;
+  const prompt=`You are a senior Indian equity market strategist (NSE/BSE). Date: ${today}. The investor holds stocks in: ${sectors}. Holdings: ${holdSummary}.
+
+Assess current Indian market conditions and sentiment. Consider: recent RBI policy stance, FII/DII flows trend, global macro (US Fed, crude oil, China), upcoming Indian events (budget, earnings season, elections), and Nifty50/Midcap100 momentum.
+
+For hotSectors and weakSectors: use ONLY sectors from this list relevant to current Indian market conditions — do NOT make up sectors. Focus on what's actually happening in Indian markets right now.
+
+Reply ONLY with valid compact JSON (no markdown, no explanation):
+{"sentimentScore":<0-100>,"sentimentLabel":"Strongly Bullish|Bullish|Cautiously Bullish|Neutral|Cautiously Bearish|Bearish","niftyOutlook":"<1 phrase, e.g. Range-bound 24000-25500>","fiiDii":"<current stance, e.g. FIIs net sellers, DIIs absorbing>","topRisks":["<specific risk 1>","<specific risk 2>","<specific risk 3>"],"hotSectors":["<sector1>","<sector2>"],"weakSectors":["<sector1>","<sector2>"],"brief":"<3 specific sentences about current Indian market conditions and what investor should watch>","actionBias":"AGGRESSIVE_BUY|BUY_SELECTIVELY|HOLD|REDUCE|DEFENSIVE"}`;
   try{const r=await claudeJSON(prompt); const parsed=extractJSON(r); if(parsed) return parsed; throw new Error('parse');}
   catch(e){return{sentimentScore:50,sentimentLabel:'Neutral',niftyOutlook:'Sideways',fiiDii:'Mixed',topRisks:['Global uncertainty','Earnings season','Currency risk'],hotSectors:['Defence','Infra'],weakSectors:['IT','FMCG'],brief:'Market analysis unavailable. Prices refreshed. Please check individual stock signals.',actionBias:'HOLD'};}
 }
@@ -7158,12 +7163,24 @@ function applySentimentToUI(ctx){if(!ctx)return;const sc=ctx.sentimentScore||50;
 async function analyseHolding(h,ctx) {
   const ltp=h.ltp||h.avgPrice; const plp=((ltp-h.avgPrice)/h.avgPrice*100).toFixed(1); const days=hDays(h.buyDate)||0; const tt=days>=365?'LTCG':'STCG';
   const isHot=ctx?.hotSectors?.includes(h.sector); const isWeak=ctx?.weakSectors?.includes(h.sector);
-  const prompt=`Indian stock analyst. Analyse ${h.symbol} (${h.exchange}) for decision support, not personalised SEBI-registered advice.
-LTP ₹${f(ltp)} | Avg ₹${f(h.avgPrice)} | Qty ${h.qty} | P&L ${plp}% | ${days}d | ${tt}
-52W ₹${f(h.l52)}–₹${f(h.h52)} | PE ${h.pe||'N/A'} | ROE ${h.roe?(h.roe*100).toFixed(1)+'%':'N/A'} | Beta ${h.beta||'N/A'}
-Sector ${h.sector} (${isHot?'HOT':'NEUTRAL'}) | Market ${ctx?.sentimentLabel||'Neutral'} | Bias ${ctx?.actionBias||'HOLD'}
-Before recommending, explicitly penalise governance/pledging/accounting/debt/cash-flow red flags when data is missing or weak.
-Reply ONLY valid JSON: {"signal":"STRONG BUY|BUY MORE|HOLD|REDUCE|EXIT","urgency":"ACT TODAY|WATCH|STABLE","stopLoss":<n>,"stopLossPct":<n>,"target1":<n>,"target1Pct":<n>,"target1Timeline":"<str>","target2":<n>,"target2Pct":<n>,"target2Timeline":"<str>","confidence":<1-10>,"bullCase":"<1s>","bearCase":"<1s>","redFlags":["<max 3>"],"action":"<advice>","reasoning":"<2 sentences>","tradeType":"SHORT_TERM|LONG_TERM|BOTH"}`;
+  const prompt=`You are a senior Indian equity research analyst (NSE/BSE). Provide decision-support analysis for ${h.symbol} (${h.exchange}) — not SEBI-registered personal advice.
+
+POSITION DATA:
+- LTP ₹${f(ltp)} | Avg Cost ₹${f(h.avgPrice)} | Qty ${h.qty} | Unrealised P&L ${plp}%
+- Holding Period ${days} days | Tax Treatment: ${tt} ${days<365&&days>300?'(LTCG threshold in '+(365-days)+' days — factor into exit timing)':''}
+- 52W Range ₹${f(h.l52)}–₹${f(h.h52)} | Position in range: ${h.h52&&h.l52?Math.round((ltp-h.l52)/(h.h52-h.l52)*100)+'%':'N/A'}
+- PE ${h.pe||'N/A'} | ROE ${h.roe?(h.roe*100).toFixed(1)+'%':'N/A'} | Beta ${h.beta||'N/A'}
+- Sector: ${h.sector||'Unknown'} (${isHot?'🔥 HOT SECTOR':'NEUTRAL'}) | Market: ${ctx?.sentimentLabel||'Neutral'} | Bias: ${ctx?.actionBias||'HOLD'}
+
+ANALYSIS RULES:
+1. If PE is N/A or >60, flag valuation risk explicitly in redFlags
+2. If stock is >15% below 52W high and in downtrend, consider REDUCE/EXIT unless strong fundamentals
+3. If holding >300 days with <365 threshold, weigh LTCG benefit before suggesting exit
+4. stopLoss must be specific price (support level), not generic %; target1/target2 based on resistance/fundamentals
+5. "action" must be 1 actionable sentence — what to DO, not generic advice
+
+Reply ONLY valid compact JSON (no markdown):
+{"signal":"STRONG BUY|BUY MORE|HOLD|REDUCE|EXIT","urgency":"ACT TODAY|WATCH|STABLE","stopLoss":<price>,"stopLossPct":<n>,"target1":<price>,"target1Pct":<n>,"target1Timeline":"<e.g. 3-6 months>","target2":<price>,"target2Pct":<n>,"target2Timeline":"<e.g. 12-18 months>","confidence":<1-10>,"bullCase":"<specific catalyst for upside>","bearCase":"<specific risk for downside>","redFlags":["<specific flag or null if none>"],"action":"<one actionable sentence>","reasoning":"<2 sentences with specific numbers>","tradeType":"SHORT_TERM|LONG_TERM|BOTH"}`;
   try{
     const r=await claudeJSON(prompt);
     if(typeof r === 'string' && /^(⚠|AI error|OpenRouter error|⛔)/.test(r.trim())) {
@@ -7206,10 +7223,15 @@ async function analyseWatchStock(w, ctx) {
 
   // Minimal prompt — only 5 fields to avoid reasoning model token exhaustion
   // Price targets are computed client-side below from 52W range + decision
-  const prompt = `Indian equity analyst. Should I enter this watchlist stock now?
-${w.symbol} (${w.sector||'?'}) LTP ₹${f(ltp)} 52W H/L ₹${f(w.h52)}/₹${f(w.l52)} PE ${w.pe||'?'}
-Watching: ${w.note||'?'} | Market: ${ctx?.sentimentLabel||'Neutral'} | Sector: ${isHot?'HOT':isWeak?'WEAK':'Neutral'}
-Reply ONLY compact JSON no markdown: {"decision":"ENTER NOW|WAIT|AVOID","entryScore":<0-10>,"conviction":"HIGH|MEDIUM|LOW","whyEnter":"<1 brief sentence>","whyWait":"<1 brief sentence>"}`;
+  const prompt = `Indian equity analyst. Entry decision for watchlist stock.
+${w.symbol} (${w.sector||'?'}) | LTP ₹${f(ltp)} | 52W High ₹${f(w.h52)} / Low ₹${f(w.l52)} | PE ${w.pe||'?'} | ROE ${w.roe?(w.roe*100).toFixed(0)+'%':'?'}
+Position in 52W range: ${w.h52&&w.l52?Math.round((ltp-w.l52)/(w.h52-w.l52)*100)+'%':'?'}
+Investor's reason for watching: ${w.note||'No note — evaluate on fundamentals/momentum'}
+Market: ${ctx?.sentimentLabel||'Neutral'} | Sector: ${isHot?'HOT (tailwind)':isWeak?'WEAK (headwind)':'Neutral'}
+
+Decision rules: ENTER NOW = price is at support/consolidation with catalyst; WAIT = good stock but entry too high or no catalyst; AVOID = fundamentally weak or better alternatives.
+
+Reply ONLY compact JSON no markdown: {"decision":"ENTER NOW|WAIT|AVOID","entryScore":<0-10>,"conviction":"HIGH|MEDIUM|LOW","whyEnter":"<specific price/catalyst reason>","whyWait":"<what condition would trigger entry>"}`;
 
   try {
     const r = await claudeJSON(prompt);
@@ -7333,7 +7355,25 @@ async function portfolioDoctor(ctx) {
   if(!D.holdings.length)return null;
   const inv=D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0);const cv=D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
   const sigs=D.holdings.map(h=>`${h.symbol}:${h.signal||'HOLD'}(${((h.qty*(h.ltp||h.avgPrice)/cv)*100).toFixed(1)}%)`).join(', ');
-  const prompt=`Portfolio Doctor for Indian retail investor.\nTotal: ₹${fI(inv)} invested, ₹${fI(cv)} current, ${D.holdings.length} stocks (ISSUE: too many for ₹5L — ideal 12-15)\nSignals: ${sigs} | Market: ${ctx?.sentimentLabel||'Neutral'}\nReply ONLY valid JSON:\n{"healthScore":<1-10>,"healthLabel":"<Excellent|Good|Fair|Poor|Critical>","topIssues":["<i1>","<i2>","<i3>"],"consolidationAdvice":"<advice>","topExitsToConsider":["<s1>","<s2>","<s3>"],"topAddMoreCandidates":["<s1>","<s2>"],"idealAllocationPerStock":"<e.g. ₹33K per stock for 15 stocks>","oneLineSummary":"<honest 1-line assessment>"}`;
+  const prompt=`You are a portfolio health auditor for an Indian retail equity investor. Give an honest, blunt assessment.
+
+PORTFOLIO SNAPSHOT:
+- Invested: ₹${fI(inv)} | Current Value: ₹${fI(cv)} | Return: ${inv>0?((cv-inv)/inv*100).toFixed(1):'?'}%
+- Number of stocks: ${D.holdings.length} ${D.holdings.length>20?'(OVERWEIGHT — too many positions, poor focus)':D.holdings.length>15?'(slightly high — aim for 12-15)':'(reasonable)'}
+- Per-stock signals: ${sigs}
+- Market regime: ${ctx?.sentimentLabel||'Neutral'} | Bias: ${ctx?.actionBias||'HOLD'}
+
+EVALUATION CRITERIA:
+- healthScore 1-4 = Critical (losing money, too many positions, no conviction)
+- healthScore 5-6 = Fair (mixed signals, some dead weight)
+- healthScore 7-8 = Good (well-structured, clear leaders)
+- healthScore 9-10 = Excellent (conviction positions, strong returns, clean structure)
+- topExitsToConsider: stocks with REDUCE/EXIT signals OR underperforming (<-10% long-held)
+- topAddMoreCandidates: stocks with STRONG BUY/BUY MORE signals and good allocation headroom
+- idealAllocationPerStock: compute as ₹${fI(cv)} ÷ ideal stock count (12-15)
+
+Reply ONLY valid compact JSON (no markdown):
+{"healthScore":<1-10>,"healthLabel":"Excellent|Good|Fair|Poor|Critical","topIssues":["<specific issue with stock names>","<specific issue>","<specific issue>"],"consolidationAdvice":"<1 specific action to take this week>","topExitsToConsider":["<SYMBOL>","<SYMBOL>","<SYMBOL>"],"topAddMoreCandidates":["<SYMBOL>","<SYMBOL>"],"idealAllocationPerStock":"<e.g. ₹45K per stock for 12-stock portfolio>","oneLineSummary":"<honest blunt 1-line assessment>"}`;
   try{const r=await claudeJSON(prompt); const j=extractJSON(r); return (j&&typeof j==='object'&&!Array.isArray(j)&&j.healthScore!=null)?j:null;}catch(e){return null;}
 }
 
@@ -9617,26 +9657,39 @@ async function loadStockAnalysis() {
 
   const ctx = D._marketCtx || {};
   const days = hDays(h.buyDate) || 0;
-  const prompt = `Comprehensive decision-support analysis of ${h.symbol} (${h.name||h.symbol}) on ${h.exchange||'NSE'} for an Indian retail investor with ₹5L portfolio, mid/small cap focus, active monitor. This is educational research, not SEBI-registered advice.
+  const pos52 = (h.h52&&h.l52&&ltp) ? Math.round((ltp-h.l52)/(h.h52-h.l52)*100) : null;
+  const ltcgDaysLeft = days < 365 ? 365 - days : 0;
+  const prompt = `You are a senior equity research analyst covering Indian markets (NSE/BSE). Write a comprehensive investment research note on ${h.symbol} (${h.name||h.symbol}). This is decision-support research — not SEBI-registered personal advice.
 
-LIVE DATA:
-- LTP: ₹${f(ltp)} | Avg Cost: ₹${f(h.avgPrice||0)} | Qty: ${h.qty||'N/A'} | P&L: ${h.avgPrice?((ltp-h.avgPrice)/h.avgPrice*100).toFixed(1)+'%':'N/A'}
-- Held: ${days}d | Tax: ${days>=365?'LTCG':'STCG'}
-- 52W High: ₹${f(h.h52)} | 52W Low: ₹${f(h.l52)}
-- P/E: ${h.pe||'N/A'} | P/B: ${h.pb||'N/A'} | ROE: ${h.roe?(h.roe*100).toFixed(1)+'%':'N/A'} | D/E: ${h.de||'N/A'} | Beta: ${h.beta||'N/A'}
-- Sector: ${h.sector||'N/A'} | Market sentiment: ${ctx.sentimentLabel||'Neutral'}
+PORTFOLIO POSITION:
+- LTP ₹${f(ltp)} | Avg Cost ₹${f(h.avgPrice||0)} | Qty ${h.qty||'N/A'} | Unrealised P&L ${h.avgPrice?((ltp-h.avgPrice)/h.avgPrice*100).toFixed(1)+'%':'N/A'}
+- Holding: ${days} days | Tax: ${days>=365?'LTCG (12.5% above ₹1.25L)':'STCG (20%)'}${ltcgDaysLeft>0&&ltcgDaysLeft<90?' | ⚡ LTCG in '+ltcgDaysLeft+' days — factor into exit timing':''}
+- 52W position: ${pos52!==null?pos52+'% of range (Low ₹'+f(h.l52)+' → High ₹'+f(h.h52)+')':'Range N/A'}
+- Fundamentals: PE ${h.pe||'N/A'} | PB ${h.pb||'N/A'} | ROE ${h.roe?(h.roe*100).toFixed(1)+'%':'N/A'} | D/E ${h.de||'N/A'} | Beta ${h.beta||'N/A'}
+- Sector: ${h.sector||'N/A'} | Market regime: ${ctx.sentimentLabel||'Neutral'} | Hot sectors: ${ctx.hotSectors?.join(',')||'N/A'} | Top risks: ${ctx.topRisks?.join('; ')||'N/A'}
 
-Write a structured report with these exact sections:
-**1. Business Snapshot** (2 lines — what the company does and its moat)
-**2. Fundamental Rating** (valuation vs peers, profitability, balance sheet strength)
-**3. Technical Position** (where in 52W range, trend, key support/resistance)
-**4. Why-Not-Buy Red Flags** (governance, pledging, accounting quality, debt, cash flow, valuation, liquidity — say "data unavailable" where needed)
-**5. Key Risks** (3 specific risks — be direct, not generic)
-**6. Upcoming Catalysts** (results date, sector tailwinds, policy events)
-**7. Price Targets** — Stop Loss / Target 1 / Target 2 with % from current price
-**8. VERDICT**: [STRONG BUY / BUY / HOLD / REDUCE / SELL] | Conviction: High/Medium/Low | Reasoning in 2 sentences
+Write a structured report with EXACTLY these 8 sections (use **bold headers**):
 
-Be specific and actionable. Mention actual price levels.`;
+**1. Business Snapshot** — 2 lines: what the company does and its competitive moat or edge in Indian context.
+
+**2. Fundamental Quality** — Rate as Strong/Moderate/Weak. Specific comments on: valuation vs sector peers (cheap/fair/expensive at PE ${h.pe||'N/A'}), profitability (ROE ${h.roe?(h.roe*100).toFixed(1)+'%':'N/A'} vs 15% benchmark), and balance sheet (D/E ${h.de||'N/A'}).
+
+**3. Technical Picture** — Current position (${pos52!==null?pos52+'% of 52W range':'52W data N/A'}), trend (bullish/bearish/sideways), key support at ₹${h.l52?f(h.l52*1.02):'N/A'}, resistance at ₹${h.h52?f(h.h52*0.97):'N/A'}.
+
+**4. Why-Not-Buy Checklist** — Flag each if concerning: governance/promoter pledging | accounting quality | high debt | cash flow weakness | valuation stretch | low liquidity. If data unavailable, say "data unavailable — verify before acting."
+
+**5. Top 3 Risks** — Specific, named risks (not generic). Include company-specific + macro risks relevant to ${h.sector||'this sector'}.
+
+**6. Upcoming Catalysts** — Next quarterly results window, any sector policy events, management guidance, or index inclusion potential.
+
+**7. Price Levels** — Give exact ₹ prices:
+- Stop Loss: ₹[price] ([%]% from LTP) — based on key support
+- Target 1: ₹[price] ([%]% upside) — [timeline, e.g. 3-6 months]
+- Target 2: ₹[price] ([%]% upside) — [timeline, e.g. 12-18 months]
+
+**8. VERDICT** — [STRONG BUY / BUY / HOLD / REDUCE / EXIT] | Conviction: [High/Medium/Low] | [2 sentence reasoning with specific numbers]
+
+Be direct, specific, and mention actual ₹ prices throughout. Maximum 400 words.`;
 
   const r = await claude(prompt);
   // Detect error responses from claude() so we can show them clearly
@@ -9693,12 +9746,19 @@ async function genMorningBrief() {
   const breaches = D.holdings.filter(h=>h.ltp&&h.stopLoss&&h.ltp<=h.stopLoss).map(h=>h.symbol).join(', ');
   const actToday = D.holdings.filter(h=>h.urgency==='ACT TODAY').map(h=>h.symbol).join(', ');
   const today = new Date().toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'short',year:'numeric'});
-  const prompt = `You are my personal stock advisor giving me a morning brief. Today: ${today}.
-Portfolio: ₹${fI(cv)} (invested ₹${fI(inv)}), ${D.holdings.length} stocks across ${new Set(D.holdings.map(h=>h.sector)).size} sectors.
-Top movers: ${topMovers||'—'}
-Stop-loss breaches: ${breaches||'None'}
-Urgent actions: ${actToday||'None'}
-Write a crisp morning brief in 4 short bullet points:
+  const prompt = `You are a senior Indian equity research analyst writing a morning brief. Today: ${today}.
+Portfolio: ₹${fI(cv)} current value (invested ₹${fI(inv)}), ${D.holdings.length} stocks across ${new Set(D.holdings.map(h=>h.sector)).size} sectors.
+Today's movers: ${topMovers||'No data yet'}
+Stop-loss breaches: ${breaches||'None — all clear'}
+Stocks needing action: ${actToday||'None flagged'}
+
+Write a crisp, specific morning brief in exactly 4 bullet points. Each bullet must be one tight sentence. NO generic advice.
+• Market pulse: what Indian market is doing today and what it means for this portfolio
+• Portfolio alert: most important holding to watch/act on today (name the stock)
+• Risk flag: biggest portfolio risk right now (be specific — name stocks/sectors)
+• Action: one concrete thing to do or monitor today
+
+Format exactly as 4 bullets starting with •
 1. Market pulse today
 2. Portfolio status (1 line)
 3. Top priority action for me today
@@ -10368,20 +10428,26 @@ async function claude(prompt, sys) {
         }
         return '⚠ OpenRouter error ['+r.status+']: '+errMsg;
       }
-      const content = d.choices?.[0]?.message?.content;
+      let content = d.choices?.[0]?.message?.content || '';
+      // Strip <think>…</think> reasoning blocks from reasoning models
+      content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
       const finishReason = d.choices?.[0]?.finish_reason;
-      // Reasoning model burned all tokens in <think> block — content is null, finish_reason is "length"
-      // Auto-retry with a non-reasoning model (Llama 3.1 8B) that produces JSON output directly
-      if((!content || content.length === 0) && finishReason === 'length' && model !== 'nvidia/nemotron-3-nano-30b-a3b:free') {
-        ilog && ilog('⚠ Reasoning model hit token limit mid-think, retrying with Llama 3.1 8B...','warn');
+      // Reasoning model burned all tokens in <think> block — content is empty, finish_reason is "length"
+      // Auto-retry with a fast non-reasoning model
+      if((!content || content.length === 0) && (finishReason === 'length' || finishReason === 'stop')) {
+        ilog && ilog('⚠ Model returned empty content (finish_reason='+finishReason+'), retrying with Llama 3.1 8B...','warn');
         const r3 = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method:'POST',
           headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro'},
-          body:JSON.stringify({model:'nvidia/nemotron-3-nano-30b-a3b:free',max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
-          signal: AbortSignal.timeout(60000)
+          body:JSON.stringify({model:'meta-llama/llama-3.1-8b-instruct:free',max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
+          signal: AbortSignal.timeout(30000)
         });
         const d3 = await r3.json();
-        if(!d3.error) return d3.choices?.[0]?.message?.content || 'Analysis unavailable.';
+        if(!d3.error) {
+          let c3 = d3.choices?.[0]?.message?.content || '';
+          c3 = c3.replace(/<think>[\s\S]*?<\/think>/gi,'').trim();
+          return c3 || 'Analysis unavailable.';
+        }
       }
       return content || 'Analysis unavailable.';
     } catch(e){return 'OpenRouter error: '+e.message;}
@@ -17813,9 +17879,12 @@ function _chatToggle() {
     const prov = localStorage.getItem('aiProvider') || 'openrouter';
     const lbl = document.getElementById('chat-model-label');
     if (lbl) {
-      let model = localStorage.getItem('orModel') || 'Llama 3.1 8B';
+      let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.1-8b-instruct:free';
       if (model === 'custom') model = localStorage.getItem('orCustomModel') || 'Custom';
-      lbl.textContent = prov === 'anthropic' ? 'Claude Sonnet' : model.split('/').pop().replace(':free','').replace(/-/g,' ');
+      const reasoningModels = ['nemotron','deepseek-r1','qwq','thinking'];
+      const isReasoning = reasoningModels.some(r => model.includes(r));
+      const displayModel = isReasoning ? 'Llama 3.1 8B (chat)' : model.split('/').pop().replace(':free','').replace(/-/g,' ');
+      lbl.textContent = prov === 'anthropic' ? 'Claude Sonnet' : displayModel;
     }
     // Hide unread badge
     const badge = document.getElementById('chat-unread');
@@ -17978,7 +18047,7 @@ ${portfolioCtx}`;
   const messages = historySlice.map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }));
 
   try {
-    const reply = await claude(text, sysPrompt);
+    const reply = await _chatCallAI(sysPrompt, messages);
     typingEl?.remove();
     _chatHistory.push({ role:'ai', content: reply });
     _chatAddMessage('ai', reply);
@@ -17989,6 +18058,70 @@ ${portfolioCtx}`;
     _chatBusy = false;
     if (sendBtn) sendBtn.disabled = false;
     document.getElementById('chat-input')?.focus();
+  }
+}
+
+// Chat-specific AI call — uses a fast conversational model with full message history
+async function _chatCallAI(sysPrompt, messages) {
+  const provider = localStorage.getItem('aiProvider') || 'openrouter';
+  if (provider !== 'openrouter') {
+    // Anthropic path — use claude() for single-turn (no multi-turn support needed for simple chats)
+    return await claude(messages[messages.length-1]?.content || '', sysPrompt);
+  }
+  const key = (localStorage.getItem('orKey') || '').trim();
+  if (!key) return '⚠️ **No AI key configured.** Go to **Settings → AI Provider** and add your free key from openrouter.ai';
+
+  const _ref = (location.protocol === 'https:' || location.protocol === 'http:') ? location.href : 'https://stocksense.local';
+
+  // Use fast conversational models — not reasoning models which are very slow for chat
+  // Order: user's configured model → fast llama → gemma fallback
+  let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.1-8b-instruct:free';
+  if (model === 'custom') {
+    const customVal = localStorage.getItem('orCustomModel') || '';
+    model = customVal && customVal !== 'custom' ? customVal : 'meta-llama/llama-3.1-8b-instruct:free';
+  }
+  // Reasoning models are too slow for interactive chat — swap to fast model
+  const reasoningModels = ['nvidia/nemotron', 'deepseek/deepseek-r1', 'qwen/qwq', 'google/gemini-2.0-flash-thinking'];
+  if (reasoningModels.some(r => model.includes(r.split('/')[1] || r))) {
+    model = 'meta-llama/llama-3.1-8b-instruct:free';
+  }
+
+  const tryFetch = async (mdl, msgs) => {
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + key,
+        'HTTP-Referer': _ref,
+        'X-Title': 'StockSense Pro'
+      },
+      body: JSON.stringify({ model: mdl, max_tokens: 1024, temperature: 0.7, messages: msgs }),
+      signal: AbortSignal.timeout(25000)
+    });
+    const raw = await r.text();
+    let d; try { d = JSON.parse(raw); } catch(e) { throw new Error('Non-JSON response from AI'); }
+    if (d.error) throw new Error(d.error.message || JSON.stringify(d.error));
+    let content = d.choices?.[0]?.message?.content || '';
+    content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    return content;
+  };
+
+  const fullMsgs = [{ role: 'system', content: sysPrompt }, ...messages];
+
+  try {
+    const reply = await tryFetch(model, fullMsgs);
+    if (reply) return reply;
+    // Empty response — try fallback model
+    return await tryFetch('google/gemma-3-12b-it:free', fullMsgs) || 'I couldn\'t generate a response. Please try again.';
+  } catch(e) {
+    // On timeout or error, try fast fallback
+    if (model !== 'meta-llama/llama-3.1-8b-instruct:free') {
+      try {
+        const reply = await tryFetch('meta-llama/llama-3.1-8b-instruct:free', fullMsgs);
+        if (reply) return reply;
+      } catch(e2) { /* fall through */ }
+    }
+    throw new Error(e.message.includes('aborted') ? 'AI took too long to respond. Check your OpenRouter key or try a different model in Settings.' : e.message);
   }
 }
 
