@@ -3800,6 +3800,26 @@ textarea.fi{resize:vertical;min-height:70px;}
   </div>
 </div>
 
+<!-- HOLDING NOTE MODAL -->
+<div class="mb" id="m-holdnote">
+  <div class="md" style="max-width:440px">
+    <div class="md-h"><div class="md-title">📋 Conviction Note</div><button class="x-btn" onclick="closeM('holdnote')">✕</button></div>
+    <div class="md-b">
+      <div style="font-size:12px;color:var(--t4);margin-bottom:10px">Capture your investment thesis, target price reminder, or conviction level for <strong id="hn-sym" style="color:var(--t2)"></strong>.</div>
+      <textarea id="hn-text" class="fi" rows="5" placeholder="e.g. Strong Q4 results, management guidance positive, accumulate on dips below ₹500. Target ₹620 in 12M." style="width:100%;resize:vertical;font-size:13px;line-height:1.6"></textarea>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-g btn-xs" onclick="setHoldNote('★ HIGH')" style="font-size:11px">★ High conviction</button>
+        <button class="btn btn-g btn-xs" onclick="setHoldNote('◐ MEDIUM')" style="font-size:11px">◐ Medium</button>
+        <button class="btn btn-g btn-xs" onclick="setHoldNote('◻ WATCHING')" style="font-size:11px">◻ Watching</button>
+      </div>
+    </div>
+    <div class="md-f">
+      <button class="btn btn-g" onclick="closeM('holdnote')">Cancel</button>
+      <button class="btn btn-ac" onclick="saveHoldNote()">Save Note</button>
+    </div>
+  </div>
+</div>
+
 <!-- ADD DIVIDEND MODAL -->
 <div class="mb" id="m-adddiv">
   <div class="md">
@@ -4748,6 +4768,9 @@ function stab(grp, id) {
     const panes=Array.from(p.parentElement.querySelectorAll('.tp'));
     tr.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',panes[i]?.id===id));
   }
+  // Lazy-render news subtabs
+  if(id==='n-corp') renderCorporateActions();
+  if(id==='n-res') renderResultsCalendar();
 }
 function setupTopNavDropdowns() {
   document.querySelectorAll('.tn-drop-wrap').forEach(wrap => {
@@ -6340,7 +6363,7 @@ function renderHoldings() {
             </div>
           </td>`;
         }
-        case 'act':return`<td style="white-space:nowrap"><button class="btn btn-g btn-xs" onclick="openDetail(${h.id})" style="margin-right:4px">Detail</button><button class="btn btn-yel btn-xs" onclick="openSellModal(${h.id})" style="margin-right:4px" title="Log a sell trade">Sell</button><button class="btn btn-red btn-xs" onclick="rmHolding(${h.id})">✕</button></td>`;
+        case 'act':return`<td style="white-space:nowrap"><button class="btn btn-g btn-xs" onclick="openDetail(${h.id})" style="margin-right:4px">Detail</button><button class="btn btn-yel btn-xs" onclick="openSellModal(${h.id})" style="margin-right:4px" title="Log a sell trade">Sell</button><button class="btn btn-g btn-xs" onclick="openNoteModal(${h.id})" style="margin-right:4px" title="${h.note?'Edit note: '+h.note.replace(/"/g,'&quot;'):'Add conviction note'}">${h.note?'📝':'📋'}</button><button class="btn btn-red btn-xs" onclick="rmHolding(${h.id})">✕</button></td>`;
         default:return'<td>—</td>';
       }
     }
@@ -6478,7 +6501,13 @@ function renderSummary() {
       const cagr = (Math.pow(cv/inv, 1/years) - 1) * 100;
       el_cagr.textContent = (cagr>=0?'+':'')+f(cagr,1)+'%';
       el_cagr.className = 'dsh-val ' + (cagr>=0?'up':'dn');
-    } else { el_cagr.textContent = '< 1M'; el_cagr.className='dsh-val'; }
+    } else {
+      const hasDates = D.holdings.some(h => h.buyDate);
+      el_cagr.textContent = hasDates ? '< 1 mo' : 'Add dates';
+      el_cagr.title = hasDates ? 'Average holding < 1 month' : 'Set buy dates on holdings for CAGR';
+      el_cagr.style.cursor = hasDates ? '' : 'help';
+      el_cagr.className = 'dsh-val';
+    }
   } else if(el_cagr) { el_cagr.textContent = '—'; }
 
   // Sharpe ratio: (portfolio return - risk-free rate) / std dev of individual returns
@@ -8226,6 +8255,235 @@ function parseRSSItems(xml, sourceLabel) {
   });
   return items;
 }
+// ═══════════════════════════════════════════════════
+// HOLDING CONVICTION NOTES
+// ═══════════════════════════════════════════════════
+let _noteHoldId = null;
+function openNoteModal(id) {
+  const h = D.holdings.find(x => x.id === id);
+  if (!h) return;
+  _noteHoldId = id;
+  document.getElementById('hn-sym').textContent = h.symbol;
+  document.getElementById('hn-text').value = h.note || '';
+  openM('holdnote');
+  setTimeout(() => document.getElementById('hn-text')?.focus(), 200);
+}
+function setHoldNote(prefix) {
+  const ta = document.getElementById('hn-text');
+  if (!ta) return;
+  const cur = ta.value.trim();
+  // Replace existing prefix tag or prepend
+  const clean = cur.replace(/^(★ HIGH|◐ MEDIUM|◻ WATCHING)\s*/,'');
+  ta.value = prefix + (clean ? '\n' + clean : '');
+}
+function saveHoldNote() {
+  const h = D.holdings.find(x => x.id === _noteHoldId);
+  if (!h) return;
+  h.note = document.getElementById('hn-text').value.trim();
+  save('holdings');
+  closeM('holdnote');
+  renderHoldings();
+  toast(h.note ? 'Note saved 📋' : 'Note cleared', 'success');
+}
+
+// ═══════════════════════════════════════════════════
+// CORPORATE ACTIONS — dividend fetch from Yahoo Finance
+// ═══════════════════════════════════════════════════
+const _corpActCache = { ts: 0, data: {} };
+
+async function _fetchDividendHistory(symbol, exchange) {
+  const yfSym = (exchange === 'BSE' ? symbol + '.BO' : symbol + '.NS');
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfSym)}?interval=1d&range=3y&events=div`;
+  try {
+    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const res = await fetch(proxy, { signal: AbortSignal.timeout(8000) });
+    const j = await res.json();
+    const data = JSON.parse(j.contents || '{}');
+    const divs = data?.chart?.result?.[0]?.events?.dividends;
+    if (!divs) return null;
+    return Object.values(divs).sort((a, b) => b.date - a.date);
+  } catch(e) { return null; }
+}
+
+function _estimateNextDiv(divArr) {
+  if (!divArr || !divArr.length) return null;
+  const dates = divArr.map(d => new Date(d.date * 1000));
+  let avgGap = 365;
+  if (dates.length >= 2) {
+    const gaps = [];
+    for (let i = 0; i < Math.min(dates.length - 1, 6); i++) {
+      gaps.push((dates[i] - dates[i+1]) / 86400000);
+    }
+    avgGap = gaps.reduce((s,g) => s+g, 0) / gaps.length;
+  }
+  const next = new Date(dates[0].getTime() + avgGap * 86400000);
+  return {
+    lastExDate: dates[0],
+    amount: divArr[0].amount,
+    nextEstExDate: next,
+    frequency: avgGap < 100 ? 'Quarterly' : avgGap < 200 ? 'Semi-annual' : 'Annual',
+    avgGapDays: Math.round(avgGap)
+  };
+}
+
+async function renderCorporateActions() {
+  const el = document.getElementById('n-corp-c');
+  if (!el) return;
+  if (!D.holdings.length) {
+    el.innerHTML = '<div style="padding:20px;color:var(--t4);font-size:12px">Add holdings to see corporate actions.</div>';
+    return;
+  }
+  // 10-min cache
+  if (_corpActCache.ts && Date.now() - _corpActCache.ts < 600000 && Object.keys(_corpActCache.data).length) {
+    _renderCorpActions(_corpActCache.data);
+    return;
+  }
+  el.innerHTML = '<div style="padding:20px;color:var(--t4);font-size:12px"><div class="spin" style="display:inline-block;margin-right:8px"></div> Fetching dividend data…</div>';
+  const results = {};
+  for (let i = 0; i < D.holdings.length; i += 3) {
+    const batch = D.holdings.slice(i, i+3);
+    await Promise.allSettled(batch.map(async h => {
+      const divs = await _fetchDividendHistory(h.symbol, h.exchange || 'NSE');
+      const info = _estimateNextDiv(divs);
+      if (info) results[h.id] = { h, info };
+    }));
+  }
+  _corpActCache.ts = Date.now();
+  _corpActCache.data = results;
+  _renderCorpActions(results);
+}
+
+function _renderCorpActions(data) {
+  const el = document.getElementById('n-corp-c');
+  if (!el) return;
+  const today = new Date();
+  const fmtDate = d => d.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'2-digit' });
+  const daysTo = d => Math.round((d - today) / 86400000);
+
+  const entries = Object.values(data);
+  if (!entries.length) {
+    el.innerHTML = `<div style="padding:20px;color:var(--t4);font-size:12px">⚠ No dividend data found. Holdings may be growth stocks or data unavailable via proxy.</div>
+      <div style="padding:0 20px 20px;font-size:11px;color:var(--t4)">Check <a href="https://www.nseindia.com/companies-listing/corporate-filings-announcements" target="_blank" style="color:var(--ac)">NSE Announcements</a> for recent corporate actions.</div>`;
+    return;
+  }
+
+  const upcoming = entries.filter(({info}) => info.nextEstExDate > today)
+    .sort((a,b) => a.info.nextEstExDate - b.info.nextEstExDate);
+  const past = entries.filter(({info}) => info.nextEstExDate <= today)
+    .sort((a,b) => b.info.nextEstExDate - a.info.nextEstExDate);
+
+  let html = '';
+
+  if (upcoming.length) {
+    html += `<div class="pn-h" style="margin-bottom:10px"><div class="pn-t">📅 Upcoming Dividends <span style="font-weight:400;font-size:11px;color:var(--t4)">(estimated from history)</span></div></div>`;
+    html += upcoming.map(({h, info}) => {
+      const days = daysTo(info.nextEstExDate);
+      const urgCol = days <= 30 ? 'var(--grn)' : days <= 90 ? 'var(--yel)' : 'var(--t3)';
+      const income = (info.amount * h.qty).toFixed(0);
+      return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--bdr)">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:13px">${h.symbol}</div>
+          <div style="font-size:10px;color:var(--t4)">${h.name} · ${info.frequency} · last ex ${fmtDate(info.lastExDate)}</div>
+        </div>
+        <div style="text-align:right;white-space:nowrap">
+          <div style="font-size:11px;color:var(--t3)">~${fmtDate(info.nextEstExDate)}</div>
+          <div style="font-size:11px;font-weight:700;color:${urgCol}">in ${days}d</div>
+        </div>
+        <div style="text-align:right;white-space:nowrap;min-width:70px">
+          <div style="font-size:12px;font-weight:700;color:var(--grn)">₹${f(info.amount)}/sh</div>
+          <div style="font-size:10px;color:var(--t4)">~₹${fI(income)} total</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  if (past.length) {
+    html += `<div style="margin-top:${upcoming.length?16:0}px;margin-bottom:8px;font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">Recently Paid</div>`;
+    html += past.slice(0,5).map(({h, info}) => {
+      const ago = Math.abs(daysTo(info.nextEstExDate));
+      return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--bdr);opacity:.65">
+        <div style="flex:1"><div style="font-weight:600;font-size:13px">${h.symbol}</div><div style="font-size:10px;color:var(--t4)">${info.frequency}</div></div>
+        <div style="font-size:11px;color:var(--t4)">${ago}d ago</div>
+        <div style="font-size:12px;font-weight:600;color:var(--t3)">₹${f(info.amount)}/sh</div>
+      </div>`;
+    }).join('');
+  }
+
+  // No-dividend holdings
+  const allSyms = D.holdings.map(h=>h.symbol);
+  const foundSyms = entries.map(({h})=>h.symbol);
+  const noDivSyms = allSyms.filter(s => !foundSyms.includes(s));
+  if (noDivSyms.length) {
+    html += `<div style="margin-top:14px;font-size:11px;color:var(--t4)">📊 No dividend history found for: ${noDivSyms.join(', ')} (may be growth stocks)</div>`;
+  }
+
+  html += `<div style="margin-top:14px;font-size:10px;color:var(--t4);padding:10px;background:var(--bg2);border-radius:8px">
+    ⚠ Dates are <strong>estimated</strong> from historical ex-dividend frequency. Always verify on
+    <a href="https://www.nseindia.com/companies-listing/corporate-filings-corporate-actions" target="_blank" style="color:var(--ac)">NSE Corporate Actions</a> before trading.
+  </div>`;
+  el.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════
+// RESULTS CALENDAR
+// ═══════════════════════════════════════════════════
+function renderResultsCalendar() {
+  const el = document.getElementById('n-res-c');
+  if (!el) return;
+  if (!D.holdings.length) {
+    el.innerHTML = '<div style="padding:20px;color:var(--t4);font-size:12px">Add holdings to see results calendar.</div>';
+    return;
+  }
+  const now = new Date();
+  const month = now.getMonth() + 1; // 1–12
+  const yr = now.getFullYear();
+
+  // Indian FY quarters: Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar
+  let qLabel, resStart, resEnd;
+  if (month >= 4 && month <= 6)       { qLabel='Q1 FY'; resStart=new Date(yr,6,15); resEnd=new Date(yr,7,31); }
+  else if (month >= 7 && month <= 9)  { qLabel='Q2 FY'; resStart=new Date(yr,9,15); resEnd=new Date(yr,10,30); }
+  else if (month >= 10 && month <= 12){ qLabel='Q3 FY'; resStart=new Date(yr+1,0,15); resEnd=new Date(yr+1,1,28); }
+  else                                 { qLabel='Q4 FY'; resStart=new Date(yr,3,15); resEnd=new Date(yr,4,31); }
+
+  const fmtDate = d => d.toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+  const inSeason = now >= resStart && now <= resEnd;
+  const daysTo = Math.max(0, Math.round((resStart - now) / 86400000));
+
+  let html = '';
+  if (inSeason) {
+    html += `<div style="background:var(--grn)1a;border:1px solid var(--grn)44;border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-weight:700;color:var(--grn);font-size:14px">📢 Results Season Active</div>
+      <div style="font-size:12px;color:var(--t3);margin-top:4px">${qLabel} results — watch for announcements through ${fmtDate(resEnd)}</div>
+    </div>`;
+  } else {
+    html += `<div style="background:var(--yel)1a;border:1px solid var(--yel)44;border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-weight:700;color:var(--yel);font-size:14px">📅 Next Results Season</div>
+      <div style="font-size:12px;color:var(--t3);margin-top:4px">${qLabel}: ${fmtDate(resStart)} – ${fmtDate(resEnd)} <span style="color:var(--t4)">(in ${daysTo}d)</span></div>
+    </div>`;
+  }
+
+  html += `<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Holdings — Expected Results Window</div>`;
+  html += D.holdings.map(h => {
+    const statusTxt = inSeason ? 'Due Now' : `In ~${daysTo}d`;
+    const statusCol = inSeason ? 'var(--grn)' : 'var(--yel)';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--bdr)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px">${h.symbol}</div>
+        <div style="font-size:11px;color:var(--t4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.name}</div>
+      </div>
+      <div style="text-align:right;white-space:nowrap">
+        <div style="font-size:11px;font-weight:700;color:${statusCol}">${statusTxt}</div>
+        <div style="font-size:10px;color:var(--t4)">${qLabel}</div>
+      </div>
+      <a href="https://www.nseindia.com/companies-listing/corporate-filings-financial-results?symbol=${encodeURIComponent(h.symbol)}" target="_blank"
+        style="font-size:10px;color:var(--ac);text-decoration:none;white-space:nowrap;padding:3px 7px;border:1px solid var(--ac)44;border-radius:6px">NSE →</a>
+    </div>`;
+  }).join('');
+
+  html += `<div style="margin-top:14px;font-size:10px;color:var(--t4)">⚠ Dates are approximate based on Indian FY quarterly cycle. Check NSE for exact announcement dates.</div>`;
+  el.innerHTML = html;
+}
+
 async function renderNews() {
   const allC = document.getElementById('n-all-c');
   const portC = document.getElementById('n-port-c');
