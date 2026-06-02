@@ -17881,10 +17881,8 @@ function _chatToggle() {
     if (lbl) {
       let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.1-8b-instruct:free';
       if (model === 'custom') model = localStorage.getItem('orCustomModel') || 'Custom';
-      const reasoningModels = ['nemotron','deepseek-r1','qwq','thinking'];
-      const isReasoning = reasoningModels.some(r => model.includes(r));
-      const displayModel = isReasoning ? 'Llama 3.1 8B (chat)' : model.split('/').pop().replace(':free','').replace(/-/g,' ');
-      lbl.textContent = prov === 'anthropic' ? 'Claude Sonnet' : displayModel;
+      const displayModel = model.split('/').pop().replace(':free','').replace(/-/g,' ');
+      lbl.textContent = prov === 'anthropic' ? 'Claude Sonnet 4' : displayModel;
     }
     // Hide unread badge
     const badge = document.getElementById('chat-unread');
@@ -18061,68 +18059,84 @@ ${portfolioCtx}`;
   }
 }
 
-// Chat-specific AI call — uses a fast conversational model with full message history
+// Chat-specific AI call — uses user's configured model with full conversation history
 async function _chatCallAI(sysPrompt, messages) {
   const provider = localStorage.getItem('aiProvider') || 'openrouter';
+
+  // Anthropic path
   if (provider !== 'openrouter') {
-    // Anthropic path — use claude() for single-turn (no multi-turn support needed for simple chats)
-    return await claude(messages[messages.length-1]?.content || '', sysPrompt);
+    const key = (localStorage.getItem('apiKey') || '').trim();
+    if (!key) throw new Error('No Anthropic API key. Go to Settings → AI Provider.');
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true' },
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1024, system:sysPrompt, messages }),
+      signal: AbortSignal.timeout(30000)
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error.message || JSON.stringify(d.error));
+    return d.content?.[0]?.text || 'No response.';
   }
+
+  // OpenRouter path — use exactly the model from Settings
   const key = (localStorage.getItem('orKey') || '').trim();
-  if (!key) return '⚠️ **No AI key configured.** Go to **Settings → AI Provider** and add your free key from openrouter.ai';
+  if (!key) throw new Error('No OpenRouter key. Go to Settings → AI Provider.');
 
-  const _ref = (location.protocol === 'https:' || location.protocol === 'http:') ? location.href : 'https://stocksense.local';
-
-  // Use fast conversational models — not reasoning models which are very slow for chat
-  // Order: user's configured model → fast llama → gemma fallback
   let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.1-8b-instruct:free';
   if (model === 'custom') {
     const customVal = localStorage.getItem('orCustomModel') || '';
     model = customVal && customVal !== 'custom' ? customVal : 'meta-llama/llama-3.1-8b-instruct:free';
   }
-  // Reasoning models are too slow for interactive chat — swap to fast model
-  const reasoningModels = ['nvidia/nemotron', 'deepseek/deepseek-r1', 'qwen/qwq', 'google/gemini-2.0-flash-thinking'];
-  if (reasoningModels.some(r => model.includes(r.split('/')[1] || r))) {
-    model = 'meta-llama/llama-3.1-8b-instruct:free';
-  }
 
-  const tryFetch = async (mdl, msgs) => {
-    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + key,
-        'HTTP-Referer': _ref,
-        'X-Title': 'StockSense Pro'
-      },
-      body: JSON.stringify({ model: mdl, max_tokens: 1024, temperature: 0.7, messages: msgs }),
-      signal: AbortSignal.timeout(25000)
-    });
-    const raw = await r.text();
-    let d; try { d = JSON.parse(raw); } catch(e) { throw new Error('Non-JSON response from AI'); }
-    if (d.error) throw new Error(d.error.message || JSON.stringify(d.error));
-    let content = d.choices?.[0]?.message?.content || '';
-    content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-    return content;
-  };
-
+  const _ref = (location.protocol === 'https:' || location.protocol === 'http:') ? location.href : 'https://stocksense.local';
   const fullMsgs = [{ role: 'system', content: sysPrompt }, ...messages];
 
-  try {
-    const reply = await tryFetch(model, fullMsgs);
-    if (reply) return reply;
-    // Empty response — try fallback model
-    return await tryFetch('google/gemma-3-12b-it:free', fullMsgs) || 'I couldn\'t generate a response. Please try again.';
-  } catch(e) {
-    // On timeout or error, try fast fallback
-    if (model !== 'meta-llama/llama-3.1-8b-instruct:free') {
-      try {
-        const reply = await tryFetch('meta-llama/llama-3.1-8b-instruct:free', fullMsgs);
-        if (reply) return reply;
-      } catch(e2) { /* fall through */ }
-    }
-    throw new Error(e.message.includes('aborted') ? 'AI took too long to respond. Check your OpenRouter key or try a different model in Settings.' : e.message);
+  // Reasoning models (nemotron, deepseek-r1, etc.) can take 60-120s — warn the user upfront
+  const reasoningModels = ['nemotron', 'deepseek-r1', 'qwq', 'flash-thinking', 'o1', 'o3'];
+  const isReasoning = reasoningModels.some(r => model.toLowerCase().includes(r));
+  const timeoutMs = isReasoning ? 90000 : 30000;
+
+  if (isReasoning) {
+    // Show a warning bubble so the user knows it's slow
+    _chatAddMessage('ai', `⏳ **Heads up:** "${model.split('/').pop()}" is a reasoning model — it may take 30–90 seconds to respond as it thinks through the answer step by step. If it's too slow, go to **Settings → AI Provider** and switch to a faster model like **Llama 3.1 8B**.`);
   }
+
+  let r;
+  try {
+    r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro' },
+      body: JSON.stringify({ model, max_tokens: 1024, temperature: 0.7, messages: fullMsgs }),
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+  } catch(e) {
+    if (e.name === 'TimeoutError' || e.message.includes('aborted')) {
+      throw new Error(`**"${model.split('/').pop()}" timed out** after ${timeoutMs/1000}s.\n\nThis model is too slow for interactive chat. Go to **Settings → AI Provider** and switch to **Llama 3.1 8B** or **Gemma 3 12B** for faster responses.`);
+    }
+    throw e;
+  }
+
+  const raw = await r.text();
+  let d;
+  try { d = JSON.parse(raw); } catch(e) { throw new Error('AI returned an invalid response. Please try again.'); }
+
+  if (d.error) {
+    const msg = d.error.message || JSON.stringify(d.error);
+    if (msg.includes('No endpoints') || msg.includes('not found') || r.status === 404) {
+      throw new Error(`**Model "${model.split('/').pop()}" is unavailable on OpenRouter.**\n\nThis model may be offline or require a paid plan. Go to **Settings → AI Provider** and select a different model.`);
+    }
+    throw new Error(msg);
+  }
+
+  let content = d.choices?.[0]?.message?.content || '';
+  // Strip <think>…</think> reasoning traces so only the final answer shows
+  content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  if (!content) {
+    throw new Error(`**"${model.split('/').pop()}" returned an empty response.**\n\nThis sometimes happens with reasoning models that exhaust their token budget in the thinking phase. Try a different model in **Settings → AI Provider**.`);
+  }
+
+  return content;
 }
 
 // Show unread badge when chat is closed and new AI message arrives
