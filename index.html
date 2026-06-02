@@ -17927,7 +17927,7 @@ function _chatGetPortfolioContext() {
   const losers  = D.holdings.filter(h=>h.ltp>0&&h.ltp<h.avgPrice).length;
   const breachedSL = D.holdings.filter(h=>h.stopLoss&&h.ltp>0&&h.ltp<=h.stopLoss).length;
 
-  const ctx = `PORTFOLIO SNAPSHOT (as of ${new Date().toLocaleDateString('en-IN')}):
+  let ctx = `PORTFOLIO SNAPSHOT (as of ${new Date().toLocaleDateString('en-IN')}):
 Total Invested: ₹${f(totalInvested,0)}
 Current Value:  ₹${f(totalCurrent,0)}
 Total P&L:      ₹${f(totalPnl,0)} (${totalPnlPct>=0?'+':''}${f(totalPnlPct,1)}%)
@@ -18043,9 +18043,10 @@ async function _chatSend() {
     _chatAddMessage('ai', `⏳ **Heads-up:** **${_mName}** is a reasoning model — it thinks before answering and can take 60–120 seconds. If that's too slow, go to **Settings → AI Provider** and switch to **Llama 3.1 8B** for instant replies.`);
   }
 
-  // Build system prompt with portfolio context
-  const portfolioCtx = _chatGetPortfolioContext();
-  const sysPrompt = `You are an expert Indian equity market analyst and investment research co-pilot with 20+ years of NSE/BSE experience. You have access to the user's portfolio data below.
+  try {
+    // Build system prompt with portfolio context (inside try so errors reset busy state)
+    const portfolioCtx = _chatGetPortfolioContext();
+    const sysPrompt = `You are an expert Indian equity market analyst and investment research co-pilot with 20+ years of NSE/BSE experience. You have access to the user's portfolio data below.
 
 Act as a disciplined decision-support analyst, not a SEBI-registered personal advisor. Give specific, actionable research tailored to Indian markets (NSE/BSE), but keep the human investor as final decision-maker. Reference actual stock names and numbers from their portfolio when relevant. Be direct, avoid generic advice, and always include the strongest why-not-buy risk before any buy/add suggestion.
 
@@ -18053,18 +18054,17 @@ Format responses clearly using **bold** for key points. Keep replies focused (un
 
 ${portfolioCtx}`;
 
-  // Build messages array with history (last 6 turns to keep context manageable)
-  const historySlice = _chatHistory.slice(-12); // last 6 exchanges
-  const messages = historySlice.map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }));
+    // Build messages array with history (last 6 turns to keep context manageable)
+    const historySlice = _chatHistory.slice(-12); // last 6 exchanges
+    const messages = historySlice.map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }));
 
-  try {
     const reply = await _chatCallAI(sysPrompt, messages);
     typingEl?.remove();
     _chatHistory.push({ role:'ai', content: reply });
     _chatAddMessage('ai', reply);
   } catch(e) {
     typingEl?.remove();
-    _chatAddMessage('ai', '⚠️ Error: ' + e.message);
+    _chatAddMessage('ai', '⚠️ ' + (e.message || 'Something went wrong. Please try again.'));
   } finally {
     _chatBusy = false;
     if (sendBtn) sendBtn.disabled = false;
