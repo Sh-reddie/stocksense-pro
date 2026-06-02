@@ -3324,23 +3324,16 @@ textarea.fi{resize:vertical;min-height:70px;}
               <div style="font-size:10px;color:var(--t4);margin-top:4px">Get free key at <strong style="color:var(--ac)">openrouter.ai</strong> → Sign up → Keys → Create. $0 cost for free models.</div>
             </div>
             <div class="fg">
-              <label class="fl">Model <span style="color:var(--t4);font-weight:400;font-size:10px">— if unsure, use Llama 3.1 8B</span></label>
+              <label class="fl">Model <span style="color:var(--t4);font-weight:400;font-size:10px">— if unsure, use Llama 3.3 70B ⭐</span></label>
               <select class="fi" id="cfg-or-model" onchange="toggleCustomModel(this.value)">
-                <optgroup label="⚡ Fastest (recommended for daily use)">
-                  <option value="nvidia/nemotron-3-nano-30b-a3b:free">Nemotron Nano 30B — Fast free ⭐ Best to start</option>
-                  <option value="mistralai/mistral-7b-instruct:free">Mistral 7B — Fast &amp; reliable</option>
-                  <option value="deepseek/deepseek-r1-0528-qwen3-8b:free">DeepSeek R1 Qwen3 8B — Lightweight R1</option>
-                  <option value="qwen/qwen3-8b:free">Qwen3 8B — Alibaba, very fast</option>
+                <optgroup label="⚡ Recommended (fast + quality)">
+                  <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B ⭐ Best to start</option>
+                  <option value="z-ai/glm-4.5-air:free">GLM 4.5 Air — Z.AI, reasoning-capable</option>
+                  <option value="nousresearch/hermes-3-llama-3.1-405b:free">Hermes 3 405B — Large model, thorough</option>
                 </optgroup>
-                <optgroup label="🎯 Better (balanced speed + quality)">
-                  <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B — Better quality, free</option>
-                  <option value="mistralai/mistral-small-3.1-24b-instruct:free">Mistral Small 24B — Smarter analysis</option>
-                  <option value="qwen/qwen3-14b:free">Qwen3 14B — Stronger Qwen</option>
-                  <option value="google/gemma-3-27b-it:free">Gemma 3 27B — Google free model</option>
-                </optgroup>
-                <optgroup label="🧠 Deep Reasoning (slow but thorough)">
-                  <option value="deepseek/deepseek-r1-0528:free">DeepSeek R1 0528 — Best reasoning</option>
-                  <option value="microsoft/phi-4-reasoning:free">Microsoft Phi-4 — Strong reasoning</option>
+                <optgroup label="🧠 Deep Reasoning (slow — 60–120s per reply)">
+                  <option value="nvidia/nemotron-3-nano-30b-a3b:free">Nemotron Nano 30B — Reasoning, slow</option>
+                  <option value="deepseek/deepseek-r1-0528:free">DeepSeek R1 — Best reasoning, very slow</option>
                 </optgroup>
                 <optgroup label="⚙ Other">
                   <option value="custom">Custom — enter model ID manually</option>
@@ -10306,7 +10299,13 @@ function init(){
   }
   const savedOrKey = localStorage.getItem('orKey');
   if(savedOrKey && document.getElementById('cfg-or-key')) document.getElementById('cfg-or-key').value = savedOrKey;
-  const savedOrModel = localStorage.getItem('orModel');
+  let savedOrModel = localStorage.getItem('orModel');
+  // Migrate deprecated/dead models to current default
+  const _deadModels = ['meta-llama/llama-3.1-8b-instruct:free','mistralai/mistral-7b-instruct:free','google/gemma-3-27b-it:free','qwen/qwen3-8b:free','qwen/qwen3-14b:free','microsoft/phi-4-reasoning:free','deepseek/deepseek-r1-0528-qwen3-8b:free'];
+  if (savedOrModel && _deadModels.includes(savedOrModel)) {
+    savedOrModel = 'meta-llama/llama-3.3-70b-instruct:free';
+    localStorage.setItem('orModel', savedOrModel);
+  }
   if(savedOrModel && document.getElementById('cfg-or-model')) document.getElementById('cfg-or-model').value = savedOrModel;
   const key=localStorage.getItem('apiKey');
   if(key&&document.getElementById('cfg-key'))document.getElementById('cfg-key').value=key;
@@ -18040,10 +18039,10 @@ async function _chatSend() {
   const _selectedModel = (localStorage.getItem('orModel') || '').toLowerCase();
   const _customModel   = (localStorage.getItem('orCustomModel') || '').toLowerCase();
   const _activeModel   = _selectedModel === 'custom' ? _customModel : _selectedModel;
-  const _reasoningKws  = ['nemotron', 'deepseek-r1', 'qwq', 'flash-thinking'];
+  const _reasoningKws  = ['nemotron', 'deepseek-r1', 'qwq', 'flash-thinking', 'glm', 'r1t', 'chimera', 'o1', 'o3'];
   if (prov === 'openrouter' && _reasoningKws.some(kw => _activeModel.includes(kw))) {
-    const _mName = (_activeModel.split('/').pop() || _activeModel).replace(/:free$/,'');
-    _chatAddMessage('ai', `⏳ **Heads-up:** **${_mName}** is a reasoning model — it thinks before answering and can take 60–120 seconds. If that's too slow, go to **Settings → AI Provider** and switch to **Llama 3.1 8B** for instant replies.`);
+    const _mName = (_activeModel.split('/').pop() || _activeModel).replace(/:free$/, '');
+    _chatAddMessage('ai', `⏳ **Heads-up:** **${_mName}** is a reasoning model — it thinks before answering and can take 60–120 seconds. If that's too slow, go to **Settings → AI Provider** and switch to **Llama 3.3 70B** for faster replies.`);
   }
 
   try {
