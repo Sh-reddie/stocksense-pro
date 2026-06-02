@@ -236,6 +236,30 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 .ds-qa-btn:hover { background:var(--s2); border-color:var(--ac); color:var(--ac); }
 .ds-qa-icon { font-size:18px; }
 
+/* Today Panel */
+#ds-today-panel { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+@media(max-width:600px){ #ds-today-panel { grid-template-columns:1fr; } }
+.dtp-card { background:var(--s1); border:1px solid var(--b1); border-radius:12px; padding:14px 16px; }
+.dtp-title { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--t4); margin-bottom:10px; }
+.dtp-mover { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--bdr); }
+.dtp-mover:last-child { border-bottom:none; }
+.dtp-mover-sym { font-weight:700; font-size:12px; min-width:70px; }
+.dtp-mover-name { font-size:10px; color:var(--t4); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dtp-mover-val { font-size:12px; font-weight:700; font-family:var(--mono); white-space:nowrap; }
+.dtp-event { display:flex; gap:8px; padding:5px 0; border-bottom:1px solid var(--bdr); align-items:flex-start; }
+.dtp-event:last-child { border-bottom:none; }
+.dtp-event-ic { font-size:14px; line-height:1.4; }
+.dtp-event-txt { font-size:11px; color:var(--t2); line-height:1.5; }
+.dtp-event-when { font-size:10px; color:var(--t4); }
+/* P&L attribution */
+#ds-pnl-attr { margin-bottom:14px; background:var(--s1); border:1px solid var(--b1); border-radius:12px; padding:14px 16px; }
+.attr-title { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--t4); margin-bottom:10px; }
+.attr-bar-wrap { display:flex; flex-direction:column; gap:5px; }
+.attr-row { display:flex; align-items:center; gap:8px; }
+.attr-sym { font-size:11px; font-weight:600; width:64px; flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.attr-bar-bg { flex:1; height:7px; background:var(--s2); border-radius:4px; overflow:hidden; }
+.attr-bar-fill { height:100%; border-radius:4px; transition:width .4s; }
+.attr-val { font-size:10px; font-family:var(--mono); width:70px; text-align:right; flex-shrink:0; }
 #ds-os-wrap { background:var(--s1); border:1px solid var(--b1); border-radius:12px; margin-bottom:16px; overflow:hidden; }
 #ds-os-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid var(--b2); }
 .ds-os-title { font-size:14px; font-weight:800; color:var(--t1); }
@@ -1122,6 +1146,24 @@ textarea.fi{resize:vertical;min-height:70px;}
       <button class="ds-qa-btn" onclick="go('52week')"><span class="ds-qa-icon">📊</span><span>52W Highs</span></button>
       <button class="ds-qa-btn" onclick="go('exit-planner')"><span class="ds-qa-icon">🚪</span><span>Exit Planner</span></button>
       <button class="ds-qa-btn" onclick="go('fii-dii')"><span class="ds-qa-icon">🏦</span><span>FII/DII</span></button>
+    </div>
+
+    <!-- ── Today Panel ──────────────────────────────────── -->
+    <div id="ds-today-panel">
+      <div class="dtp-card">
+        <div class="dtp-title">📈 Today's Movers <span id="dtp-market-status" style="float:right;font-size:10px;padding:2px 7px;border-radius:8px"></span></div>
+        <div id="dtp-movers"><div style="color:var(--t4);font-size:12px">Prices loading…</div></div>
+      </div>
+      <div class="dtp-card">
+        <div class="dtp-title">📅 Coming Up This Week</div>
+        <div id="dtp-events"><div style="color:var(--t4);font-size:12px">—</div></div>
+      </div>
+    </div>
+
+    <!-- ── P&L Attribution ───────────────────────────────── -->
+    <div id="ds-pnl-attr">
+      <div class="attr-title">💰 P&amp;L Attribution — who's moving your portfolio</div>
+      <div class="attr-bar-wrap" id="ds-attr-bars"></div>
     </div>
 
     <!-- ── Portfolio Health Centre ────────────────────────── -->
@@ -6478,6 +6520,148 @@ function renderDashHoldings() {
 // ═══════════════════════════════════════════════════
 // SUMMARY CARDS
 // ═══════════════════════════════════════════════════
+// TODAY PANEL + P&L ATTRIBUTION
+// ═══════════════════════════════════════════════════
+function renderTodayPanel() {
+  // ── Market status ──────────────────────────────
+  const statusEl = document.getElementById('dtp-market-status');
+  if (statusEl) {
+    const now = new Date();
+    // IST = UTC+5:30
+    const istMs = now.getTime() + (now.getTimezoneOffset() * 60000) + (5.5 * 3600000);
+    const ist = new Date(istMs);
+    const h = ist.getHours(), m = ist.getMinutes(), dow = ist.getDay();
+    const isWeekday = dow >= 1 && dow <= 5;
+    const afterOpen = h > 9 || (h === 9 && m >= 15);
+    const beforeClose = h < 15 || (h === 15 && m <= 30);
+    const isOpen = isWeekday && afterOpen && beforeClose;
+    if (isOpen) {
+      statusEl.textContent = '🟢 OPEN';
+      statusEl.style.background = 'rgba(34,197,94,.15)';
+      statusEl.style.color = 'var(--grn)';
+    } else {
+      const closeHour = isWeekday && !afterOpen ? 9 : (!isWeekday ? (dow===6?2:3) : 0);
+      statusEl.textContent = '🔴 CLOSED';
+      statusEl.style.background = 'rgba(239,68,68,.12)';
+      statusEl.style.color = 'var(--red)';
+    }
+  }
+
+  // ── Today's movers ──────────────────────────────
+  const moversEl = document.getElementById('dtp-movers');
+  if (moversEl && D.holdings.length) {
+    const withChg = D.holdings.filter(h => h.chgP !== undefined && h.chgP !== null);
+    if (withChg.length) {
+      const sorted = [...withChg].sort((a,b) => Math.abs(b.chgP||0) - Math.abs(a.chgP||0)).slice(0, 5);
+      const todayPL = h => ((h.chg||0) * h.qty);
+      moversEl.innerHTML = sorted.map(h => {
+        const pct = h.chgP || 0;
+        const pl = todayPL(h);
+        const col = pct >= 0 ? 'var(--grn)' : 'var(--red)';
+        return `<div class="dtp-mover" onclick="openDetail(${h.id})" style="cursor:pointer">
+          <div class="dtp-mover-sym">${h.symbol}</div>
+          <div class="dtp-mover-name">${h.name}</div>
+          <div class="dtp-mover-val" style="color:${col}">${pct>=0?'+':''}${f(pct,2)}%</div>
+          <div class="dtp-mover-val" style="color:${col};font-size:10px;margin-left:2px">${pl>=0?'+':''}₹${fI(Math.abs(pl))}</div>
+        </div>`;
+      }).join('');
+    } else {
+      moversEl.innerHTML = `<div style="color:var(--t4);font-size:12px">Refresh prices to see today's movers</div>`;
+    }
+  } else if (moversEl) {
+    moversEl.innerHTML = `<div style="color:var(--t4);font-size:12px">Add holdings to see movers</div>`;
+  }
+
+  // ── Coming up this week ──────────────────────────
+  const eventsEl = document.getElementById('dtp-events');
+  if (eventsEl) {
+    const events = [];
+    const now = new Date();
+    const weekEnd = new Date(now.getTime() + 7 * 86400000);
+
+    // LTCG crossings this week
+    D.holdings.forEach(h => {
+      if (!h.buyDate) return;
+      const days = hDays(h.buyDate) || 0;
+      const daysToLTCG = 365 - days;
+      if (daysToLTCG > 0 && daysToLTCG <= 7) {
+        const crossDate = new Date(Date.now() + daysToLTCG * 86400000);
+        events.push({ ic:'🧾', txt:`<b>${h.symbol}</b> crosses LTCG threshold — hold to save tax`, when: `in ${daysToLTCG}d (${crossDate.toLocaleDateString('en-IN',{day:'numeric',month:'short'})})` });
+      }
+    });
+
+    // Results season check
+    const month = now.getMonth() + 1;
+    let qLabel = null;
+    if ([7,8].includes(month)) qLabel = 'Q1 results season';
+    else if ([10,11].includes(month)) qLabel = 'Q2 results season';
+    else if ([1,2].includes(month)) qLabel = 'Q3 results season';
+    else if ([4,5].includes(month)) qLabel = 'Q4 results season';
+    if (qLabel) events.push({ ic:'📢', txt:`<b>${qLabel}</b> — watch for earnings announcements`, when:'active now' });
+
+    // SIP due this week
+    (D.sips || []).forEach(s => {
+      if (!s.active || !s.nextDate) return;
+      const next = new Date(s.nextDate);
+      if (next >= now && next <= weekEnd) {
+        const daysTo = Math.round((next - now) / 86400000);
+        events.push({ ic:'📈', txt:`<b>${s.symbol}</b> SIP due — ₹${fI(s.amount)}`, when:`in ${daysTo}d (${next.toLocaleDateString('en-IN',{day:'numeric',month:'short'})})` });
+      }
+    });
+
+    // Price alerts close to trigger
+    (D.alerts || []).filter(a => a.active).forEach(a => {
+      const h = D.holdings.find(x => x.symbol === a.symbol) || D.watchlist.find(x => x.symbol === a.symbol);
+      const ltp = h?.ltp;
+      if (!ltp) return;
+      const dist = Math.abs((a.price - ltp) / ltp * 100);
+      if (dist < 3) {
+        events.push({ ic:'🔔', txt:`<b>${a.symbol}</b> alert within 3% — ${a.type} at ₹${f(a.price)}`, when:`now ₹${f(ltp)}` });
+      }
+    });
+
+    if (events.length) {
+      eventsEl.innerHTML = events.slice(0,5).map(e =>
+        `<div class="dtp-event">
+          <div class="dtp-event-ic">${e.ic}</div>
+          <div><div class="dtp-event-txt">${e.txt}</div><div class="dtp-event-when">${e.when}</div></div>
+        </div>`
+      ).join('');
+    } else {
+      eventsEl.innerHTML = `<div style="color:var(--t4);font-size:12px">No events this week — clear skies ✓</div>`;
+    }
+  }
+}
+
+function renderPnlAttribution() {
+  const el = document.getElementById('ds-attr-bars');
+  if (!el || !D.holdings.length) return;
+
+  const inv = D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0);
+  if (!inv) return;
+
+  // Use unrealised P&L contribution
+  const items = D.holdings.map(h => {
+    const ltp = h.ltp || h.avgPrice;
+    const pl = (ltp - h.avgPrice) * h.qty;
+    return { symbol: h.symbol, id: h.id, pl, pct: (pl/inv)*100 };
+  }).sort((a,b) => b.pl - a.pl);
+
+  const maxAbs = Math.max(...items.map(x=>Math.abs(x.pl)), 1);
+
+  el.innerHTML = items.map(it => {
+    const col = it.pl >= 0 ? 'var(--grn)' : 'var(--red)';
+    const barW = Math.round(Math.abs(it.pl) / maxAbs * 100);
+    const sign = it.pl >= 0 ? '+' : '';
+    return `<div class="attr-row" onclick="openDetail(${it.id})" style="cursor:pointer" title="${it.symbol}: ${sign}₹${fI(Math.abs(it.pl))}">
+      <div class="attr-sym">${it.symbol}</div>
+      <div class="attr-bar-bg"><div class="attr-bar-fill" style="width:${barW}%;background:${col}"></div></div>
+      <div class="attr-val" style="color:${col}">${sign}₹${fI(Math.abs(it.pl))}</div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════
 function renderSummary() {
   const inv = D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice, 0);
   const cv  = D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice), 0);
@@ -6500,9 +6684,17 @@ function renderSummary() {
   const el_td = document.getElementById('ds-today');
   if(el_td) el_td.className = 'dsh-val ' + (todayPL>=0?'up':'dn');
   if(xirrRate !== null && isFinite(xirrRate)) {
-    set('ds-xirr', fP(xirrRate*100));
     const el_x = document.getElementById('ds-xirr');
-    if(el_x) el_x.className = 'dsh-val ' + (xirrRate>=0?'up':'dn');
+    // XIRR is unreliable when avg holding < 60 days — annualising a week of data gives extreme values
+    const avgDaysX = D.holdings.length
+      ? D.holdings.reduce((s,h)=>(s+(hDays(h.buyDate)||0)),0)/D.holdings.length : 0;
+    if (avgDaysX < 60) {
+      set('ds-xirr', '< 2 mo');
+      if(el_x){ el_x.className='dsh-val'; el_x.title='Need 60+ day avg holding for reliable XIRR'; el_x.style.cursor='help'; }
+    } else {
+      set('ds-xirr', fP(xirrRate*100));
+      if(el_x){ el_x.className='dsh-val '+(xirrRate>=0?'up':'dn'); el_x.title=''; el_x.style.cursor=''; }
+    }
   } else { set('ds-xirr', '—'); }
   // Simple CAGR = (cv/inv)^(1/years) - 1, using avg holding period
   const el_cagr = document.getElementById('ds-cagr');
@@ -6581,6 +6773,9 @@ function renderSummary() {
   set('ds-pos', D.holdings.length+' positions');
   // LTCG alert
   if(typeof renderLtcgAlert==='function') renderLtcgAlert();
+  // Today panel + P&L attribution
+  renderTodayPanel();
+  renderPnlAttribution();
   const el_sent = document.getElementById('ds-sent'); if(el_sent) el_sent.textContent = '—';
 
   // Holdings strip for holdings page
