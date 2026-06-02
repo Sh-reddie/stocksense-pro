@@ -922,96 +922,108 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div id="tn-row2">
     <div class="tn-tab on" id="tnt-dashboard" onclick="go('dashboard')">🏠 Dashboard</div>
 
-    <!-- Portfolio dropdown -->
+    <!-- ── PORTFOLIO ── -->
     <div class="tn-drop-wrap">
       <div class="tn-tab" id="tnt-portfolio" onclick="go('holdings')">💼 Portfolio ▾</div>
       <div class="tn-drop">
-        <div class="tn-drop-div">My Investments</div>
+        <div class="tn-drop-div">Positions</div>
         <div class="tn-drop-item" onclick="go('holdings')">📋 Holdings</div>
         <div class="tn-drop-item" onclick="go('watchlist')">👁 Watchlist</div>
-        <div class="tn-drop-item" onclick="go('sip')">📈 SIP / DCA</div>
-        <div class="tn-drop-item" onclick="go('realised')">💰 Realised P&amp;L</div>
-        <div class="tn-drop-item" onclick="go('dividends')">🏦 Dividends</div>
-        <div class="tn-drop-item" onclick="go('divcal')">🗓 Dividend Calendar</div>
         <div class="tn-drop-item" onclick="go('journal')">📒 Trade Journal</div>
+        <div class="tn-drop-item" onclick="go('sip')">📈 SIP / DCA Tracker</div>
         <div class="tn-drop-sep"></div>
-        <div class="tn-drop-div">Performance</div>
+        <div class="tn-drop-div">Returns &amp; P&amp;L</div>
+        <div class="tn-drop-item" onclick="go('realised')">💰 Realised P&amp;L</div>
         <div class="tn-drop-item" onclick="go('benchmark')">📊 vs Nifty Benchmark</div>
         <div class="tn-drop-item" onclick="go('timeline')">📈 Value Timeline</div>
         <div class="tn-drop-item" onclick="go('rebalancer')">⚖ Rebalancer</div>
+        <div class="tn-drop-sep"></div>
+        <div class="tn-drop-div">Income</div>
+        <div class="tn-drop-item" onclick="go('dividends')">🏦 Dividends Received</div>
+        <div class="tn-drop-item" onclick="go('divcal')">🗓 Dividend Calendar</div>
       </div>
     </div>
 
-    <!-- Research dropdown -->
+    <!-- ── MARKETS (new) ── -->
     <div class="tn-drop-wrap">
-      <div class="tn-tab" id="tnt-research" onclick="go('screener')">🔍 Research ▾</div>
+      <div class="tn-tab" id="tnt-markets" onclick="go('news')">📡 Markets ▾</div>
       <div class="tn-drop">
-        <div class="tn-drop-div">Stock Discovery</div>
+        <div class="tn-drop-div">Live Feed</div>
+        <div class="tn-drop-item" onclick="go('news')">📰 News &amp; Events</div>
+        <div class="tn-drop-item" onclick="go('sectormap')">🌡 Sector Rotation Map</div>
+        <div class="tn-drop-item" onclick="go('fii-dii')">🏦 FII / DII Flows</div>
+        <div class="tn-drop-item" onclick="go('deals')">💼 Bulk / Block Deals</div>
+        <div class="tn-drop-sep"></div>
+        <div class="tn-drop-div">Macro &amp; Scheduled</div>
+        <div class="tn-drop-item" onclick="go('macro')">🌐 Macro &amp; Institutional</div>
+        <div class="tn-drop-item" onclick="go('calendar')">📅 Earnings Calendar</div>
+      </div>
+    </div>
+
+    <!-- ── RESEARCH ── -->
+    <div class="tn-drop-wrap">
+      <div class="tn-tab" id="tnt-research" onclick="go('screener')">🔬 Research ▾</div>
+      <div class="tn-drop">
+        <div class="tn-drop-div">Screeners</div>
         <div class="tn-drop-item" onclick="go('screener')">🔍 Nifty 500 Screener</div>
-        <div class="tn-drop-item" onclick="go('52week')">📊 52-Week Screener</div>
+        <div class="tn-drop-item" onclick="go('52week')">📊 52-Week H/L Screener</div>
+        <div class="tn-drop-item" onclick="go('watchlist-builder')">🔭 Watchlist Builder</div>
+        <div class="tn-drop-sep"></div>
+        <div class="tn-drop-div">Deep Analysis</div>
+        <div class="tn-drop-item" onclick="go('analysis')">🔍 Stock Deep Dive</div>
         <div class="tn-drop-item" onclick="go('fair-value')">💎 Fair Value Engine</div>
         <div class="tn-drop-item" onclick="go('comparator')">⚔ Stock Comparator</div>
-        <div class="tn-drop-sep"></div>
-        <div class="tn-drop-div">Market Data</div>
-        <div class="tn-drop-item" onclick="go('fii-dii')">🏦 FII / DII Flows</div>
-        <div class="tn-drop-item" onclick="go('sectormap')">🌡 Sector Rotation Map</div>
-        <div class="tn-drop-item" onclick="go('macro')">🌐 Macro &amp; Institutional</div>
-        <div class="tn-drop-item" onclick="go('news')">📰 News &amp; Events</div>
-        <div class="tn-drop-item" onclick="go('calendar')">📅 Earnings Calendar</div>
-        <div class="tn-drop-item" onclick="go('deals')">💼 Bulk / Block Deals</div>
+        <div class="tn-drop-item" onclick="go('momentum')">🚀 Momentum Board</div>
+        <div class="tn-drop-item" onclick="go('heatmap')">🔥 Correlation Heatmap</div>
       </div>
     </div>
 
-    <!-- AI Insights dropdown -->
+    <!-- ── AI ── -->
     <div class="tn-drop-wrap">
-      <div class="tn-tab" id="tnt-ai" onclick="go('daily-brief')">🤖 AI Insights ▾</div>
+      <div class="tn-tab" id="tnt-ai" onclick="go('daily-brief')">🤖 AI ▾</div>
       <div class="tn-drop">
-        <div class="tn-drop-div">Today</div>
-        <div class="tn-drop-item" onclick="go('daily-brief')" style="font-weight:600;color:var(--ac)">🌅 Daily Market Brief</div>
-        <div class="tn-drop-item" onclick="go('action-plan')" style="color:var(--grn)">📋 Weekly Action Plan</div>
+        <div class="tn-drop-div">Today's Intel ★</div>
+        <div class="tn-drop-item" onclick="go('daily-brief')" style="font-weight:700;color:var(--ac)">🌅 Daily Market Brief</div>
+        <div class="tn-drop-item" onclick="go('action-plan')" style="font-weight:600;color:var(--grn)">📋 Weekly Action Plan</div>
         <div class="tn-drop-item" onclick="go('action')">⚡ Action Center</div>
         <div class="tn-drop-sep"></div>
         <div class="tn-drop-div">Portfolio Health</div>
         <div class="tn-drop-item" onclick="go('portfolio-doctor')" style="color:var(--ac2)">🩺 Portfolio Doctor</div>
-        <div class="tn-drop-item" onclick="go('intel-report')" style="color:var(--ac)">📑 Intelligence Report</div>
+        <div class="tn-drop-item" onclick="go('intel-report')">📑 Intelligence Report</div>
         <div class="tn-drop-item" onclick="go('stress-test')">🧨 Stress Test</div>
         <div class="tn-drop-item" onclick="go('opportunity')">🏆 Opportunity Ranker</div>
         <div class="tn-drop-sep"></div>
         <div class="tn-drop-div">Trade Decisions</div>
-        <div class="tn-drop-item" onclick="go('analysis')">🔍 Stock Deep Dive</div>
         <div class="tn-drop-item" onclick="go('entry-triggers')">🎯 Entry Triggers</div>
         <div class="tn-drop-item" onclick="go('exit-planner')">🚪 Exit Planner</div>
         <div class="tn-drop-item" onclick="go('position-builder')">📐 Position Builder</div>
-        <div class="tn-drop-item" onclick="go('momentum')">🚀 Momentum Board</div>
+        <div class="tn-drop-item" onclick="go('strategies')">🧠 Advanced Strategies</div>
         <div class="tn-drop-sep"></div>
-        <div class="tn-drop-div">Discover &amp; Plan</div>
-        <div class="tn-drop-item" onclick="go('watchlist-builder')">🔭 Watchlist Builder</div>
-        <div class="tn-drop-item" onclick="go('earnings-preview')">📣 Earnings Preview</div>
+        <div class="tn-drop-div">Planning &amp; Optimisation</div>
         <div class="tn-drop-item" onclick="go('ai-rebalancer')">⚖️ AI Rebalancer</div>
         <div class="tn-drop-item" onclick="go('goal-planner')">🎯 Goal Planner</div>
         <div class="tn-drop-item" onclick="go('dividend-opt')">💸 Dividend Optimizer</div>
+        <div class="tn-drop-item" onclick="go('earnings-preview')">📣 Earnings Preview</div>
         <div class="tn-drop-item" onclick="go('planner')">📐 Investment Planner</div>
-        <div class="tn-drop-item" onclick="go('strategies')">🧠 Advanced Strategies</div>
       </div>
     </div>
 
-    <!-- Tools dropdown -->
+    <!-- ── MANAGE ── -->
     <div class="tn-drop-wrap">
-      <div class="tn-tab" id="tnt-tools" onclick="go('risk')">🛠 Tools ▾</div>
+      <div class="tn-tab" id="tnt-manage" onclick="go('alerts')">⚙ Manage ▾</div>
       <div class="tn-drop">
-        <div class="tn-drop-div">Risk &amp; Allocation</div>
+        <div class="tn-drop-div">Risk</div>
         <div class="tn-drop-item" onclick="go('risk')">🛡 Risk Console</div>
         <div class="tn-drop-item" onclick="go('riskpro')">⚠ Risk Analytics</div>
-        <div class="tn-drop-item" onclick="go('heatmap')">🔥 Correlation Heatmap</div>
         <div class="tn-drop-sep"></div>
-        <div class="tn-drop-div">Alerts</div>
+        <div class="tn-drop-div">Alerts &amp; Notifications</div>
         <div class="tn-drop-item" onclick="go('alerts')">🔔 Price Alerts</div>
         <div class="tn-drop-item" onclick="go('custom-alerts')">🛎 Custom Alerts</div>
         <div class="tn-drop-item" onclick="go('notifications')">📬 Notifications Log</div>
         <div class="tn-drop-sep"></div>
-        <div class="tn-drop-div">Manage</div>
+        <div class="tn-drop-div">Data &amp; Settings</div>
         <div class="tn-drop-item" onclick="go('tax')">🧾 Tax P&amp;L Report</div>
-        <div class="tn-drop-item" onclick="go('import')">⬆ Import CSV / Excel</div>
+        <div class="tn-drop-item" onclick="go('import')">⬆ Import / Export</div>
         <div class="tn-drop-item" onclick="go('settings')">⚙ Settings</div>
       </div>
     </div>
@@ -4684,24 +4696,26 @@ const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
-  // Portfolio tab
+  // Portfolio tab — my money, positions, P&L, income
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio',
   dividends:'portfolio', divcal:'portfolio', journal:'portfolio', benchmark:'portfolio',
   timeline:'portfolio', rebalancer:'portfolio',
-  // Research tab
+  // Markets tab — what's happening out there
+  news:'markets', sectormap:'markets', 'fii-dii':'markets', deals:'markets',
+  macro:'markets', calendar:'markets',
+  // Research tab — find & analyse stocks
   screener:'research', '52week':'research', 'fair-value':'research', comparator:'research',
-  'fii-dii':'research', sectormap:'research', macro:'research', news:'research',
-  calendar:'research', deals:'research',
-  // AI Insights tab
-  analysis:'ai', plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai',
+  analysis:'research', momentum:'research', heatmap:'research', 'watchlist-builder':'research',
+  // AI tab — all AI-powered features
+  plan:'ai', planner:'ai', strategies:'ai', 'daily-brief':'ai',
   'entry-triggers':'ai', 'portfolio-doctor':'ai', 'opportunity':'ai', 'action-plan':'ai',
-  'position-builder':'ai', 'stress-test':'ai', 'intel-report':'ai', 'watchlist-builder':'ai',
+  'position-builder':'ai', 'stress-test':'ai', 'intel-report':'ai',
   'exit-planner':'ai', 'ai-rebalancer':'ai', 'earnings-preview':'ai', 'dividend-opt':'ai',
-  'goal-planner':'ai', action:'ai', momentum:'ai',
-  // Tools tab
-  risk:'tools', heatmap:'tools', riskpro:'tools',
-  alerts:'tools', notifications:'tools', 'custom-alerts':'tools',
-  tax:'tools', import:'tools', settings:'tools'
+  'goal-planner':'ai', action:'ai',
+  // Manage tab — risk, alerts, settings, data
+  risk:'manage', heatmap_:'manage', riskpro:'manage',
+  alerts:'manage', notifications:'manage', 'custom-alerts':'manage',
+  tax:'manage', import:'manage', settings:'manage'
 };
 
 function go(id) {
