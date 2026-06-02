@@ -5210,8 +5210,8 @@ If unsure, reply: UNKNOWN`;
   try {
     let ticker = null;
     if (provider === 'openrouter') {
-      let model = localStorage.getItem('orModel') || 'nvidia/nemotron-3-nano-30b-a3b:free';
-      if (model === 'custom') model = localStorage.getItem('orCustomModel') || 'nvidia/nemotron-3-nano-30b-a3b:free';
+      let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct:free';
+      if (model === 'custom') model = localStorage.getItem('orCustomModel') || 'meta-llama/llama-3.3-70b-instruct:free';
       const _ref = (location.protocol === 'http:' || location.protocol === 'https:') ? location.href : 'https://stocksense.local';
       const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method:'POST', signal: AbortSignal.timeout(15000),
@@ -9600,7 +9600,7 @@ function populateAiSel() {
     const k = p==='openrouter' ? (localStorage.getItem('orKey')||'').trim() : (localStorage.getItem('apiKey')||'').trim();
     let label;
     if(p === 'openrouter') {
-      let m = localStorage.getItem('orModel') || 'nvidia/nemotron-3-nano-30b-a3b:free';
+      let m = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct:free';
       if(m === 'custom') m = (localStorage.getItem('orCustomModel')||'custom');
       label = 'OpenRouter · '+(m.split('/').pop().replace(':free',' (free)'));
     } else {
@@ -10378,10 +10378,10 @@ async function claude(prompt, sys) {
   if (provider === 'openrouter') {
     const key   = localStorage.getItem('orKey') || '';
     // Resolve model — never send 'custom' literally to API
-    let model = localStorage.getItem('orModel') || 'nvidia/nemotron-3-nano-30b-a3b:free';
+    let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct:free';
     if(model === 'custom') {
       const customVal = localStorage.getItem('orCustomModel') || document.getElementById('cfg-or-custom')?.value.trim();
-      model = customVal && customVal !== 'custom' ? customVal : 'nvidia/nemotron-3-nano-30b-a3b:free';
+      model = customVal && customVal !== 'custom' ? customVal : 'meta-llama/llama-3.3-70b-instruct:free';
     }
     if (!key) return '⚠ No OpenRouter API key. Go to Settings → AI Provider → add your free key from openrouter.ai';
     // Use a stable HTTPS referer — file:// URLs cause OpenRouter to reject the request
@@ -10410,21 +10410,24 @@ async function claude(prompt, sys) {
       if(d.error) {
         const errMsg = d.error.message || JSON.stringify(d.error);
         // Model not found — suggest fallback
-        if(errMsg.includes('No endpoints') || errMsg.includes('not found') || r.status===404) {
-          // Auto-retry with most reliable free model
-          if(model !== 'nvidia/nemotron-3-nano-30b-a3b:free') {
-            ilog && ilog('⚠ Model "'+model+'" unavailable, retrying with Llama 3.1 8B...','warn');
-            localStorage.setItem('orModel','nvidia/nemotron-3-nano-30b-a3b:free');
-            const r2 = await fetch('https://openrouter.ai/api/v1/chat/completions',{
-              method:'POST',
-              headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro'},
-              body:JSON.stringify({model:'nvidia/nemotron-3-nano-30b-a3b:free',max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
-              signal: AbortSignal.timeout(60000)
-            });
-            const d2 = await r2.json();
-            if(!d2.error) return d2.choices?.[0]?.message?.content || 'Analysis unavailable.';
+        if(errMsg.includes('No endpoints') || errMsg.includes('not found') || errMsg.includes('Provider returned error') || r.status===404 || r.status===503) {
+          // Auto-retry with fallback free models
+          const fallbacks = ['meta-llama/llama-3.3-70b-instruct:free','google/gemma-3-27b-it:free','mistralai/mistral-7b-instruct:free'];
+          for(const fb of fallbacks) {
+            if(fb === model) continue;
+            ilog && ilog('⚠ Model "'+model+'" unavailable, retrying with '+fb+'...','warn');
+            try {
+              const r2 = await fetch('https://openrouter.ai/api/v1/chat/completions',{
+                method:'POST',
+                headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro'},
+                body:JSON.stringify({model:fb,max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
+                signal: AbortSignal.timeout(60000)
+              });
+              const d2 = await r2.json();
+              if(!d2.error) return d2.choices?.[0]?.message?.content || 'Analysis unavailable.';
+            } catch(e2) { /* try next */ }
           }
-          return '⚠ Model unavailable on OpenRouter. Go to Settings → try "Llama 3.1 8B" or check openrouter.ai/models for free models.';
+          return '⚠ All AI models are temporarily unavailable on OpenRouter. Please try again in a few minutes.';
         }
         return '⚠ OpenRouter error ['+r.status+']: '+errMsg;
       }
@@ -10439,7 +10442,7 @@ async function claude(prompt, sys) {
         const r3 = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method:'POST',
           headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro'},
-          body:JSON.stringify({model:'meta-llama/llama-3.1-8b-instruct:free',max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
+          body:JSON.stringify({model:'meta-llama/llama-3.3-70b-instruct:free',max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
           signal: AbortSignal.timeout(30000)
         });
         const d3 = await r3.json();
@@ -10484,13 +10487,13 @@ async function claudeJSON(prompt, sys) {
     return claude(prompt, sys);
   }
   // Ordered list of non-reasoning free models to try (auto-skips unavailable ones)
-  // Last verified working: 2026-05-28
+  // Last verified: 2026-06-01
   const FAST_MODELS = [
-    'nvidia/nemotron-3-nano-30b-a3b:free',
-    'z-ai/glm-4.5-air:free',
-    'liquid/lfm-2.5-1.2b-instruct:free',
-    'nvidia/nemotron-3-super-120b-a12b:free',
-    'google/gemma-4-26b-a4b-it:free'
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'google/gemma-3-27b-it:free',
+    'mistralai/mistral-7b-instruct:free',
+    'nousresearch/hermes-3-llama-3.1-405b:free',
+    'z-ai/glm-4.5-air:free'
   ];
   for (const model of FAST_MODELS) {
     try {
@@ -17879,7 +17882,7 @@ function _chatToggle() {
     const prov = localStorage.getItem('aiProvider') || 'openrouter';
     const lbl = document.getElementById('chat-model-label');
     if (lbl) {
-      let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.1-8b-instruct:free';
+      let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct:free';
       if (model === 'custom') model = localStorage.getItem('orCustomModel') || 'Custom';
       const displayModel = model.split('/').pop().replace(':free','').replace(/-/g,' ');
       lbl.textContent = prov === 'anthropic' ? 'Claude Sonnet 4' : displayModel;
@@ -18092,73 +18095,86 @@ async function _chatCallAI(sysPrompt, messages) {
   const key = (localStorage.getItem('orKey') || '').trim();
   if (!key) throw new Error('No OpenRouter key. Go to Settings → AI Provider.');
 
-  let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.1-8b-instruct:free';
+  // Default model — llama-3.3-70b (3.1-8b was deprecated on OpenRouter)
+  const CHAT_DEFAULT = 'meta-llama/llama-3.3-70b-instruct:free';
+  // Fallback cascade tried automatically if primary is unavailable
+  const CHAT_FALLBACKS = [
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'google/gemma-3-27b-it:free',
+    'mistralai/mistral-7b-instruct:free',
+    'nousresearch/hermes-3-llama-3.1-405b:free'
+  ];
+
+  let model = localStorage.getItem('orModel') || CHAT_DEFAULT;
   if (model === 'custom') {
     const customVal = localStorage.getItem('orCustomModel') || '';
-    model = customVal && customVal !== 'custom' ? customVal : 'meta-llama/llama-3.1-8b-instruct:free';
+    model = customVal && customVal !== 'custom' ? customVal : CHAT_DEFAULT;
   }
 
   const _ref = (location.protocol === 'https:' || location.protocol === 'http:') ? location.href : 'https://stocksense.local';
   const fullMsgs = [{ role: 'system', content: sysPrompt }, ...messages];
 
-  const reasoningModels = ['nemotron', 'deepseek-r1', 'qwq', 'flash-thinking', 'o1', 'o3'];
-  const isReasoning = reasoningModels.some(kw => model.toLowerCase().includes(kw));
-  const timeoutMs = isReasoning ? 90000 : 30000;
-
-  // Fetch with full timeout covering both connection AND body read.
-  // stream:false forces the server to return a complete JSON body (not SSE chunks),
-  // which prevents r.text() from hanging on an open streaming connection.
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  let r;
-  try {
-    r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro' },
-      body: JSON.stringify({ model, max_tokens: 1024, temperature: 0.7, stream: false, messages: fullMsgs }),
-      signal: controller.signal
-    });
-  } catch(e) {
-    clearTimeout(timeoutId);
-    if (e.name === 'AbortError' || e.message.includes('aborted')) {
-      throw new Error(`**"${model.split('/').pop()}" timed out** after ${timeoutMs/1000}s.\n\nThis model is too slow for interactive chat. Go to **Settings → AI Provider** and switch to **Llama 3.1 8B** for fast responses.`);
+  // Attempt a single model — returns content or throws with coded prefix
+  async function _tryModel(m) {
+    const reasoningModels = ['nemotron', 'deepseek-r1', 'qwq', 'flash-thinking', 'o1', 'o3'];
+    const isReasoning = reasoningModels.some(kw => m.toLowerCase().includes(kw));
+    const timeoutMs = isReasoning ? 90000 : 30000;
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), timeoutMs);
+    let r;
+    try {
+      r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro' },
+        body: JSON.stringify({ model: m, max_tokens: 1024, temperature: 0.7, stream: false, messages: fullMsgs }),
+        signal: controller.signal
+      });
+    } catch(e) {
+      clearTimeout(tid);
+      if (e.name === 'AbortError' || e.message.includes('aborted'))
+        throw new Error(`TIMEOUT:${m}:${timeoutMs/1000}`);
+      throw e;
     }
-    throw e;
-  }
-
-  // Read body — still covered by the same AbortController
-  let raw;
-  try {
-    raw = await r.text();
-  } catch(e) {
-    clearTimeout(timeoutId);
-    if (e.name === 'AbortError') {
-      throw new Error(`**"${model.split('/').pop()}" timed out** while reading response after ${timeoutMs/1000}s. Switch to a faster model in **Settings → AI Provider**.`);
+    let raw;
+    try { raw = await r.text(); } catch(e) {
+      clearTimeout(tid);
+      if (e.name === 'AbortError') throw new Error(`TIMEOUT:${m}:${timeoutMs/1000}`);
+      throw e;
     }
-    throw e;
-  }
-  clearTimeout(timeoutId);
-  let d;
-  try { d = JSON.parse(raw); } catch(e) { throw new Error('AI returned an invalid response. Please try again.'); }
-
-  if (d.error) {
-    const msg = d.error.message || JSON.stringify(d.error);
-    if (msg.includes('No endpoints') || msg.includes('not found') || r.status === 404) {
-      throw new Error(`**Model "${model.split('/').pop()}" is unavailable on OpenRouter.**\n\nThis model may be offline or require a paid plan. Go to **Settings → AI Provider** and select a different model.`);
+    clearTimeout(tid);
+    let d;
+    try { d = JSON.parse(raw); } catch(e) { throw new Error('AI returned an invalid response. Please try again.'); }
+    if (d.error) {
+      const msg = d.error.message || JSON.stringify(d.error);
+      if (msg.includes('No endpoints') || msg.includes('not found') || msg.includes('Provider returned error') || r.status === 404 || r.status === 503)
+        throw new Error(`UNAVAIL:${m}`);
+      throw new Error(msg);
     }
-    throw new Error(msg);
+    let content = (d.choices?.[0]?.message?.content || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    if (!content) throw new Error(`EMPTY:${m}`);
+    return { content, usedModel: m };
   }
 
-  let content = d.choices?.[0]?.message?.content || '';
-  // Strip <think>…</think> reasoning traces so only the final answer shows
-  content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-
-  if (!content) {
-    throw new Error(`**"${model.split('/').pop()}" returned an empty response.**\n\nThis sometimes happens with reasoning models that exhaust their token budget in the thinking phase. Try a different model in **Settings → AI Provider**.`);
+  // Build ordered list: user choice first, then fallbacks
+  const toTry = [model, ...CHAT_FALLBACKS.filter(f => f !== model)];
+  for (const m of toTry) {
+    try {
+      const res = await _tryModel(m);
+      if (m !== model) {
+        return `*(Fell back to **${m.split('/').pop().replace(':free','')}** — your selected model was unavailable)*\n\n${res.content}`;
+      }
+      return res.content;
+    } catch(e) {
+      const msg = e.message || '';
+      if (msg.startsWith('TIMEOUT:')) {
+        const parts = msg.split(':');
+        throw new Error(`**"${parts[1].split('/').pop()}" timed out** after ${parts[2]}s.\n\nThis model is too slow for interactive chat. Go to **Settings → AI Provider** and select a faster model.`);
+      }
+      if (msg.startsWith('UNAVAIL:') || msg.startsWith('EMPTY:')) continue; // try next
+      throw e; // non-retryable
+    }
   }
-
-  return content;
+  throw new Error('**All AI models are currently unavailable on OpenRouter.**\n\nThis is likely a temporary outage. Please try again in a few minutes, or switch to Anthropic in **Settings → AI Provider**.');
 }
 
 // Show unread badge when chat is closed and new AI message arrives
