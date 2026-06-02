@@ -17317,6 +17317,8 @@ const LK = {
       // Locked — show PIN entry
       document.body.classList.add('app-locked');
       this._mode = 'locked';
+      const ls = document.getElementById('lock-screen');
+      if (ls) { ls.style.display = 'flex'; requestAnimationFrame(() => ls.classList.remove('hidden')); }
       this.render();
     }
   }
