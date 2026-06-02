@@ -18030,6 +18030,16 @@ async function _chatSend() {
   // Show typing indicator
   const typingEl = _chatShowTyping();
 
+  // Warn upfront if the selected model is a slow reasoning model
+  const _selectedModel = (localStorage.getItem('orModel') || '').toLowerCase();
+  const _customModel   = (localStorage.getItem('orCustomModel') || '').toLowerCase();
+  const _activeModel   = _selectedModel === 'custom' ? _customModel : _selectedModel;
+  const _reasoningKws  = ['nemotron', 'deepseek-r1', 'qwq', 'flash-thinking'];
+  if (prov === 'openrouter' && _reasoningKws.some(kw => _activeModel.includes(kw))) {
+    const _mName = (_activeModel.split('/').pop() || _activeModel).replace(/:free$/,'');
+    _chatAddMessage('ai', `⏳ **Heads-up:** **${_mName}** is a reasoning model — it thinks before answering and can take 60–120 seconds. If that's too slow, go to **Settings → AI Provider** and switch to **Llama 3.1 8B** for instant replies.`);
+  }
+
   // Build system prompt with portfolio context
   const portfolioCtx = _chatGetPortfolioContext();
   const sysPrompt = `You are an expert Indian equity market analyst and investment research co-pilot with 20+ years of NSE/BSE experience. You have access to the user's portfolio data below.
@@ -18091,32 +18101,44 @@ async function _chatCallAI(sysPrompt, messages) {
   const _ref = (location.protocol === 'https:' || location.protocol === 'http:') ? location.href : 'https://stocksense.local';
   const fullMsgs = [{ role: 'system', content: sysPrompt }, ...messages];
 
-  // Reasoning models (nemotron, deepseek-r1, etc.) can take 60-120s — warn the user upfront
   const reasoningModels = ['nemotron', 'deepseek-r1', 'qwq', 'flash-thinking', 'o1', 'o3'];
-  const isReasoning = reasoningModels.some(r => model.toLowerCase().includes(r));
+  const isReasoning = reasoningModels.some(kw => model.toLowerCase().includes(kw));
   const timeoutMs = isReasoning ? 90000 : 30000;
 
-  if (isReasoning) {
-    // Show a warning bubble so the user knows it's slow
-    _chatAddMessage('ai', `⏳ **Heads up:** "${model.split('/').pop()}" is a reasoning model — it may take 30–90 seconds to respond as it thinks through the answer step by step. If it's too slow, go to **Settings → AI Provider** and switch to a faster model like **Llama 3.1 8B**.`);
-  }
+  // Fetch with full timeout covering both connection AND body read.
+  // stream:false forces the server to return a complete JSON body (not SSE chunks),
+  // which prevents r.text() from hanging on an open streaming connection.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   let r;
   try {
     r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro' },
-      body: JSON.stringify({ model, max_tokens: 1024, temperature: 0.7, messages: fullMsgs }),
-      signal: AbortSignal.timeout(timeoutMs)
+      body: JSON.stringify({ model, max_tokens: 1024, temperature: 0.7, stream: false, messages: fullMsgs }),
+      signal: controller.signal
     });
   } catch(e) {
-    if (e.name === 'TimeoutError' || e.message.includes('aborted')) {
-      throw new Error(`**"${model.split('/').pop()}" timed out** after ${timeoutMs/1000}s.\n\nThis model is too slow for interactive chat. Go to **Settings → AI Provider** and switch to **Llama 3.1 8B** or **Gemma 3 12B** for faster responses.`);
+    clearTimeout(timeoutId);
+    if (e.name === 'AbortError' || e.message.includes('aborted')) {
+      throw new Error(`**"${model.split('/').pop()}" timed out** after ${timeoutMs/1000}s.\n\nThis model is too slow for interactive chat. Go to **Settings → AI Provider** and switch to **Llama 3.1 8B** for fast responses.`);
     }
     throw e;
   }
 
-  const raw = await r.text();
+  // Read body — still covered by the same AbortController
+  let raw;
+  try {
+    raw = await r.text();
+  } catch(e) {
+    clearTimeout(timeoutId);
+    if (e.name === 'AbortError') {
+      throw new Error(`**"${model.split('/').pop()}" timed out** while reading response after ${timeoutMs/1000}s. Switch to a faster model in **Settings → AI Provider**.`);
+    }
+    throw e;
+  }
+  clearTimeout(timeoutId);
   let d;
   try { d = JSON.parse(raw); } catch(e) { throw new Error('AI returned an invalid response. Please try again.'); }
 
