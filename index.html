@@ -10301,7 +10301,7 @@ function init(){
   if(savedOrKey && document.getElementById('cfg-or-key')) document.getElementById('cfg-or-key').value = savedOrKey;
   let savedOrModel = localStorage.getItem('orModel');
   // Migrate deprecated/dead models to current default
-  const _deadModels = ['meta-llama/llama-3.1-8b-instruct:free','mistralai/mistral-7b-instruct:free','google/gemma-3-27b-it:free','qwen/qwen3-8b:free','qwen/qwen3-14b:free','microsoft/phi-4-reasoning:free','deepseek/deepseek-r1-0528-qwen3-8b:free'];
+  const _deadModels = ['meta-llama/llama-3.1-8b-instruct:free','mistralai/mistral-7b-instruct:free','google/gemma-3-27b-it:free','qwen/qwen3-8b:free','qwen/qwen3-14b:free','microsoft/phi-4-reasoning:free','deepseek/deepseek-r1-0528-qwen3-8b:free','nvidia/nemotron-3-nano-30b-a3b:free','nousresearch/hermes-3-llama-3.1-405b:free'];
   if (savedOrModel && _deadModels.includes(savedOrModel)) {
     savedOrModel = 'meta-llama/llama-3.3-70b-instruct:free';
     localStorage.setItem('orModel', savedOrModel);
