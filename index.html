@@ -10706,6 +10706,9 @@ function processOrderHistory(rows2d) {
       buyDate: buyDateISO
     });
   }
+  // Expose for QA / console inspection
+  window._lastFullySoldSymbols = fullySoldSymbols;
+  window._lastActiveLots = result.length;
   // Log fully-sold stocks so user can verify
   if (fullySoldSymbols.length) {
     ilog('📊 Fully sold (no remaining lots): <strong>' + fullySoldSymbols.join(', ') + '</strong> — these are NOT in active holdings because all shares were sold per FIFO', 'warn');
