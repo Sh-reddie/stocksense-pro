@@ -10675,12 +10675,16 @@ function processOrderHistory(rows2d) {
 
   // Build result: only symbols with remaining lots
   const result = [];
+  const fullySoldSymbols = [];
   let totalRealised = 0;
   for (const [sym, h] of Object.entries(holdings)) {
     const activeLots = h.lots.filter(l => l.remaining > 0.001);
     const totalRealised_s = h.realised;
     totalRealised += totalRealised_s;
-    if (!activeLots.length) continue;
+    if (!activeLots.length) {
+      if (!/^\d/.test(sym) && sym.length >= 2 && !sym.includes('$')) fullySoldSymbols.push(sym);
+      continue;
+    }
     // Skip junk symbols: BSE numeric codes, odd-lot markers ($), ETF placeholders
     const cleanSym = sym.replace(/\$.*/, '').replace(/\.\d+$/, '');
     if (/^\d/.test(sym) || sym.length < 2) continue; // skip numeric BSE codes
@@ -10702,6 +10706,11 @@ function processOrderHistory(rows2d) {
       buyDate: buyDateISO
     });
   }
+  // Log fully-sold stocks so user can verify
+  if (fullySoldSymbols.length) {
+    ilog('📊 Fully sold (no remaining lots): <strong>' + fullySoldSymbols.join(', ') + '</strong> — these are NOT in active holdings because all shares were sold per FIFO', 'warn');
+  }
+  ilog('📊 Active holdings from FIFO: <strong>' + result.length + '</strong> · Fully sold out: <strong>' + fullySoldSymbols.length + '</strong>');
   // Store realised P&L summary + individual sell trades for D.realised
   window._orderHistoryRealisedPnL = Math.round(totalRealised * 100) / 100;
   window._orderHistoryRealisedTrades = [];
