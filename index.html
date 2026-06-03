@@ -358,6 +358,14 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 .t-neu{background:rgba(148,163,184,.1);color:var(--t3);}
 .t-stcg{background:rgba(251,191,36,.12);color:#fbbf24;}
 .t-ltcg{background:rgba(34,211,238,.12);color:#22d3ee;}
+.t-holding{background:rgba(79,142,247,.14);color:var(--ac);}
+.t-realised{background:rgba(251,146,60,.14);color:#fb923c;}
+.t-unknown{background:rgba(148,163,184,.12);color:var(--t3);}
+.oh-ftab{transition:all .15s;}
+.oh-ftab.on{background:var(--ac);color:#fff !important;border-color:var(--ac);}
+.oh-buy-row{border-left:3px solid rgba(34,197,94,.5);}
+.oh-sell-row{border-left:3px solid rgba(239,68,68,.5);}
+.oh-unknown-row{border-left:3px solid rgba(148,163,184,.3);opacity:.7;}
 
 /* ── AI BOX ─────────────────────────────────── */
 .ai-box{background:linear-gradient(135deg,rgba(79,142,247,.05),rgba(124,106,247,.06));border:1px solid rgba(124,106,247,.2);border-radius:var(--radius);padding:16px;position:relative;}
@@ -853,6 +861,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="mob-nav-item" onclick="mgo('daily-brief')" style="font-weight:600;color:var(--ac)">🌅 Daily Brief</div>
     <div class="mob-nav-sect">💼 Portfolio</div>
     <div class="mob-nav-item" onclick="mgo('holdings')">📋 Holdings</div>
+    <div class="mob-nav-item" onclick="mgo('order-history')">🗂 Order History</div>
     <div class="mob-nav-item" onclick="mgo('watchlist')">👁 Watchlist</div>
     <div class="mob-nav-item" onclick="mgo('sip')">📈 SIP / DCA</div>
     <div class="mob-nav-item" onclick="mgo('realised')">💰 Realised P&amp;L</div>
@@ -952,6 +961,7 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="tn-drop">
         <div class="tn-drop-div">Positions</div>
         <div class="tn-drop-item" onclick="go('holdings')">📋 Holdings</div>
+        <div class="tn-drop-item" onclick="go('order-history')">🗂 Order History</div>
         <div class="tn-drop-item" onclick="go('watchlist')">👁 Watchlist</div>
         <div class="tn-drop-item" onclick="go('journal')">📒 Trade Journal</div>
         <div class="tn-drop-item" onclick="go('sip')">📈 SIP / DCA Tracker</div>
@@ -1998,6 +2008,101 @@ textarea.fi{resize:vertical;min-height:70px;}
         </div></div>
       </div>
     </div>
+  </div>
+
+  <!-- ═══ ORDER HISTORY ════════════════════════════════════════════ -->
+  <div class="sec" id="sec-order-history">
+    <div class="sec-head">
+      <div class="sec-title">🗂 Order History</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-p btn-sm" onclick="document.getElementById('ohf').click()">⬆ Import XLSX</button>
+        <input type="file" id="ohf" accept=".xlsx,.xls" style="display:none" onchange="ohHandleFile(this.files[0])">
+        <button class="btn btn-g btn-sm" onclick="ohExportCSV()">⬇ CSV</button>
+        <button class="btn btn-red btn-sm" onclick="if(confirm('Clear all order history?')){D.orders=[];save(\'orders\');renderOrderHistory();toast(\'Order history cleared\',\'ok\')}">🗑 Clear</button>
+      </div>
+    </div>
+
+    <!-- Import drop zone — shown only when no orders -->
+    <div id="oh-dropzone" style="display:none;border:2px dashed var(--b2);border-radius:14px;padding:40px 20px;text-align:center;cursor:pointer;background:var(--s2);margin-bottom:20px;transition:border-color .2s" onclick="document.getElementById('ohf').click()" ondragover="event.preventDefault();this.style.borderColor='var(--ac)'" ondragleave="this.style.borderColor='var(--b2)'" ondrop="event.preventDefault();this.style.borderColor='var(--b2)';ohHandleFile(event.dataTransfer.files[0])">
+      <div style="font-size:48px;margin-bottom:12px">📂</div>
+      <div style="font-family:var(--display);font-size:18px;font-weight:700;margin-bottom:6px">Drop your Order History file here</div>
+      <div style="font-size:12px;color:var(--t4);margin-bottom:16px">Angel One · 5paisa · Any broker Excel with Stock Name, Symbol, Type, Qty, Value, Date columns</div>
+      <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap">
+        <span class="tag t-buy" style="font-size:11px">Angel One</span>
+        <span class="tag t-buy" style="font-size:11px">5paisa</span>
+        <span class="tag t-hold" style="font-size:11px">Any .xlsx with BUY/SELL history</span>
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div id="oh-stats" style="display:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px">
+      <div class="pn" style="text-align:center;padding:12px 8px">
+        <div style="font-size:22px;font-weight:800;font-family:var(--display)" id="oh-stat-total">—</div>
+        <div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-top:3px">Total Orders</div>
+      </div>
+      <div class="pn" style="text-align:center;padding:12px 8px">
+        <div style="font-size:22px;font-weight:800;font-family:var(--display);color:var(--grn)" id="oh-stat-buys">—</div>
+        <div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-top:3px">Buy Orders</div>
+      </div>
+      <div class="pn" style="text-align:center;padding:12px 8px">
+        <div style="font-size:22px;font-weight:800;font-family:var(--display);color:var(--red)" id="oh-stat-sells">—</div>
+        <div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-top:3px">Sell Orders</div>
+      </div>
+      <div class="pn" style="text-align:center;padding:12px 8px">
+        <div style="font-size:22px;font-weight:800;font-family:var(--display);color:var(--ac)" id="oh-stat-holding">—</div>
+        <div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-top:3px">Still Holding</div>
+      </div>
+      <div class="pn" style="text-align:center;padding:12px 8px">
+        <div style="font-size:22px;font-weight:800;font-family:var(--display);color:var(--yel)" id="oh-stat-realised">—</div>
+        <div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-top:3px">Exited</div>
+      </div>
+      <div class="pn" style="text-align:center;padding:12px 8px">
+        <div style="font-size:13px;font-weight:800;font-family:var(--display)" id="oh-stat-invested">—</div>
+        <div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-top:3px">Total Invested</div>
+      </div>
+    </div>
+
+    <!-- Filters + Search -->
+    <div id="oh-filters" style="display:none;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn btn-xs oh-ftab on" id="oh-f-all"      onclick="ohFilter('all')">All</button>
+        <button class="btn btn-xs oh-ftab"    id="oh-f-buy"      onclick="ohFilter('buy')">🟢 BUY</button>
+        <button class="btn btn-xs oh-ftab"    id="oh-f-sell"     onclick="ohFilter('sell')">🔴 SELL</button>
+        <button class="btn btn-xs oh-ftab"    id="oh-f-holding"  onclick="ohFilter('holding')">🔵 Holding</button>
+        <button class="btn btn-xs oh-ftab"    id="oh-f-realised" onclick="ohFilter('realised')">🟠 Realised</button>
+        <button class="btn btn-xs oh-ftab"    id="oh-f-unknown"  onclick="ohFilter('unknown')">⚠ Unknown</button>
+      </div>
+      <input type="text" class="fi" id="oh-search" placeholder="🔍 Search symbol or name…" style="min-width:180px;flex:1" oninput="renderOrderHistory()">
+      <select class="fi" id="oh-sort" style="width:160px" onchange="renderOrderHistory()">
+        <option value="date-desc">Newest First</option>
+        <option value="date-asc">Oldest First</option>
+        <option value="sym-asc">Symbol A→Z</option>
+        <option value="value-desc">Largest Value</option>
+      </select>
+    </div>
+
+    <!-- Orders table -->
+    <div id="oh-table-wrap" style="display:none;overflow-x:auto">
+      <table class="tbl" style="width:100%;min-width:720px">
+        <thead>
+          <tr>
+            <th style="width:90px">Date</th>
+            <th>Stock</th>
+            <th style="width:54px">Exch</th>
+            <th style="width:54px">Type</th>
+            <th style="width:70px;text-align:right">Qty</th>
+            <th style="width:90px;text-align:right">Price</th>
+            <th style="width:100px;text-align:right">Value</th>
+            <th style="width:100px">Status</th>
+          </tr>
+        </thead>
+        <tbody id="oh-tbody"></tbody>
+      </table>
+    </div>
+    <div id="oh-empty" style="text-align:center;padding:60px 20px;color:var(--t4);font-size:14px;display:none">
+      No orders match your filter.
+    </div>
+    <div id="oh-import-log" style="margin-top:16px;font-family:var(--mono);font-size:11px;line-height:1.9;color:var(--t2);max-height:220px;overflow-y:auto;display:none"></div>
   </div>
 
   <!-- ═══ AI INVESTOR — ADVANCED STRATEGIES ════════════════════════ -->
@@ -4379,6 +4484,7 @@ function switchPortfolio(id) {
   D.realised  = _pfLoad('realised','[]');
   D.watchlist = _pfLoad('watchlist','[]');
   D.dividends = _pfLoad('dividends','[]');
+  D.orders    = _pfLoad('orders','[]');
   D.cfg       = _pfLoad('cfg','{"risk":"aggressive","hor":"medium","pt":20,"sl":12,"ref":60}');
   D.notifs    = _pfLoad('notifs','[]');
   closePfModal();
@@ -4471,6 +4577,7 @@ let D = {
   realised:  _pfLoad('realised','[]'),
   watchlist: _pfLoad('watchlist','[]'),
   dividends: _pfLoad('dividends','[]'),
+  orders:    _pfLoad('orders','[]'),
   cfg:       _pfLoad('cfg','{"risk":"aggressive","hor":"medium","pt":20,"sl":12,"ref":60}'),
   notifs:    _pfLoad('notifs','[]'),
 };
@@ -4727,14 +4834,14 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP / DCA Tracker',action:'⚡ Action Center',momentum:'🚀 Momentum Board',risk:'🛡 Risk Console',benchmark:'📊 Benchmark vs Nifty',heatmap:'🔥 Correlation Heatmap',sectormap:'🌡 Sector Rotation Map',rebalancer:'⚖ Portfolio Rebalancer',analysis:'🔍 Stock Deep Dive',plan:'Exit Planner',planner:'📐 Investment Planner',realised:'💰 Realised P&L',dividends:'🏦 Dividends',tax:'🧾 Tax P&L Report',divcal:'🗓 Dividend Calendar',alerts:'🔔 Price Alerts',notifications:'📬 Notifications',calendar:'📅 Earnings Calendar',news:'📰 News & Events',deals:'💼 Bulk & Block Deals',import:'⬆ Import CSV / Excel',settings:'⚙ Settings',strategies:'🧠 AI Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Nifty 500 Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily Market Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 Portfolio Doctor','opportunity':'🏆 Opportunity Ranker','action-plan':'📋 Weekly Action Plan','position-builder':'📐 Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ Stock Comparator','intel-report':'📑 Intelligence Report','watchlist-builder':'🔭 Watchlist Builder','exit-planner':'🚪 Exit Strategy Planner','ai-rebalancer':'⚖️ AI Portfolio Rebalancer','earnings-preview':'📣 Earnings Preview','dividend-opt':'💸 Dividend Optimizer','goal-planner':'🎯 Goal Planner','timeline':'📈 Value Timeline','52week':'📊 52-Week Screener','custom-alerts':'🛎 Custom Alerts','fii-dii':'🏦 FII / DII Flow Tracker'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP / DCA Tracker',action:'⚡ Action Center',momentum:'🚀 Momentum Board',risk:'🛡 Risk Console',benchmark:'📊 Benchmark vs Nifty',heatmap:'🔥 Correlation Heatmap',sectormap:'🌡 Sector Rotation Map',rebalancer:'⚖ Portfolio Rebalancer',analysis:'🔍 Stock Deep Dive',plan:'Exit Planner',planner:'📐 Investment Planner',realised:'💰 Realised P&L',dividends:'🏦 Dividends',tax:'🧾 Tax P&L Report',divcal:'🗓 Dividend Calendar',alerts:'🔔 Price Alerts',notifications:'📬 Notifications',calendar:'📅 Earnings Calendar',news:'📰 News & Events',deals:'💼 Bulk & Block Deals',import:'⬆ Import CSV / Excel',settings:'⚙ Settings',strategies:'🧠 AI Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Nifty 500 Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily Market Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 Portfolio Doctor','opportunity':'🏆 Opportunity Ranker','action-plan':'📋 Weekly Action Plan','position-builder':'📐 Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ Stock Comparator','intel-report':'📑 Intelligence Report','watchlist-builder':'🔭 Watchlist Builder','exit-planner':'🚪 Exit Strategy Planner','ai-rebalancer':'⚖️ AI Portfolio Rebalancer','earnings-preview':'📣 Earnings Preview','dividend-opt':'💸 Dividend Optimizer','goal-planner':'🎯 Goal Planner','timeline':'📈 Value Timeline','52week':'📊 52-Week Screener','custom-alerts':'🛎 Custom Alerts','fii-dii':'🏦 FII / DII Flow Tracker','order-history':'📋 Order History'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   // Portfolio tab — my money, positions, P&L, income
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio',
   dividends:'portfolio', divcal:'portfolio', journal:'portfolio', benchmark:'portfolio',
-  timeline:'portfolio', rebalancer:'portfolio',
+  timeline:'portfolio', rebalancer:'portfolio', 'order-history':'portfolio',
   // Markets tab — what's happening out there
   news:'markets', sectormap:'markets', 'fii-dii':'markets', deals:'markets',
   macro:'markets', calendar:'markets',
@@ -4771,6 +4878,7 @@ function go(id) {
   if(id==='risk') calcRisk();
   if(id==='action') renderActionCards();
   if(id==='holdings') renderHoldHeaders();
+  if(id==='order-history') renderOrderHistory();
   if(id==='alerts') renderAlerts();
   if(id==='notifications') renderNotifs();
   if(id==='calendar') renderCalendar();
@@ -10722,6 +10830,253 @@ function processOrderHistory(rows2d) {
   }
   window._orderHistoryRealisedTrades.sort((a,b) => (a.sellDate||'') < (b.sellDate||'') ? -1 : 1);
   return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ORDER HISTORY SECTION — render, filter, import, export
+// ═══════════════════════════════════════════════════════════════════
+let _ohFilter = 'all';
+
+function ohFilter(f) {
+  _ohFilter = f;
+  document.querySelectorAll('.oh-ftab').forEach(b => b.classList.remove('on'));
+  document.getElementById('oh-f-'+f)?.classList.add('on');
+  renderOrderHistory();
+}
+
+function renderOrderHistory() {
+  const orders = D.orders || [];
+  const dz   = document.getElementById('oh-dropzone');
+  const stats = document.getElementById('oh-stats');
+  const filt  = document.getElementById('oh-filters');
+  const wrap  = document.getElementById('oh-table-wrap');
+  const empty = document.getElementById('oh-empty');
+  const log   = document.getElementById('oh-import-log');
+
+  if (!orders.length) {
+    if (dz)    { dz.style.display = 'block'; }
+    if (stats) { stats.style.display = 'none'; }
+    if (filt)  { filt.style.display = 'none'; }
+    if (wrap)  { wrap.style.display = 'none'; }
+    if (empty) { empty.style.display = 'none'; }
+    return;
+  }
+  if (dz)    { dz.style.display = 'none'; }
+  if (stats) { stats.style.display = 'grid'; }
+  if (filt)  { filt.style.display = 'flex'; }
+
+  // Stats
+  const buys    = orders.filter(o => o.type === 'BUY');
+  const sells   = orders.filter(o => o.type === 'SELL');
+  const holding = orders.filter(o => o.status === 'holding');
+  const realised= orders.filter(o => o.status === 'realised' || o.type === 'SELL');
+  const unknown = orders.filter(o => o.status === 'unknown');
+  const invested= buys.reduce((s, o) => s + o.value, 0);
+  const el = id => document.getElementById(id);
+  if (el('oh-stat-total'))    el('oh-stat-total').textContent    = orders.length;
+  if (el('oh-stat-buys'))     el('oh-stat-buys').textContent     = buys.length;
+  if (el('oh-stat-sells'))    el('oh-stat-sells').textContent    = sells.length;
+  if (el('oh-stat-holding'))  el('oh-stat-holding').textContent  = new Set(holding.map(o=>o.sym)).size + ' stocks';
+  if (el('oh-stat-realised')) el('oh-stat-realised').textContent = new Set(realised.filter(o=>o.type==='SELL').map(o=>o.sym)).size + ' stocks';
+  if (el('oh-stat-invested')) el('oh-stat-invested').textContent = '₹' + fI(Math.round(invested));
+
+  // Filter + search
+  const q    = (document.getElementById('oh-search')?.value || '').toLowerCase();
+  const sort = document.getElementById('oh-sort')?.value || 'date-desc';
+  let filtered = orders.filter(o => {
+    if (_ohFilter === 'buy'      && o.type !== 'BUY')           return false;
+    if (_ohFilter === 'sell'     && o.type !== 'SELL')          return false;
+    if (_ohFilter === 'holding'  && o.status !== 'holding')     return false;
+    if (_ohFilter === 'realised' && o.status !== 'realised' && o.type !== 'SELL') return false;
+    if (_ohFilter === 'unknown'  && o.status !== 'unknown')     return false;
+    if (q && !o.sym.toLowerCase().includes(q) && !o.name.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  // Sort
+  if (sort === 'date-desc') filtered.sort((a,b) => (b.date||'') > (a.date||'') ? 1 : -1);
+  else if (sort === 'date-asc') filtered.sort((a,b) => (a.date||'') > (b.date||'') ? 1 : -1);
+  else if (sort === 'sym-asc') filtered.sort((a,b) => a.sym.localeCompare(b.sym));
+  else if (sort === 'value-desc') filtered.sort((a,b) => b.value - a.value);
+
+  if (!filtered.length) {
+    if (wrap)  wrap.style.display  = 'none';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (wrap)  wrap.style.display  = 'block';
+  if (empty) empty.style.display = 'none';
+
+  const statusChip = s => {
+    if (s === 'holding')  return '<span class="tag t-holding">🔵 Holding</span>';
+    if (s === 'realised') return '<span class="tag t-realised">🟠 Realised</span>';
+    if (s === 'unknown')  return '<span class="tag t-unknown">⚠ Unknown</span>';
+    return '';
+  };
+
+  const tbody = document.getElementById('oh-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = filtered.map(o => {
+    const isBuy = o.type === 'BUY';
+    const rowCls = o.status === 'unknown' ? 'oh-unknown-row' : isBuy ? 'oh-buy-row' : 'oh-sell-row';
+    const typChip = isBuy
+      ? '<span class="tag t-buy" style="min-width:40px;text-align:center">BUY</span>'
+      : '<span class="tag t-sell" style="min-width:40px;text-align:center">SELL</span>';
+    const statusCol = isBuy ? statusChip(o.status) : statusChip('realised');
+    const dateShort = (o.date||'').slice(0,10);
+    return `<tr class="${rowCls}">
+      <td style="font-size:11px;color:var(--t3);white-space:nowrap">${dateShort}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div>
+            <div class="sym" style="font-size:12px">${o.sym}</div>
+            <div style="font-size:10px;color:var(--t4);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${o.name}</div>
+          </div>
+        </div>
+      </td>
+      <td><span style="font-size:10px;color:var(--t4)">${o.exchange||'NSE'}</span></td>
+      <td>${typChip}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:12px">${o.qty}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:12px">₹${f(o.price)}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:12px">₹${fI(Math.round(o.value))}</td>
+      <td>${statusCol}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function ohHandleFile(file) {
+  if (!file) return;
+  const log = document.getElementById('oh-import-log');
+  const ohLog = msg => { if (log) { log.style.display='block'; log.innerHTML += msg + '<br>'; log.scrollTop = log.scrollHeight; } ilog(msg); };
+
+  ohLog('📂 Reading ' + file.name + '…');
+  let rows2d;
+  try {
+    rows2d = await parseXLSX(file);
+  } catch(e) {
+    ohLog('⛔ Could not read file: ' + e.message);
+    return;
+  }
+  if (!rows2d) { ohLog('⛔ File could not be parsed'); return; }
+
+  // Find header row
+  let hdrIdx = -1;
+  for (let i = 0; i < rows2d.length; i++) {
+    const row = rows2d[i].map(c => String(c||'').toLowerCase().trim());
+    if (row.includes('stock name') && row.includes('symbol') && row.includes('type') && row.includes('quantity')) { hdrIdx = i; break; }
+  }
+  if (hdrIdx < 0) { ohLog('⛔ Could not find Order History header row. Ensure file has: Stock Name, Symbol, Type, Quantity, Value columns.'); return; }
+
+  const hdrs = rows2d[hdrIdx].map(c => String(c||'').toLowerCase().trim());
+  const fi = k => hdrs.findIndex(h => h === k || h.includes(k));
+  const iName=fi('stock name'); const iSym=fi('symbol'); const iIsin=fi('isin');
+  const iType=fi('type'); const iQty=fi('quantity'); const iVal=fi('value');
+  const iExch=fi('exchange'); const iDate=fi('execution date')>=0?fi('execution date'):fi('date');
+  const iStat=fi('order status')>=0?fi('order status'):fi('status');
+
+  // Parse all executed orders
+  const rawOrders = [];
+  for (let i = hdrIdx+1; i < rows2d.length; i++) {
+    const r = rows2d[i];
+    if (!r[iSym]) continue;
+    const status = iStat>=0 ? String(r[iStat]||'').toLowerCase() : 'executed';
+    if (!status.includes('execut')) continue;
+    const qty = parseFloat(r[iQty])||0;
+    const val = parseFloat(r[iVal])||0;
+    if (!qty || !val) continue;
+    const typ = String(r[iType]||'').toUpperCase().trim();
+    if (typ !== 'BUY' && typ !== 'SELL') continue;
+    const rawDate = iDate>=0 ? String(r[iDate]||'') : '';
+    let sortKey = rawDate;
+    const dm = rawDate.match(/^(\d{2})-(\d{2})-(\d{4})/);
+    if (dm) sortKey = dm[3]+'-'+dm[2]+'-'+dm[1]+rawDate.slice(10);
+    const symRaw = String(r[iSym]||'').trim();
+    rawOrders.push({
+      name: String(r[iName]||'').trim(),
+      symRaw,
+      isin: iIsin>=0 ? String(r[iIsin]||'') : '',
+      typ, qty, val,
+      price: Math.round(val/qty*100)/100,
+      exchange: iExch>=0 ? String(r[iExch]||'NSE') : 'NSE',
+      rawDate, sortKey
+    });
+  }
+  rawOrders.sort((a,b) => a.sortKey < b.sortKey ? -1 : 1);
+  ohLog(`📊 Found <strong>${rawOrders.length}</strong> executed orders across ${new Set(rawOrders.map(o=>o.symRaw)).size} symbols`);
+
+  // FIFO to determine which symbols have remaining lots
+  const holdings = {};
+  for (const o of rawOrders) {
+    const s = o.symRaw;
+    if (!holdings[s]) holdings[s] = { lots: [] };
+    const h = holdings[s];
+    if (o.typ === 'BUY') {
+      h.lots.push({ remaining: o.qty });
+    } else if (o.typ === 'SELL') {
+      let rem = o.qty;
+      while (rem > 0.001 && h.lots.length) {
+        const lot = h.lots[0];
+        const take = Math.min(lot.remaining, rem);
+        lot.remaining -= take; rem -= take;
+        if (lot.remaining < 0.001) h.lots.shift();
+      }
+    }
+  }
+
+  // Determine status per symbol
+  const symStatus = {};
+  for (const [sym, h] of Object.entries(holdings)) {
+    const isNumeric = /^\d/.test(sym);
+    const hasDollar = sym.includes('$');
+    const hasRemaining = h.lots.some(l => l.remaining > 0.001);
+    if (isNumeric || hasDollar) symStatus[sym] = 'unknown';
+    else if (hasRemaining) symStatus[sym] = 'holding';
+    else symStatus[sym] = 'realised';
+  }
+
+  // Build D.orders
+  let holding=0, realised=0, unknown=0;
+  const newOrders = rawOrders.map(o => {
+    const cleanSym = o.symRaw.replace(/\$.*/, '').replace(/\.\d+$/, '').toUpperCase().trim();
+    const st = symStatus[o.symRaw] || 'unknown';
+    if (st==='holding') holding++; else if (st==='unknown') unknown++; else realised++;
+    const dm = o.rawDate.match(/^(\d{2})-(\d{2})-(\d{4})/);
+    const isoDate = dm ? dm[3]+'-'+dm[2]+'-'+dm[1] : o.rawDate;
+    return {
+      sym: cleanSym || o.symRaw,
+      name: o.name,
+      isin: o.isin,
+      type: o.typ,
+      qty: o.qty,
+      price: o.price,
+      value: o.val,
+      exchange: o.exchange,
+      date: isoDate,
+      status: st
+    };
+  });
+
+  D.orders = newOrders;
+  save('orders');
+  ohLog(`✅ Saved <strong>${newOrders.length}</strong> orders — 🔵 ${new Set(newOrders.filter(x=>x.status==='holding').map(x=>x.sym)).size} stocks still holding · 🟠 ${new Set(newOrders.filter(x=>x.type==='SELL').map(x=>x.sym)).size} exited · ⚠ ${unknown} unknown`);
+
+  // Also run full FIFO import (updates Holdings + Realised P&L)
+  ohLog('🔄 Updating Holdings & Realised P&L via FIFO…');
+  await importHoldingsV2(rows2d);
+
+  renderOrderHistory();
+  toast('Order History imported — ' + newOrders.length + ' orders', 'ok');
+}
+
+function ohExportCSV() {
+  if (!D.orders?.length) { toast('No orders to export','info'); return; }
+  const hdr = 'Date,Symbol,Name,Exchange,Type,Qty,Price,Value,Status';
+  const rows = D.orders.map(o =>
+    [o.date,o.sym,'"'+o.name+'"',o.exchange,o.type,o.qty,o.price,o.value,o.status].join(',')
+  );
+  const blob = new Blob([hdr+'\n'+rows.join('\n')], {type:'text/csv'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'order_history.csv'; a.click();
 }
 
 // Pre-process Zerodha tradebook: aggregate BUY trades by symbol → weighted avg
