@@ -10952,7 +10952,27 @@ async function ohHandleFile(file) {
   ohLog('📂 Reading ' + file.name + '…');
   let rows2d;
   try {
-    rows2d = await parseXLSX(file);
+    rows2d = await new Promise((resolve, reject) => {
+      // Load SheetJS if not already present
+      const doRead = () => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          try {
+            const wb = XLSX.read(e.target.result, {type:'array'});
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            resolve(XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false}));
+          } catch(err) { reject(err); }
+        };
+        reader.onerror = () => reject(new Error('FileReader error'));
+        reader.readAsArrayBuffer(file);
+      };
+      if (window.XLSX) { doRead(); return; }
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload = doRead;
+      s.onerror = () => reject(new Error('Could not load SheetJS'));
+      document.head.appendChild(s);
+    });
   } catch(e) {
     ohLog('⛔ Could not read file: ' + e.message);
     return;
