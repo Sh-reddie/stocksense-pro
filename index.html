@@ -10641,15 +10641,34 @@ function processOrderHistory(rows2d) {
     } else if (o.typ === 'SELL') {
       let sellRemaining = o.qty;
       let costBasis = 0;
+      let earliestBuyDate = '';
       while (sellRemaining > 0.001 && h.lots.length > 0) {
         const lot = h.lots[0];
         const take = Math.min(lot.remaining, sellRemaining);
         costBasis += take * lot.price;
+        if (!earliestBuyDate) earliestBuyDate = lot.date;
         lot.remaining -= take;
         sellRemaining -= take;
         if (lot.remaining < 0.001) h.lots.shift();
       }
-      h.realised += o.qty * o.pricePerShare - costBasis;
+      const pl = o.qty * o.pricePerShare - costBasis;
+      h.realised += pl;
+      // Convert DD-MM-YYYY to YYYY-MM-DD
+      const _dm = o.rawDate.match(/^(\d{2})-(\d{2})-(\d{4})/);
+      const sellDateISO = _dm ? _dm[3]+'-'+_dm[2]+'-'+_dm[1] : '';
+      const _dm2 = earliestBuyDate.match(/^(\d{2})-(\d{2})-(\d{4})/);
+      const buyDateISO2 = _dm2 ? _dm2[3]+'-'+_dm2[2]+'-'+_dm2[1] : '';
+      if (!h.sellTrades) h.sellTrades = [];
+      h.sellTrades.push({
+        sym: s, name: h.name || s, isin: h.isin,
+        exchange: o.exchange,
+        qty: o.qty,
+        buyPrice: costBasis / o.qty,
+        sellPrice: o.pricePerShare,
+        buyDate: buyDateISO2,
+        sellDate: sellDateISO,
+        pl: Math.round(pl * 100) / 100
+      });
     }
     h.exchange = o.exchange; // use last known exchange
   }
@@ -10683,8 +10702,13 @@ function processOrderHistory(rows2d) {
       buyDate: buyDateISO
     });
   }
-  // Store realised P&L summary for display
+  // Store realised P&L summary + individual sell trades for D.realised
   window._orderHistoryRealisedPnL = Math.round(totalRealised * 100) / 100;
+  window._orderHistoryRealisedTrades = [];
+  for (const h of Object.values(holdings)) {
+    if (h.sellTrades) window._orderHistoryRealisedTrades.push(...h.sellTrades);
+  }
+  window._orderHistoryRealisedTrades.sort((a,b) => (a.sellDate||'') < (b.sellDate||'') ? -1 : 1);
   return result;
 }
 
@@ -11004,6 +11028,29 @@ async function importHoldingsV2(rows2d) {
       const realised = window._orderHistoryRealisedPnL || 0;
       ilog(`📊 Order History: <strong>${parsed.length} active holdings</strong> after FIFO netting of all BUY/SELL trades`);
       ilog(`💰 Realised P&L from completed trades: <strong style="color:${realised>=0?'var(--grn)':'var(--red)'}">${realised>=0?'+':''}₹${realised.toLocaleString('en-IN')}</strong>`);
+      // Push individual sell trades into D.realised
+      const sellTrades = window._orderHistoryRealisedTrades || [];
+      let rAdded = 0, rDupes = 0;
+      for (const t of sellTrades) {
+        const days = hDays(t.buyDate) || 0;
+        if (isDupeR(t.sym, t.exchange, t.buyDate, t.sellDate, t.buyPrice, t.qty)) { rDupes++; continue; }
+        D.realised.push({
+          id: Date.now() + Math.random(),
+          symbol: t.sym, name: t.name || t.sym,
+          exchange: t.exchange || 'NSE',
+          qty: t.qty,
+          buyPrice: Math.round(t.buyPrice * 100) / 100,
+          sellPrice: Math.round(t.sellPrice * 100) / 100,
+          buyDate: t.buyDate, sellDate: t.sellDate,
+          pl: t.pl, plPct: t.buyPrice ? ((t.sellPrice - t.buyPrice) / t.buyPrice * 100) : 0,
+          holdDays: days, taxType: taxT(days)
+        });
+        rAdded++;
+      }
+      if (rAdded) {
+        save('realised');
+        ilog(`📋 Added <strong>${rAdded}</strong> completed sell trades to Realised P&L${rDupes ? ` · ${rDupes} skipped (dupes)` : ''}`);
+      }
     } else { ilog('⛔ Could not parse Order History — check file format','error'); return; }
   } else {
     parsed=parseGrowwStatement(rows2d);
