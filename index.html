@@ -11015,7 +11015,12 @@ async function importHoldingsV2(rows2d) {
     const match=nameToSymbol(row.rawName, row.isin);
     let sym,exch,sector;
     if(match){sym=match.sym;exch=row.exchange.includes('BSE')?'BSE':match.exch||'NSE';sector=match.sector||'Others';mapped++;ilog('🔗 "'+row.rawName+'" → '+sym);}
-    else{sym=row.rawName.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);exch=row.exchange.includes('BSE')?'BSE':'NSE';sector='Others';unmapped++;ilog('⚠ Unmapped: "'+row.rawName+'" → using "'+sym+'" (edit if wrong)','warn');}
+    else{
+      // Prefer the exchange symbol from the file (Order History provides it in row.sym)
+      sym = row.sym ? row.sym.replace(/\$.*/, '').replace(/\.\d+$/, '').toUpperCase() : row.rawName.toUpperCase().replace(/[^A-Z0-9-]/g,'').slice(0,12);
+      exch=row.exchange&&row.exchange.includes('BSE')?'BSE':'NSE';sector='Others';unmapped++;
+      ilog('⚠ Unmapped: "'+row.rawName+'" → using "'+sym+'" (edit if wrong)','warn');
+    }
     if(!sym||sym.length<2||sym==='SKIP'){if(sym==='SKIP')ilog('⏭ Skipped NCD/debt instrument: '+row.rawName,'warn');skip++;continue;}
     const buyDate=row.buyDate||new Date().toISOString().split('T')[0];
     if(isDupe(sym,exch,buyDate,row.avgPrice,row.qty)){ilog('↩ Dup: '+sym+' ₹'+row.avgPrice+'×'+row.qty,'warn');dupes++;continue;}
