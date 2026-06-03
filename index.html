@@ -10557,6 +10557,11 @@ function detectBroker(rows2d) {
     if (flat.includes('angel one') || flat.includes('angelone')) return 'Angel One';
     if (flat.includes('dhan'))        return 'Dhan';
   }
+  // Detect "Order History" XLSX (Angel One / 5paisa / generic broker)
+  for (let i=0; i<Math.min(rows2d.length,8); i++) {
+    const flat = rows2d[i].map(c=>String(c||'').toLowerCase()).join(' ');
+    if (flat.includes('order history for stocks')) return 'Order History';
+  }
   // Detect by column signature
   for (let i=0; i<Math.min(rows2d.length,8); i++) {
     const row = rows2d[i].map(c=>String(c||'').toLowerCase().trim());
@@ -10564,8 +10569,123 @@ function detectBroker(rows2d) {
     if (row.includes('instrument') && row.includes('qty') && !row.includes('stock name')) return 'Zerodha Holdings';
     if (row.includes('instrument name') || row.includes('script name'))  return 'Upstox';
     if (row.includes('ticker') && row.includes('average buy price'))      return 'Tickertape';
+    // Column-signature detection for Order History (stock name + symbol + isin + type + quantity + value)
+    if (row.includes('stock name') && row.includes('symbol') && row.includes('type') && row.includes('quantity') && row.includes('value')) return 'Order History';
   }
   return 'Generic CSV';
+}
+
+// ═══════════════════════════════════════════════════
+// ORDER HISTORY PARSER — FIFO net-holdings calculator
+// Handles: Angel One, 5paisa, generic broker XLSX
+// Format: Stock name | Symbol | ISIN | Type | Quantity | Value (total ₹) | Exchange | Order ID | Date | Status
+// ═══════════════════════════════════════════════════
+function processOrderHistory(rows2d) {
+  // Find header row with "stock name" + "symbol" + "type"
+  let hdrIdx = -1;
+  for (let i = 0; i < rows2d.length; i++) {
+    const row = rows2d[i].map(c => String(c||'').toLowerCase().trim());
+    if (row.includes('stock name') && row.includes('symbol') && row.includes('type')) { hdrIdx = i; break; }
+  }
+  if (hdrIdx < 0) return null;
+  const hdrs = rows2d[hdrIdx].map(c => String(c||'').toLowerCase().trim());
+  const fi = k => hdrs.findIndex(h => h === k || h.includes(k));
+  const iName  = fi('stock name');
+  const iSym   = fi('symbol');
+  const iIsin  = fi('isin');
+  const iType  = fi('type');
+  const iQty   = fi('quantity');
+  const iVal   = fi('value');     // total ₹ per transaction
+  const iExch  = fi('exchange');
+  const iDate  = fi('execution date') >= 0 ? fi('execution date') : fi('date');
+  const iStat  = fi('order status') >= 0 ? fi('order status') : fi('status');
+  if (iSym < 0 || iType < 0 || iQty < 0 || iVal < 0) return null;
+
+  // Collect all executed orders, sorted by date
+  const orders = [];
+  for (let i = hdrIdx + 1; i < rows2d.length; i++) {
+    const r = rows2d[i];
+    if (!r[iSym]) continue;
+    const status = iStat >= 0 ? String(r[iStat]||'').toLowerCase() : 'executed';
+    if (!status.includes('execut')) continue;
+    const qty = parseFloat(r[iQty]) || 0;
+    const val = parseFloat(r[iVal]) || 0;
+    if (!qty || !val) continue;
+    const typ = String(r[iType]||'').toUpperCase().trim();
+    const rawDate = iDate >= 0 ? String(r[iDate]||'') : '';
+    // Parse "DD-MM-YYYY HH:MM AM/PM" → comparable string "YYYY-MM-DD HH:MM"
+    let sortKey = rawDate;
+    const dm = rawDate.match(/^(\d{2})-(\d{2})-(\d{4})/);
+    if (dm) sortKey = dm[3] + '-' + dm[2] + '-' + dm[1] + rawDate.slice(10);
+    orders.push({
+      name:  String(r[iName]||''),
+      sym:   String(r[iSym]||'').trim(),
+      isin:  iIsin >= 0 ? String(r[iIsin]||'') : '',
+      typ, qty, totalVal: val,
+      pricePerShare: val / qty,
+      exchange: iExch >= 0 ? String(r[iExch]||'NSE') : 'NSE',
+      rawDate, sortKey
+    });
+  }
+  orders.sort((a, b) => a.sortKey < b.sortKey ? -1 : 1);
+
+  // FIFO lot tracking per symbol
+  const holdings = {};
+  const realisedPnL = {};
+  for (const o of orders) {
+    const s = o.sym;
+    if (!holdings[s]) holdings[s] = { name: o.name, isin: o.isin, exchange: o.exchange, lots: [], realised: 0 };
+    const h = holdings[s];
+    if (o.typ === 'BUY') {
+      h.lots.push({ qty: o.qty, price: o.pricePerShare, date: o.rawDate, remaining: o.qty });
+    } else if (o.typ === 'SELL') {
+      let sellRemaining = o.qty;
+      let costBasis = 0;
+      while (sellRemaining > 0.001 && h.lots.length > 0) {
+        const lot = h.lots[0];
+        const take = Math.min(lot.remaining, sellRemaining);
+        costBasis += take * lot.price;
+        lot.remaining -= take;
+        sellRemaining -= take;
+        if (lot.remaining < 0.001) h.lots.shift();
+      }
+      h.realised += o.qty * o.pricePerShare - costBasis;
+    }
+    h.exchange = o.exchange; // use last known exchange
+  }
+
+  // Build result: only symbols with remaining lots
+  const result = [];
+  let totalRealised = 0;
+  for (const [sym, h] of Object.entries(holdings)) {
+    const activeLots = h.lots.filter(l => l.remaining > 0.001);
+    const totalRealised_s = h.realised;
+    totalRealised += totalRealised_s;
+    if (!activeLots.length) continue;
+    // Skip junk symbols: BSE numeric codes, odd-lot markers ($), ETF placeholders
+    const cleanSym = sym.replace(/\$.*/, '').replace(/\.\d+$/, '');
+    if (/^\d/.test(sym) || sym.length < 2) continue; // skip numeric BSE codes
+    const totalQty = activeLots.reduce((s, l) => s + l.remaining, 0);
+    const totalCost = activeLots.reduce((s, l) => s + l.remaining * l.price, 0);
+    const avgPrice = totalCost / totalQty;
+    const firstBuyDate = activeLots[0].date; // chronological first lot
+    // Convert DD-MM-YYYY to YYYY-MM-DD for storage
+    const dm2 = firstBuyDate.match(/^(\d{2})-(\d{2})-(\d{4})/);
+    const buyDateISO = dm2 ? dm2[3] + '-' + dm2[2] + '-' + dm2[1] : '';
+    result.push({
+      rawName: h.name || sym,
+      sym: cleanSym,   // cleaned symbol (no $ suffix)
+      isin: h.isin,
+      qty: Math.round(totalQty * 1000) / 1000,
+      avgPrice: Math.round(avgPrice * 100) / 100,
+      ltp: null,
+      exchange: h.exchange || 'NSE',
+      buyDate: buyDateISO
+    });
+  }
+  // Store realised P&L summary for display
+  window._orderHistoryRealisedPnL = Math.round(totalRealised * 100) / 100;
+  return result;
 }
 
 // Pre-process Zerodha tradebook: aggregate BUY trades by symbol → weighted avg
@@ -10878,6 +10998,13 @@ async function importHoldingsV2(rows2d) {
     parsed = processZerodhaTradebook(rows2d);
     if (parsed?.length) ilog(`📊 Zerodha tradebook: aggregated ${parsed.length} unique symbols from BUY trades`);
     else { ilog('⛔ Could not parse Zerodha tradebook — check column names','error'); return; }
+  } else if (broker === 'Order History') {
+    parsed = processOrderHistory(rows2d);
+    if (parsed?.length) {
+      const realised = window._orderHistoryRealisedPnL || 0;
+      ilog(`📊 Order History: <strong>${parsed.length} active holdings</strong> after FIFO netting of all BUY/SELL trades`);
+      ilog(`💰 Realised P&L from completed trades: <strong style="color:${realised>=0?'var(--grn)':'var(--red)'}">${realised>=0?'+':''}₹${realised.toLocaleString('en-IN')}</strong>`);
+    } else { ilog('⛔ Could not parse Order History — check file format','error'); return; }
   } else {
     parsed=parseGrowwStatement(rows2d);
   }
@@ -10890,7 +11017,7 @@ async function importHoldingsV2(rows2d) {
     if(match){sym=match.sym;exch=row.exchange.includes('BSE')?'BSE':match.exch||'NSE';sector=match.sector||'Others';mapped++;ilog('🔗 "'+row.rawName+'" → '+sym);}
     else{sym=row.rawName.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);exch=row.exchange.includes('BSE')?'BSE':'NSE';sector='Others';unmapped++;ilog('⚠ Unmapped: "'+row.rawName+'" → using "'+sym+'" (edit if wrong)','warn');}
     if(!sym||sym.length<2||sym==='SKIP'){if(sym==='SKIP')ilog('⏭ Skipped NCD/debt instrument: '+row.rawName,'warn');skip++;continue;}
-    const buyDate=new Date().toISOString().split('T')[0];
+    const buyDate=row.buyDate||new Date().toISOString().split('T')[0];
     if(isDupe(sym,exch,buyDate,row.avgPrice,row.qty)){ilog('↩ Dup: '+sym+' ₹'+row.avgPrice+'×'+row.qty,'warn');dupes++;continue;}
     ilog('⏳ Fetching '+sym+'...');
     const [pd,fn]=await Promise.all([fetchPrice(sym,exch),fetchFund(sym,exch)]);
