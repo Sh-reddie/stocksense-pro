@@ -11032,7 +11032,15 @@ async function importHoldingsV2(rows2d) {
       const sellTrades = window._orderHistoryRealisedTrades || [];
       let rAdded = 0, rDupes = 0;
       for (const t of sellTrades) {
-        const days = hDays(t.buyDate) || 0;
+        // Compute hold days from buyDate→sellDate (not buyDate→today)
+        const days = (t.buyDate && t.sellDate)
+          ? Math.max(0, Math.floor((new Date(t.sellDate) - new Date(t.buyDate)) / 86400000))
+          : 0;
+        // Skip trades where buy lot predates file range (no cost basis)
+        if (!t.buyDate || t.buyPrice <= 0) {
+          ilog(`⚠ Skipped ${t.sym} sell on ${t.sellDate}: buy lot predates file range (cost basis unknown)`, 'warn');
+          continue;
+        }
         if (isDupeR(t.sym, t.exchange, t.buyDate, t.sellDate, t.buyPrice, t.qty)) { rDupes++; continue; }
         D.realised.push({
           id: Date.now() + Math.random(),
