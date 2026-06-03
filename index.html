@@ -4506,7 +4506,7 @@ function createPortfolio() {
 function deletePortfolio(id) {
   if (id === 'default') { toast('Cannot delete default portfolio','warn'); return; }
   if (!confirm('Delete this portfolio and all its data?')) return;
-  ['holdings','realised','watchlist','dividends','cfg','notifs'].forEach(k => {
+  ['holdings','realised','watchlist','dividends','cfg','notifs','orders'].forEach(k => {
     localStorage.removeItem(id + '_' + k);
   });
   const list = pfList().filter(p=>p.id!==id);
@@ -4622,7 +4622,7 @@ const _kv = {
 
       if (data && (data.holdings?.length > 0 || data.realised?.length > 0 || data.watchlist?.length > 0)) {
         // Server data is the source of truth — merge into D and localStorage
-        const keys = ['holdings','realised','watchlist','dividends','cfg'];
+        const keys = ['holdings','realised','watchlist','dividends','cfg','orders'];
         let changed = false;
         for (const k of keys) {
           if (data[k] !== undefined) {
@@ -4673,6 +4673,7 @@ const _kv = {
         watchlist: D.watchlist,
         dividends: D.dividends,
         cfg:       D.cfg,
+        orders:    D.orders,
         symMap:    _symMapGet(),
         _savedAt:  new Date().toISOString(),
       };
