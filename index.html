@@ -7149,11 +7149,14 @@ async function runAllAI() {
   updBatch('Market context…', 0, 8, 'Analysing market sentiment…');
   const ctx = await getMarketContext(); D._marketCtx=ctx; applySentimentToUI(ctx);
 
-  // ── Phase 2: Holdings — batch 5 at a time ───────────────────────────
-  const BATCH = 5;
+  // ── Phase 2: Holdings — batch 3 at a time (avoid free-tier rate limits) ─
+  const BATCH = 3;
+  const BATCH_DELAY = 4000; // 4s between batches to respect free-tier rate limits
   const hStep = 60 / Math.max(D.holdings.length, 1);
   let hDone = 0;
   for (let i = 0; i < D.holdings.length; i += BATCH) {
+    // Reset model-failure cache before each batch so cascade retries fresh
+    window._claudeJSONFastFailed = false;
     const batch = D.holdings.slice(i, i + BATCH);
     batch.forEach(h => { chipStates[h.symbol] = 'active'; });
     const syms = batch.map(h => h.symbol).join(', ');
@@ -7162,6 +7165,7 @@ async function runAllAI() {
     await Promise.all(batch.map(h => analyseHolding(h, ctx)));
     batch.forEach(h => { chipStates[h.symbol] = 'done'; });
     hDone += batch.length;
+    if (i + BATCH < D.holdings.length) await new Promise(r => setTimeout(r, BATCH_DELAY));
   }
   save('holdings');
 
@@ -7170,6 +7174,7 @@ async function runAllAI() {
   const wStep = 15 / Math.max(D.watchlist.length, 1);
   let wDone = 0;
   for (let i = 0; i < D.watchlist.length; i += BATCH) {
+    window._claudeJSONFastFailed = false;
     const batch = D.watchlist.slice(i, i + BATCH);
     batch.forEach(w => { chipStates[w.symbol] = 'active'; });
     const syms = batch.map(w => w.symbol).join(', ');
@@ -7178,6 +7183,7 @@ async function runAllAI() {
     await Promise.all(batch.map(w => analyseWatchStock(w, ctx)));
     batch.forEach(w => { chipStates[w.symbol] = 'done'; });
     wDone += batch.length;
+    if (i + BATCH < D.watchlist.length) await new Promise(r => setTimeout(r, BATCH_DELAY));
   }
   save('watchlist');
 
