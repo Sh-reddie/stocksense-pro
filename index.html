@@ -11413,6 +11413,10 @@ async function importHoldingsV2(rows2d) {
   } else if (broker === 'Order History') {
     parsed = processOrderHistory(rows2d);
     if (parsed?.length) {
+      // Order History is the authoritative source — clear stale holdings so null-avgPrice
+      // entries from old imports don't survive the duplicate check.
+      D.holdings = [];
+      D.realised  = [];
       const realised = window._orderHistoryRealisedPnL || 0;
       ilog(`📊 Order History: <strong>${parsed.length} active holdings</strong> after FIFO netting of all BUY/SELL trades`);
       ilog(`💰 Realised P&L from completed trades: <strong style="color:${realised>=0?'var(--grn)':'var(--red)'}">${realised>=0?'+':''}₹${realised.toLocaleString('en-IN')}</strong>`);
@@ -11469,8 +11473,9 @@ async function importHoldingsV2(rows2d) {
     if(isDupe(sym,exch,buyDate,row.avgPrice,row.qty)){ilog('↩ Dup: '+sym+' ₹'+row.avgPrice+'×'+row.qty,'warn');dupes++;continue;}
     ilog('⏳ Fetching '+sym+'...');
     const [pd,fn]=await Promise.all([fetchPrice(sym,exch),fetchFund(sym,exch)]);
-    const sl=+(row.avgPrice*(1-D.cfg.sl/100)).toFixed(2);
-    D.holdings.push({id:Date.now()+Math.random(),symbol:sym,name:pd?.name||row.rawName,exchange:exch,qty:row.qty,avgPrice:row.avgPrice,buyDate,sector,ltp:pd?.ltp||row.ltp||row.avgPrice,chg:pd?.chg||0,chgP:pd?.chgP||0,h52:pd?.h52||null,l52:pd?.l52||null,pe:fn?.pe||null,pb:fn?.pb||null,roe:fn?.roe||null,de:fn?.de||null,eps:fn?.eps||null,mcap:fn?.mcap||null,dy:fn?.dy||null,beta:fn?.beta||null,rg:fn?.rg||null,eg:fn?.eg||null,signal:fn?.rcm?rcmSig(fn.rcm):'HOLD',stopLoss:sl,target1:+(row.avgPrice*1.15).toFixed(2),target2:+(row.avgPrice*1.25).toFixed(2),addedAt:new Date().toISOString()});
+    const _ap = row.avgPrice || 0;
+    const sl = _ap ? +(_ap*(1-D.cfg.sl/100)).toFixed(2) : null;
+    D.holdings.push({id:Date.now()+Math.random(),symbol:sym,name:pd?.name||row.rawName,exchange:exch,qty:row.qty,avgPrice:row.avgPrice,buyDate,sector,ltp:pd?.ltp||row.ltp||_ap||null,chg:pd?.chg||0,chgP:pd?.chgP||0,h52:pd?.h52||null,l52:pd?.l52||null,pe:fn?.pe||null,pb:fn?.pb||null,roe:fn?.roe||null,de:fn?.de||null,eps:fn?.eps||null,mcap:fn?.mcap||null,dy:fn?.dy||null,beta:fn?.beta||null,rg:fn?.rg||null,eg:fn?.eg||null,signal:fn?.rcm?rcmSig(fn.rcm):'HOLD',stopLoss:sl,target1:_ap?+(_ap*1.15).toFixed(2):null,target2:_ap?+(_ap*1.25).toFixed(2):null,addedAt:new Date().toISOString()});
     added++;ilog('✓ '+sym+' · Qty '+row.qty+' · Avg ₹'+row.avgPrice+' · LTP ₹'+(pd?.ltp||row.ltp||row.avgPrice));
     await new Promise(r=>setTimeout(r,120)); // reduced from 350ms
   }
