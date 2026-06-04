@@ -7265,24 +7265,17 @@ function applySentimentToUI(ctx){if(!ctx)return;const sc=ctx.sentimentScore||50;
 async function analyseHolding(h,ctx) {
   const ltp=h.ltp||h.avgPrice; const plp=((ltp-h.avgPrice)/h.avgPrice*100).toFixed(1); const days=hDays(h.buyDate)||0; const tt=days>=365?'LTCG':'STCG';
   const isHot=ctx?.hotSectors?.includes(h.sector); const isWeak=ctx?.weakSectors?.includes(h.sector);
-  const prompt=`You are a senior Indian equity research analyst (NSE/BSE). Provide decision-support analysis for ${h.symbol} (${h.exchange}) — not SEBI-registered personal advice.
+  const pos52 = h.h52&&h.l52&&ltp ? Math.round((ltp-h.l52)/(h.h52-h.l52)*100) : null;
+  const prompt=`Senior Indian equity analyst (NSE/BSE). Decision-support for ${h.symbol} (${h.exchange}). Not SEBI-registered advice.
 
-POSITION DATA:
-- LTP ₹${f(ltp)} | Avg Cost ₹${f(h.avgPrice)} | Qty ${h.qty} | Unrealised P&L ${plp}%
-- Holding Period ${days} days | Tax Treatment: ${tt} ${days<365&&days>300?'(LTCG threshold in '+(365-days)+' days — factor into exit timing)':''}
-- 52W Range ₹${f(h.l52)}–₹${f(h.h52)} | Position in range: ${h.h52&&h.l52?Math.round((ltp-h.l52)/(h.h52-h.l52)*100)+'%':'N/A'}
-- PE ${h.pe||'N/A'} | ROE ${h.roe?(h.roe*100).toFixed(1)+'%':'N/A'} | Beta ${h.beta||'N/A'}
-- Sector: ${h.sector||'Unknown'} (${isHot?'🔥 HOT SECTOR':'NEUTRAL'}) | Market: ${ctx?.sentimentLabel||'Neutral'} | Bias: ${ctx?.actionBias||'HOLD'}
+POSITION: LTP ₹${f(ltp)} | Cost ₹${f(h.avgPrice)} | P&L ${plp}% | Qty ${h.qty} | Held ${days}d (${tt}${days>300&&days<365?' — LTCG in '+(365-days)+'d':''})
+MARKET: 52W ₹${f(h.l52)}–₹${f(h.h52)}${pos52!=null?' | Position '+pos52+'% of range':''} | PE ${h.pe||'N/A'} | ROE ${h.roe?(h.roe*100).toFixed(1)+'%':'N/A'} | Beta ${h.beta||'N/A'}
+CONTEXT: Sector ${h.sector||'?'} ${isHot?'(HOT)':isWeak?'(WEAK)':'(neutral)'} | Market ${ctx?.sentimentLabel||'Neutral'}
 
-ANALYSIS RULES:
-1. If PE is N/A or >60, flag valuation risk explicitly in redFlags
-2. If stock is >15% below 52W high and in downtrend, consider REDUCE/EXIT unless strong fundamentals
-3. If holding >300 days with <365 threshold, weigh LTCG benefit before suggesting exit
-4. stopLoss must be specific price (support level), not generic %; target1/target2 based on resistance/fundamentals
-5. "action" must be 1 actionable sentence — what to DO, not generic advice
+RULES: stopLoss=specific support price; targets=resistance/fair-value; action=one direct sentence on what to DO now; bullCase/bearCase must include at least one specific number or named catalyst; redFlags only if real issue exists.
 
-Reply ONLY valid compact JSON (no markdown):
-{"signal":"STRONG BUY|BUY MORE|HOLD|REDUCE|EXIT","urgency":"ACT TODAY|WATCH|STABLE","stopLoss":<price>,"stopLossPct":<n>,"target1":<price>,"target1Pct":<n>,"target1Timeline":"<e.g. 3-6 months>","target2":<price>,"target2Pct":<n>,"target2Timeline":"<e.g. 12-18 months>","confidence":<1-10>,"bullCase":"<specific catalyst for upside>","bearCase":"<specific risk for downside>","redFlags":["<specific flag or null if none>"],"action":"<one actionable sentence>","reasoning":"<2 sentences with specific numbers>","tradeType":"SHORT_TERM|LONG_TERM|BOTH"}`;
+Reply ONLY compact JSON:
+{"signal":"STRONG BUY|BUY MORE|HOLD|REDUCE|EXIT","urgency":"ACT TODAY|WATCH|STABLE","stopLoss":<price>,"target1":<price>,"target1Timeline":"3-6 months","target2":<price>,"target2Timeline":"12-18 months","confidence":<1-10>,"bullCase":"<catalyst with specific number>","bearCase":"<risk with specific number>","redFlags":["<real flag>"],"action":"<direct 1-sentence action>","reasoning":"<2 sentences with specific ₹ or % numbers>","tradeType":"SHORT_TERM|LONG_TERM|BOTH"}`;
   try{
     const r=await claudeJSON(prompt);
     if(typeof r === 'string' && /^(⚠|AI error|OpenRouter error|⛔)/.test(r.trim())) {
@@ -9133,56 +9126,125 @@ function _sdAiContent(h) {
   const el = document.getElementById('sd-ai-content');
   if(!el) return;
   if(!h||!h.aiAction){
-    const provider = localStorage.getItem('aiProvider') || 'openrouter';
-    const hasKey = provider === 'openrouter'
-      ? !!(localStorage.getItem('orKey')||'').trim()
-      : !!(localStorage.getItem('apiKey')||'').trim();
+    const hasKey = !!(localStorage.getItem('orKey')||'').trim();
     el.innerHTML = hasKey
-      ? `<div style="padding:24px;text-align:center"><div style="font-size:32px;margin-bottom:10px">🤖</div><div style="color:var(--t2);font-size:13px;font-weight:600;margin-bottom:6px">No AI analysis yet</div><div style="color:var(--t4);font-size:11px;margin-bottom:16px">Click below to get a full signal, stop-loss, targets, bull/bear case</div><button class="btn btn-p" onclick="_sdRunAI()">🤖 Analyse Now</button></div>`
-      : `<div style="padding:24px;text-align:center"><div style="font-size:32px;margin-bottom:10px">🔑</div><div style="color:var(--t2);font-size:13px;font-weight:600;margin-bottom:6px">AI Provider Not Configured</div><div style="color:var(--t4);font-size:11px;margin-bottom:16px">Go to Settings → AI Provider and add your free OpenRouter key</div><button class="btn btn-p" onclick="closeM('stockdetail');go('settings')">Open Settings</button></div>`;
+      ? `<div style="padding:30px;text-align:center"><div style="font-size:36px;margin-bottom:12px">🤖</div><div style="color:var(--t1);font-size:14px;font-weight:700;margin-bottom:6px">No AI analysis yet</div><div style="color:var(--t4);font-size:12px;margin-bottom:18px;line-height:1.5">Get signal, stop-loss, targets, bull &amp; bear thesis — all in one click</div><button class="btn btn-p" onclick="_sdRunAI()" style="padding:10px 24px;font-size:13px">⚡ Run AI Analysis</button></div>`
+      : `<div style="padding:30px;text-align:center"><div style="font-size:36px;margin-bottom:12px">🔑</div><div style="color:var(--t1);font-size:14px;font-weight:700;margin-bottom:6px">AI Not Configured</div><div style="color:var(--t4);font-size:12px;margin-bottom:18px">Add your free OpenRouter API key in Settings</div><button class="btn btn-p" onclick="closeM('stockdetail');go('settings')">Open Settings</button></div>`;
     return;
   }
-  const sigColor = h.signal?.includes('BUY')?'var(--grn)':h.signal==='HOLD'?'var(--yel)':'var(--red)';
-  const urgColor = h.urgency==='ACT TODAY'?'var(--red)':h.urgency==='WATCH'?'var(--yel)':'var(--grn)';
+  const ltp = h.ltp||h.avgPrice||0;
+  const plp = h.avgPrice&&h.avgPrice>0 ? ((ltp-h.avgPrice)/h.avgPrice*100) : 0;
+  const days = hDays(h.buyDate)||0;
+  const daysToLtcg = days<365 ? 365-days : 0;
+  const taxLabel = days>=365 ? '✅ LTCG' : `⏳ STCG${daysToLtcg>0?' ('+daysToLtcg+'d to LTCG)':''}`;
+  const totalPortCV = D.holdings.reduce((s,x)=>s+x.qty*(x.ltp||x.avgPrice||0),0);
+  const portWt = totalPortCV>0 ? ((h.qty*ltp/totalPortCV)*100).toFixed(1) : '—';
+
+  // Colours
+  const isBuy=h.signal?.includes('BUY'), isHold=h.signal==='HOLD';
+  const sigCol = isBuy?'var(--grn)':isHold?'var(--yel)':'var(--red)';
+  const urgCol = h.urgency==='ACT TODAY'?'var(--red)':h.urgency==='WATCH'?'var(--yel)':'var(--grn)';
+  const urgIcon = h.urgency==='ACT TODAY'?'⚡':h.urgency==='WATCH'?'👁':'✅';
+  const confPct = h.confidence ? Math.round(h.confidence/10*100) : 50;
+  const confCol = (h.confidence||0)>=7?'var(--grn)':(h.confidence||0)>=4?'var(--yel)':'var(--red)';
+
+  // Price levels
+  const slDist  = h.stopLoss&&ltp ? ((ltp-h.stopLoss)/ltp*100).toFixed(1)   : null;
+  const t1Dist  = h.target1 &&ltp ? ((h.target1-ltp)/ltp*100).toFixed(1)     : null;
+  const t2Dist  = h.target2 &&ltp ? ((h.target2-ltp)/ltp*100).toFixed(1)     : null;
+  const rr      = slDist&&t1Dist  ? (parseFloat(t1Dist)/Math.abs(parseFloat(slDist))).toFixed(1) : null;
+  const rrGood  = rr && parseFloat(rr)>=2;
+
   el.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-      <div style="background:${sigColor}18;border:1px solid ${sigColor}44;border-radius:8px;padding:8px 16px;font-weight:700;font-size:15px;color:${sigColor}">${h.signal||'HOLD'}</div>
-      <div style="background:${urgColor}18;border:1px solid ${urgColor}44;border-radius:8px;padding:8px 16px;font-weight:700;font-size:13px;color:${urgColor}">${h.urgency||'STABLE'}</div>
-      <div style="font-family:var(--mono);font-size:12px;color:var(--t3)">Confidence: ${h.confidence||'—'}/10</div>
-      <div style="font-size:11px;color:var(--t4);margin-left:auto">${h.lastAnalysed?'Updated '+new Date(h.lastAnalysed).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div>
-    </div>
-    <div class="ai-box" style="margin-bottom:12px">
-      <div class="ai-txt"><strong style="color:var(--t1)">📋 Action:</strong> ${h.aiAction||'—'}</div>
-    </div>
-    ${h.aiReasoning?`<div class="ai-box" style="margin-bottom:12px"><div class="ai-txt">${h.aiReasoning}</div></div>`:''}
-    ${h.redFlags?.length?`<div style="margin-bottom:12px;padding:10px 12px;background:rgba(240,82,82,.07);border:1px solid rgba(240,82,82,.25);border-radius:8px"><div style="font-size:10px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Why-Not-Buy Flags</div><div style="display:flex;flex-direction:column;gap:5px">${h.redFlags.map(x=>`<div style="font-size:12px;color:var(--t2);line-height:1.45">• ${x}</div>`).join('')}</div></div>`:''}
-    ${h.bullCase||h.bearCase?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-      ${h.bullCase?`<div class="sd-fund-section" style="border-color:rgba(45,211,111,.25)"><h4 style="color:var(--grn)">🐂 Bull Case</h4><p style="font-size:12px;line-height:1.6;color:var(--t2)">${h.bullCase}</p></div>`:''}
-      ${h.bearCase?`<div class="sd-fund-section" style="border-color:rgba(240,82,82,.25)"><h4 style="color:var(--red)">🐻 Bear Case</h4><p style="font-size:12px;line-height:1.6;color:var(--t2)">${h.bearCase}</p></div>`:''}
-    </div>`:''}
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
-      <div class="sd-stat-card"><div class="sd-stat-lbl">Stop Loss</div><div class="sd-stat-val dn">₹${f(h.stopLoss)}</div><div style="font-size:9.5px;color:var(--t4);margin-top:2px">${h.stopLossPct?fP(h.stopLossPct):''}</div></div>
-      <div class="sd-stat-card"><div class="sd-stat-lbl">Target 1</div><div class="sd-stat-val" style="color:var(--cyn)">₹${f(h.target1)}</div><div style="font-size:9.5px;color:var(--t4);margin-top:2px">${h.target1Timeline||''}${h.target1Pct?' · '+fP(h.target1Pct):''}</div></div>
-      <div class="sd-stat-card"><div class="sd-stat-lbl">Target 2</div><div class="sd-stat-val" style="color:var(--ac2)">₹${f(h.target2)}</div><div style="font-size:9.5px;color:var(--t4);margin-top:2px">${h.target2Timeline||''}${h.target2Pct?' · '+fP(h.target2Pct):''}</div></div>
-      <div class="sd-stat-card"><div class="sd-stat-lbl">Trade Type</div><div class="sd-stat-val" style="font-size:11px">${h.tradeType||'—'}</div></div>
-    </div>
-    <button class="btn btn-p btn-sm" onclick="_sdRunAI()">↻ Re-analyse</button>`;
-  // Add Entry/Exit timing card if stop loss or target is set
-  const ltp = h.ltp||h.avgPrice;
-  if(h.stopLoss || h.target1) {
-    const slDist = h.stopLoss ? ((ltp-h.stopLoss)/ltp*100).toFixed(1) : null;
-    const t1Dist = h.target1 ? ((h.target1-ltp)/ltp*100).toFixed(1) : null;
-    const rr = slDist && t1Dist ? (parseFloat(t1Dist)/parseFloat(slDist)).toFixed(1) : null;
-    el.innerHTML += `<div style="margin-top:12px;padding:12px;background:var(--s2);border-radius:8px;border:1px solid var(--b1)">
-      <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Entry / Exit Levels</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-        ${h.stopLoss?`<div style="text-align:center;padding:8px;background:rgba(239,68,68,.08);border-radius:6px"><div style="font-size:10px;color:var(--t4)">Stop Loss</div><div style="font-size:15px;font-weight:700;color:var(--red);font-family:var(--mono)">₹${f(h.stopLoss)}</div><div style="font-size:10px;color:var(--t4)">${slDist}% below LTP</div></div>`:''}
-        ${h.target1?`<div style="text-align:center;padding:8px;background:rgba(34,197,94,.08);border-radius:6px"><div style="font-size:10px;color:var(--t4)">Target 1</div><div style="font-size:15px;font-weight:700;color:var(--grn);font-family:var(--mono)">₹${f(h.target1)}</div><div style="font-size:10px;color:var(--t4)">${fP(t1Dist)} · ${h.target1Timeline||'~3M'}</div></div>`:''}
-        ${h.target2?`<div style="text-align:center;padding:8px;background:rgba(34,197,94,.06);border-radius:6px"><div style="font-size:10px;color:var(--t4)">Target 2</div><div style="font-size:15px;font-weight:700;color:var(--cyn);font-family:var(--mono)">₹${f(h.target2)}</div><div style="font-size:10px;color:var(--t4)">${fP((h.target2-ltp)/ltp*100)} · ${h.target2Timeline||'~6M'}</div></div>`:''}
+  <!-- ① SIGNAL HERO BAND -->
+  <div style="background:${sigCol}12;border:1.5px solid ${sigCol}30;border-radius:12px;padding:14px 16px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:22px;font-weight:900;color:${sigCol};letter-spacing:.5px;line-height:1">${h.signal||'HOLD'}</span>
+        ${h.urgency?`<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;border:1px solid ${urgCol}44;background:${urgCol}15;color:${urgCol}">${urgIcon} ${h.urgency}</span>`:''}
+        ${rr?`<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;border:1px solid ${rrGood?'rgba(34,197,94,.35)':'rgba(251,191,36,.35)'};background:${rrGood?'rgba(34,197,94,.1)':'rgba(251,191,36,.1)'};color:${rrGood?'var(--grn)':'var(--yel)'}">${rr}:1 R:R ${rrGood?'✓':'⚠'}</span>`:''}
       </div>
-      ${rr?`<div style="margin-top:8px;font-size:11px;color:var(--t3)">Risk/Reward: <strong style="color:${parseFloat(rr)>=2?'var(--grn)':'var(--yel)'}">${rr}:1</strong> ${parseFloat(rr)>=2?'✓ Good R:R':'⚠ Low R:R — consider adjusting'}</div>`:''}
-    </div>`;
-  }
+      <span style="font-size:10.5px;color:var(--t4)">${h.lastAnalysed?'Updated '+new Date(h.lastAnalysed).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</span>
+    </div>
+    <!-- Conviction bar -->
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:10px;color:var(--t3);white-space:nowrap;min-width:80px">Conviction ${h.confidence||'—'}/10</span>
+      <div style="flex:1;background:var(--b2);border-radius:4px;height:5px;overflow:hidden">
+        <div style="width:${confPct}%;height:100%;background:${confCol};border-radius:4px"></div>
+      </div>
+      <span style="font-size:10px;color:var(--t4);min-width:60px;text-align:right">${h.tradeType||''}</span>
+    </div>
+  </div>
+
+  <!-- ② WHAT TO DO NOW -->
+  <div style="background:var(--s2);border:1px solid var(--b1);border-left:3px solid ${sigCol};border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px">
+    <div style="font-size:9.5px;font-weight:800;color:var(--t4);text-transform:uppercase;letter-spacing:.9px;margin-bottom:5px">📋 What to do now</div>
+    <div style="font-size:13px;color:var(--t1);font-weight:600;line-height:1.55">${h.aiAction||'—'}</div>
+    ${h.aiReasoning?`<div style="font-size:11.5px;color:var(--t3);margin-top:7px;padding-top:7px;border-top:1px solid var(--b1);line-height:1.55">${h.aiReasoning}</div>`:''}
+  </div>
+
+  <!-- ③ PRICE MAP -->
+  ${(h.stopLoss||h.target1)?`
+  <div style="margin-bottom:12px">
+    <div style="font-size:9.5px;font-weight:800;color:var(--t4);text-transform:uppercase;letter-spacing:.9px;margin-bottom:7px">📊 Price Levels</div>
+    <div style="display:flex;gap:6px;align-items:stretch">
+      ${h.stopLoss?`<div style="flex:1;text-align:center;padding:10px 4px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:8px">
+        <div style="font-size:9px;color:var(--t4);margin-bottom:4px;text-transform:uppercase">Stop Loss</div>
+        <div style="font-size:14px;font-weight:800;color:var(--red);font-family:var(--mono)">₹${f(h.stopLoss)}</div>
+        <div style="font-size:9.5px;color:var(--red);margin-top:3px;opacity:.8">${slDist?'−'+slDist+'%':''}</div>
+      </div>`:''}
+      <div style="flex:1.2;text-align:center;padding:10px 4px;background:var(--s2);border:2px solid var(--b2);border-radius:8px">
+        <div style="font-size:9px;color:var(--t4);margin-bottom:4px;text-transform:uppercase">Current LTP</div>
+        <div style="font-size:14px;font-weight:800;color:var(--t1);font-family:var(--mono)">₹${f(ltp)}</div>
+        <div style="font-size:9.5px;color:${plp>=0?'var(--grn)':'var(--red)'};margin-top:3px">${plp>=0?'+':''}${plp.toFixed(1)}% vs cost</div>
+      </div>
+      ${h.target1?`<div style="flex:1;text-align:center;padding:10px 4px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:8px">
+        <div style="font-size:9px;color:var(--t4);margin-bottom:4px;text-transform:uppercase">Target 1</div>
+        <div style="font-size:14px;font-weight:800;color:var(--grn);font-family:var(--mono)">₹${f(h.target1)}</div>
+        <div style="font-size:9.5px;color:var(--grn);margin-top:3px;opacity:.8">+${t1Dist||0}% · ${h.t1Timeline||'3M'}</div>
+      </div>`:''}
+      ${h.target2?`<div style="flex:1;text-align:center;padding:10px 4px;background:rgba(79,142,247,.07);border:1px solid rgba(79,142,247,.2);border-radius:8px">
+        <div style="font-size:9px;color:var(--t4);margin-bottom:4px;text-transform:uppercase">Target 2</div>
+        <div style="font-size:14px;font-weight:800;color:var(--cyn);font-family:var(--mono)">₹${f(h.target2)}</div>
+        <div style="font-size:9.5px;color:var(--cyn);margin-top:3px;opacity:.8">+${t2Dist||0}% · ${h.t2Timeline||'12M'}</div>
+      </div>`:''}
+    </div>
+  </div>`:''}
+
+  <!-- ④ BULL / BEAR THESIS -->
+  ${(h.bullCase||h.bearCase)?`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+    ${h.bullCase?`<div style="padding:12px;background:rgba(34,197,94,.05);border:1px solid rgba(34,197,94,.18);border-radius:8px">
+      <div style="font-size:9.5px;font-weight:800;color:var(--grn);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px">🐂 Bull Thesis</div>
+      <div style="font-size:11.5px;color:var(--t2);line-height:1.6">${h.bullCase}</div>
+    </div>`:'<div></div>'}
+    ${h.bearCase?`<div style="padding:12px;background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.18);border-radius:8px">
+      <div style="font-size:9.5px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px">🐻 Bear Thesis</div>
+      <div style="font-size:11.5px;color:var(--t2);line-height:1.6">${h.bearCase}</div>
+    </div>`:''}
+  </div>`:''}
+
+  <!-- ⑤ RED FLAGS -->
+  ${h.redFlags?.filter(Boolean).length?`
+  <div style="padding:10px 12px;background:rgba(240,82,82,.05);border:1px solid rgba(240,82,82,.18);border-radius:8px;margin-bottom:12px">
+    <div style="font-size:9.5px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.8px;margin-bottom:7px">⚠ Why-Not-Buy Flags</div>
+    ${h.redFlags.filter(Boolean).map(x=>`<div style="font-size:11.5px;color:var(--t2);line-height:1.5;margin-bottom:4px;display:flex;gap:6px"><span style="color:var(--red);flex-shrink:0">•</span>${x}</div>`).join('')}
+  </div>`:''}
+
+  <!-- ⑥ CONTEXT CHIPS -->
+  <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">
+    <span style="font-size:10.5px;padding:4px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:20px;color:var(--t3)">📅 ${days}d held</span>
+    <span style="font-size:10.5px;padding:4px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:20px;color:var(--t3)">${taxLabel}</span>
+    ${portWt!=='—'?`<span style="font-size:10.5px;padding:4px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:20px;color:var(--t3)">⚖ ${portWt}% of portfolio</span>`:''}
+    ${h.pe?`<span style="font-size:10.5px;padding:4px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:20px;color:var(--t3)">PE ${h.pe.toFixed(1)}</span>`:''}
+  </div>
+
+  <!-- ⑦ ACTIONS -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-g btn-sm" onclick="_sdRunAI()" style="flex:1;min-width:120px">↻ Re-analyse</button>
+    <button class="btn btn-g btn-sm" onclick="sdTab('chart',document.getElementById('sdt-chart'))" style="flex:1;min-width:100px">📈 Chart</button>
+    ${h.stopLoss?`<button class="btn btn-g btn-sm" onclick="closeM('stockdetail');go('alerts')" style="flex:1;min-width:100px">🔔 Set Alert</button>`:''}
+  </div>`;
 }
 
 // ── Edit Tab helpers ─────────────────────────────────────────────────────────
