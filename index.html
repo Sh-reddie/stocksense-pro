@@ -1095,6 +1095,7 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="dsh-stat">
         <div class="dsh-lbl">Today's P&amp;L</div>
         <div class="dsh-val" id="ds-today">—</div>
+        <div id="ds-sparkline" style="margin-top:4px;height:28px;width:80px"></div>
       </div>
       <div class="dsh-div"></div>
       <div class="dsh-stat">
@@ -1529,7 +1530,7 @@ textarea.fi{resize:vertical;min-height:70px;}
   <!-- ═══ TAX ═══════════════════════════════════════ -->
   <div class="sec" id="sec-tax">
     <div class="sec-head"><div class="sec-title">Tax P&L Report</div><div style="display:flex;gap:8px"><select class="fi" id="tax-fy" style="width:150px" onchange="renderTax()"><option value="2025-26">FY 2025-26</option><option value="2024-25">FY 2024-25</option></select><button class="btn btn-g" onclick="exportTaxCSV()">⬇ CSV</button><button class="btn btn-g" onclick="exportExcel()" title="Full portfolio Excel for CA">📊 Excel</button><button class="btn btn-p" onclick="genTaxAI()">🤖 Tax Advisory</button></div></div>
-    <div class="tabs"><div class="tab on" onclick="stab('tx','tax-main')">📊 P&amp;L Report</div><div class="tab" onclick="stab('tx','tax-harvest');renderTaxHarvesting()">🌾 Harvesting</div><div class="tab" onclick="stab('tx','tax-optimizer');renderTaxOptimizer()" style="font-weight:600;color:var(--ac)">🧮 AI Optimizer</div></div>
+    <div class="tabs"><div class="tab on" onclick="stab('tx','tax-main')">📊 P&amp;L Report</div><div class="tab" onclick="stab('tx','tax-harvest');renderTaxHarvesting()">🌾 Harvesting</div><div class="tab" onclick="stab('tx','tax-optimizer');renderTaxOptimizer()" style="font-weight:600;color:var(--ac)">🧮 AI Optimizer</div><div class="tab" onclick="stab('tx','tax-ltcg-cal');renderLtcgCalendar()" style="font-weight:700;color:var(--yel)">📅 LTCG Calendar</div></div>
     <div id="tax-main" class="tp on">
       <div class="sg sg-4 gap">
         <div class="sc c4"><div class="sc-lbl">STCG (&lt;12m)</div><div class="sc-val" id="tax-stcg" style="color:var(--orn)">₹0</div><div class="sc-sub" style="color:var(--orn)">Tax @ 20%</div></div>
@@ -1572,6 +1573,10 @@ textarea.fi{resize:vertical;min-height:70px;}
           </div>
         </div>
       </div>
+    </div>
+    <!-- LTCG Calendar Tab Panel -->
+    <div id="tax-ltcg-cal" class="tp">
+      <div id="tax-ltcg-cal-content"><div style="padding:40px;text-align:center;color:var(--t4)">Click "📅 LTCG Calendar" tab to load.</div></div>
     </div>
   </div>
 
@@ -3876,6 +3881,10 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="fr gap">
         <div class="fg" style="margin-bottom:0"><label class="fl">Buy Date *</label><input type="date" class="fi" id="as-date"></div>
         <div class="fg" style="margin-bottom:0"><label class="fl">Sector</label><select class="fi" id="as-sec"><option>Defence</option><option>Banking</option><option>IT</option><option>FMCG</option><option>Pharma</option><option>Energy</option><option>Auto</option><option>Metals</option><option>Infra</option><option>Telecom</option><option>Realty</option><option>Others</option></select></div>
+      </div>
+      <div class="fg" style="margin-top:8px">
+        <label class="fl" style="display:flex;align-items:center;gap:5px">💡 Investment Thesis <span style="color:var(--t4);font-weight:400;font-size:10px">— why are you buying? (1 sentence, shown when you review later)</span></label>
+        <input type="text" class="fi" id="as-thesis" placeholder="e.g. Defence PSU with strong order book, FY26 revenue visibility, and structural tailwind from capex budget" maxlength="240" style="font-size:12px">
       </div>
     </div>
     <div class="md-f">
@@ -6276,8 +6285,10 @@ async function confirmAddStock() {
   if(isDupe(s.sym,s.exch,date,price,qty)){toast('Duplicate — same Symbol+Date+Price+Qty already exists','warn');closeM('addstock');return;}
   const p=s._price, fn=s._fund;
   const sl=+(price*(1-D.cfg.sl/100)).toFixed(2);
-  D.holdings.push({id:Date.now()+Math.random(),symbol:s.sym,name:p?.name||s.name,exchange:s.exch,qty,avgPrice:price,buyDate:date,sector,ltp:p?.ltp||price,chg:p?.chg||0,chgP:p?.chgP||0,h52:p?.h52||null,l52:p?.l52||null,pe:fn?.pe||null,pb:fn?.pb||null,roe:fn?.roe||null,de:fn?.de||null,eps:fn?.eps||null,mcap:fn?.mcap||null,dy:fn?.dy||null,beta:fn?.beta||null,rg:fn?.rg||null,eg:fn?.eg||null,signal:fn?.rcm?rcmSig(fn.rcm):'HOLD',stopLoss:sl,target1:+(price*1.15).toFixed(2),target2:+(price*1.25).toFixed(2),addedAt:new Date().toISOString()});
+  const thesis = document.getElementById('as-thesis')?.value?.trim() || '';
+  D.holdings.push({id:Date.now()+Math.random(),symbol:s.sym,name:p?.name||s.name,exchange:s.exch,qty,avgPrice:price,buyDate:date,sector,ltp:p?.ltp||price,chg:p?.chg||0,chgP:p?.chgP||0,h52:p?.h52||null,l52:p?.l52||null,pe:fn?.pe||null,pb:fn?.pb||null,roe:fn?.roe||null,de:fn?.de||null,eps:fn?.eps||null,mcap:fn?.mcap||null,dy:fn?.dy||null,beta:fn?.beta||null,rg:fn?.rg||null,eg:fn?.eg||null,signal:fn?.rcm?rcmSig(fn.rcm):'HOLD',stopLoss:sl,target1:+(price*1.15).toFixed(2),target2:+(price*1.25).toFixed(2),addedAt:new Date().toISOString(),thesis:thesis||undefined});
   save('holdings'); renderAll(); closeM('addstock');
+  const thesisEl = document.getElementById('as-thesis'); if(thesisEl) thesisEl.value='';
   toast(`${s.sym} added · LTP ₹${p?.ltp||price}`);
 }
 
@@ -6555,12 +6566,15 @@ function renderHoldings() {
           const _ltp2 = h.ltp||h.avgPrice;
           if (!h.avgPrice || _days2 < 30) return `<td style="font-size:10px;color:var(--t4);text-align:center">—</td>`;
           const _cagr = (Math.pow(_ltp2/h.avgPrice, 365/_days2) - 1) * 100;
-          const _nifty = 12; // Nifty 50 historical ~12% CAGR benchmark
-          const _beat = _cagr > _nifty;
-          const _cc = _cagr > _nifty ? 'var(--grn)' : _cagr > 0 ? 'var(--yel)' : 'var(--red)';
-          return `<td style="text-align:center;white-space:nowrap">
+          // Use actual Nifty return for this holding period if available, else fall back to 12%
+          const _niftyActual = _niftyHistory ? _getNiftyReturnSince(h.buyDate) : null;
+          const _niftyBench = _niftyActual !== null ? _niftyActual * 100 : 12;
+          const _niftyLabel = _niftyActual !== null ? `Nifty ${_niftyActual>=0?'+':''}${(_niftyActual*100).toFixed(1)}%` : 'N50 ~12%';
+          const _beat = _cagr > _niftyBench;
+          const _cc = _cagr > _niftyBench ? 'var(--grn)' : _cagr > 0 ? 'var(--yel)' : 'var(--red)';
+          return `<td style="text-align:center;white-space:nowrap" data-nifty-buydate="${h.buyDate||''}" data-stock-cagr="${_cagr.toFixed(2)}" data-days="${_days2}">
             <div style="font-size:11.5px;font-weight:700;color:${_cc};font-family:var(--mono)">${_cagr>=0?'+':''}${_cagr.toFixed(1)}%</div>
-            <div style="font-size:8.5px;color:var(--t4);margin-top:1px">${_beat?'▲ beats N50':'▼ N50 +12%'}</div>
+            <div style="font-size:8.5px;color:var(--t4);margin-top:1px">${_beat?'▲':'▼'} ${_niftyLabel}</div>
           </td>`;
         }
         case 'sent': {
@@ -6577,7 +6591,7 @@ function renderHoldings() {
             </div>
           </td>`;
         }
-        case 'act':return`<td style="white-space:nowrap"><button class="btn btn-g btn-xs" onclick="openDetail(${h.id})" style="margin-right:4px">Detail</button><button class="btn btn-yel btn-xs" onclick="openSellModal(${h.id})" style="margin-right:4px" title="Log a sell trade">Sell</button><button class="btn btn-p btn-xs" onclick="openAvgDown(${h.id})" style="margin-right:4px" title="Average-Down Calculator">Avg↓</button><button class="btn btn-g btn-xs" onclick="openNoteModal(${h.id})" style="margin-right:4px" title="${h.note?'Edit note: '+h.note.replace(/"/g,'&quot;'):'Add conviction note'}">${h.note?'📝':'📋'}</button><button class="btn btn-red btn-xs" onclick="rmHolding(${h.id})">✕</button></td>`;
+        case 'act':return`<td style="white-space:nowrap"><button class="btn btn-g btn-xs" onclick="openDetail(${h.id})" style="margin-right:4px">Detail</button><button class="btn btn-yel btn-xs" onclick="openSellModal(${h.id})" style="margin-right:4px" title="Log a sell trade">Sell</button><button class="btn btn-p btn-xs" onclick="openAvgDown(${h.id})" style="margin-right:4px" title="Average-Down Calculator">Avg↓</button><button class="btn btn-g btn-xs" onclick="openNoteModal(${h.id})" style="margin-right:4px" title="${h.note?'Edit note: '+h.note.replace(/"/g,'&quot;'):'Add conviction note'}">${h.note?'📝':'📋'}</button><button class="btn btn-g btn-xs" onclick="openTrailSLModal(${h.id})" style="margin-right:4px" title="${h.trailSlPct?'Trailing SL active: '+h.trailSlPct+'% below high':'Set trailing stop loss'}" style="color:${h.trailSlPct?'var(--cyn)':'inherit'}">${h.trailSlPct?'⟳SL':'TSL'}</button><button class="btn btn-red btn-xs" onclick="rmHolding(${h.id})">✕</button></td>`;
         default:return'<td>—</td>';
       }
     }
@@ -9174,7 +9188,8 @@ function _sdHoldContent(h) {
       </div>
       ${days<365&&h.buyDate?`<div style="margin-top:10px;padding:8px 12px;background:rgba(250,173,20,.08);border:1px solid rgba(250,173,20,.25);border-radius:6px;font-size:11px;color:var(--yel)">⏱ LTCG in <strong>${365-days} days</strong> — held ${days}/365 days. Equity STCG is generally 20% after 23 Jul 2024; check tax impact before selling.</div>`:''}
       ${days>=365?`<div style="margin-top:10px;padding:8px 12px;background:rgba(45,211,111,.08);border:1px solid rgba(45,211,111,.25);border-radius:6px;font-size:11px;color:var(--grn)">✅ LTCG qualified — held ${days} days. Listed equity LTCG is generally 12.5% above ₹1.25L annual exemption, plus applicable cess/surcharge.</div>`:''}
-      ${h.notes?`<div style="margin-top:12px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:6px"><div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">📝 Investment Thesis</div><div style="font-size:12px;color:var(--t2);line-height:1.6;white-space:pre-wrap">${h.notes}</div></div>`:''}
+      ${h.thesis?`<div style="margin-top:10px;padding:10px 12px;background:rgba(79,142,247,.07);border-left:3px solid var(--ac);border-radius:0 8px 8px 0"><div style="font-size:9.5px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">💡 Original Investment Thesis</div><div style="font-size:12px;color:var(--t2);line-height:1.6">${h.thesis}</div></div>`:''}
+      ${h.notes?`<div style="margin-top:10px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:6px"><div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">📝 Conviction Note</div><div style="font-size:12px;color:var(--t2);line-height:1.6;white-space:pre-wrap">${h.notes}</div></div>`:''}
     </div>
     <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
       <button class="btn btn-p btn-sm" onclick="sdTab('ai',document.getElementById('sdt-ai'))">🤖 Full AI Analysis</button>
@@ -19068,6 +19083,528 @@ document.addEventListener('DOMContentLoaded', function(){
   // Boot lock screen
   LK.init();
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// FEATURE PACK v2 — 7 investor-grade upgrades
+// ═══════════════════════════════════════════════════════════════════
+
+// ── 1. LTCG TAX CALENDAR ────────────────────────────────────────────
+// Shows ALL holdings sorted by days-to-LTCG with exact tax cost of
+// selling early vs waiting, per-stock breakdown.
+// ────────────────────────────────────────────────────────────────────
+function renderLtcgCalendar() {
+  const el = document.getElementById('tax-ltcg-cal-content');
+  if (!el) return;
+  if (!D.holdings.length) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t4)">Add holdings to see LTCG calendar.</div>';
+    return;
+  }
+
+  const STCG = 0.20, LTCG = 0.125, EXEMPT = 125000;
+  const today = new Date();
+
+  const rows = D.holdings.map(h => {
+    const days = hDays(h.buyDate) || 0;
+    const ltp = h.ltp || h.avgPrice;
+    const gain = (ltp - h.avgPrice) * h.qty;
+    const daysToLTCG = Math.max(0, 365 - days);
+    const isLTCG = days >= 365;
+    // Tax if sold NOW
+    const taxNow = isLTCG
+      ? Math.max(0, gain - EXEMPT) * LTCG
+      : gain > 0 ? gain * STCG : 0;
+    // Tax if sold AFTER crossing LTCG
+    const taxAfter = gain > 0 ? Math.max(0, gain - EXEMPT) * LTCG : 0;
+    const taxSaving = isLTCG ? 0 : Math.max(0, taxNow - taxAfter);
+    return { h, days, daysToLTCG, isLTCG, gain, taxNow, taxAfter, taxSaving, ltp };
+  }).sort((a, b) => {
+    // STCG first (sorted by days-to-LTCG ascending), then LTCG at bottom
+    if (a.isLTCG !== b.isLTCG) return a.isLTCG ? 1 : -1;
+    return a.daysToLTCG - b.daysToLTCG;
+  });
+
+  const totalSavingIfWait = rows.reduce((s, r) => s + r.taxSaving, 0);
+  const urgentCount = rows.filter(r => !r.isLTCG && r.daysToLTCG <= 30 && r.taxSaving > 500).length;
+
+  let html = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px">
+      <div class="sc c5"><div class="sc-lbl">STCG Holdings</div><div class="sc-val" style="color:var(--orn)">${rows.filter(r=>!r.isLTCG).length}</div><div class="sc-sub">held &lt; 1 year</div></div>
+      <div class="sc c2"><div class="sc-lbl">LTCG Holdings</div><div class="sc-val" style="color:var(--grn)">${rows.filter(r=>r.isLTCG).length}</div><div class="sc-sub">held ≥ 1 year</div></div>
+      <div class="sc c1"><div class="sc-lbl">Total Tax Saving if Wait</div><div class="sc-val up">₹${fI(totalSavingIfWait)}</div><div class="sc-sub">STCG 20% → LTCG 12.5%</div></div>
+      <div class="sc c4"><div class="sc-lbl">Urgent (≤ 30 days)</div><div class="sc-val" style="color:var(--yel)">${urgentCount}</div><div class="sc-sub">high-saving crossings soon</div></div>
+    </div>`;
+
+  // Urgency banner
+  const urgentRows = rows.filter(r => !r.isLTCG && r.daysToLTCG <= 14 && r.taxSaving > 200);
+  if (urgentRows.length) {
+    html += `<div style="background:rgba(251,191,36,.1);border:1.5px solid rgba(251,191,36,.4);border-radius:10px;padding:12px 16px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:800;color:var(--yel);margin-bottom:8px">⚠️ DO NOT SELL THESE IN THE NEXT 2 WEEKS — tax savings at stake:</div>
+      ${urgentRows.map(r => `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px solid var(--b2)">
+        <span style="font-weight:700;color:var(--t1)">${r.h.symbol}</span>
+        <span style="color:var(--t3);font-size:11px">${r.daysToLTCG} day${r.daysToLTCG!==1?'s':''} away</span>
+        <span style="color:var(--grn);font-weight:700">Save ₹${fI(r.taxSaving)}</span>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  html += `<div style="overflow-x:auto"><table class="tbl">
+    <thead><tr>
+      <th>Stock</th><th>Held</th><th>Days to LTCG</th><th>LTCG Date</th>
+      <th>Gain at LTP</th><th>Tax if Sell Now</th><th>Tax After LTCG</th>
+      <th style="color:var(--grn)">₹ Saving if Wait</th><th>Verdict</th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const ltcgDate = r.h.buyDate ? new Date(new Date(r.h.buyDate).getTime() + 365*86400000).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—';
+      let verdict, vColor;
+      if (r.isLTCG) { verdict = '✅ Free to sell'; vColor = 'var(--grn)'; }
+      else if (r.daysToLTCG <= 14 && r.taxSaving > 200) { verdict = `🔴 Wait ${r.daysToLTCG}d`; vColor = 'var(--red)'; }
+      else if (r.daysToLTCG <= 45 && r.taxSaving > 500) { verdict = `⏳ Wait ${r.daysToLTCG}d`; vColor = 'var(--yel)'; }
+      else if (r.gain <= 0) { verdict = '↓ At loss'; vColor = 'var(--t4)'; }
+      else { verdict = `${r.daysToLTCG}d remaining`; vColor = 'var(--t3)'; }
+      const urgBar = !r.isLTCG && r.daysToLTCG > 0 ? `<div style="height:3px;background:var(--b2);border-radius:2px;margin-top:3px;overflow:hidden"><div style="height:3px;background:${r.daysToLTCG<=30?'var(--yel)':'var(--ac)'};width:${Math.min(100,Math.round((365-r.daysToLTCG)/365*100))}%"></div></div>` : '';
+      return `<tr style="${r.daysToLTCG <= 14 && !r.isLTCG && r.taxSaving > 200 ? 'background:rgba(251,191,36,.05)' : ''}">
+        <td><div class="sym">${r.h.symbol}</div><div class="snm">${r.h.name}</div>${urgBar}</td>
+        <td class="mn">${r.days}d</td>
+        <td class="mn" style="color:${r.isLTCG?'var(--grn)':r.daysToLTCG<=30?'var(--yel)':'var(--t2)'};font-weight:700">${r.isLTCG ? '✅ LTCG' : r.daysToLTCG + 'd'}</td>
+        <td style="font-size:11px;color:var(--t3)">${ltcgDate}</td>
+        <td class="mn ${r.gain>=0?'up':'dn'}">${r.gain>=0?'+':''}₹${fI(Math.abs(r.gain))}</td>
+        <td class="mn" style="color:${r.taxNow>0?'var(--red)':'var(--t4)'}">${r.taxNow>0?'₹'+fI(r.taxNow):'—'}</td>
+        <td class="mn" style="color:${r.taxAfter>0?'var(--orn)':'var(--grn)'}">${r.taxAfter>0?'₹'+fI(r.taxAfter):'Exempt'}</td>
+        <td class="mn" style="color:var(--grn);font-weight:700">${r.taxSaving>0?'₹'+fI(r.taxSaving):'—'}</td>
+        <td style="font-size:11px;font-weight:700;color:${vColor}">${verdict}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>
+  <div style="font-size:10px;color:var(--t4);margin-top:8px;padding:6px 8px;background:var(--s2);border-radius:6px">
+    LTCG threshold: 12 months from buy date. STCG rate 20%. LTCG rate 12.5% with ₹1.25L annual exemption. Tax saving = STCG payable − LTCG payable on same gain. Not financial advice.
+  </div>`;
+
+  el.innerHTML = html;
+}
+
+// ── 2. "WHY I BOUGHT" — thesis field saved inline in confirmAddStock ─
+// The as-thesis input was added to the HTML modal, and the field is now
+// read directly inside confirmAddStock() above. See that function.
+
+// ── 3. AI PERSISTENCE FIX ───────────────────────────────────────────
+// Patch _kv.init() to merge AI fields from local holdings when server
+// data overwrites D.holdings, so cloud sync never wipes AI analysis.
+// ────────────────────────────────────────────────────────────────────
+const _AI_FIELDS = ['signal','urgency','stopLoss','stopLossPct','target1','target2',
+  'target1Timeline','target2Timeline','target1Pct','target2Pct','confidence',
+  'bullCase','bearCase','redFlags','action','tradeType','aiAnalysedAt',
+  '_sentiment','_sentimentAt','_aiScore','thesis','trailSlPct','trailSlHigh'];
+
+function _mergeAiFields(serverHoldings, localHoldings) {
+  if (!localHoldings || !localHoldings.length) return serverHoldings;
+  return serverHoldings.map(sh => {
+    const lh = localHoldings.find(x => x.id === sh.id);
+    if (!lh) return sh;
+    const merged = { ...sh };
+    for (const f of _AI_FIELDS) {
+      // Keep local value if server doesn't have it, or if local was set more recently (aiAnalysedAt)
+      if (lh[f] !== undefined && lh[f] !== null) {
+        if (sh[f] === undefined || sh[f] === null) {
+          merged[f] = lh[f];
+        } else if (f === 'aiAnalysedAt' || f === '_sentimentAt') {
+          // Keep whichever is newer
+          try { merged[f] = new Date(lh[f]) > new Date(sh[f]) ? lh[f] : sh[f]; } catch(e) {}
+        }
+        // For signal/stopLoss/target etc: if local was analysed more recently, prefer local
+        else if (lh.aiAnalysedAt && sh.aiAnalysedAt) {
+          try { if (new Date(lh.aiAnalysedAt) > new Date(sh.aiAnalysedAt)) merged[f] = lh[f]; } catch(e) {}
+        }
+      }
+    }
+    return merged;
+  });
+}
+
+// Monkey-patch _kv.init to wrap the holdings merge
+(function() {
+  const _origKvInit = _kv.init.bind(_kv);
+  _kv.init = async function() {
+    // Snapshot local AI data BEFORE server data can overwrite it
+    const localSnap = JSON.parse(JSON.stringify(D.holdings || []));
+    await _origKvInit();
+    // After init, re-merge AI fields that may have been lost
+    if (D.holdings && D.holdings.length && localSnap.length) {
+      const merged = _mergeAiFields(D.holdings, localSnap);
+      // Only apply if merge changed something
+      const changed = JSON.stringify(merged) !== JSON.stringify(D.holdings);
+      if (changed) {
+        D.holdings = merged;
+        try { localStorage.setItem(_pfKey('holdings'), JSON.stringify(D.holdings)); } catch(e) {}
+      }
+    }
+  };
+})();
+
+// ── 4. TRAILING STOP LOSS ───────────────────────────────────────────
+// Each holding can have h.trailSlPct (e.g. 12 = trail 12% below high).
+// On every price refresh, if new LTP > h.trailSlHigh, raise the stop.
+// ────────────────────────────────────────────────────────────────────
+function _applyTrailingSL(h, newLtp) {
+  if (!h.trailSlPct || !newLtp) return false;
+  const high = Math.max(h.trailSlHigh || 0, newLtp, h.avgPrice);
+  const newSL = +(high * (1 - h.trailSlPct / 100)).toFixed(2);
+  let changed = false;
+  if (high > (h.trailSlHigh || 0)) { h.trailSlHigh = high; changed = true; }
+  if (!h.stopLoss || newSL > h.stopLoss) { h.stopLoss = newSL; changed = true; }
+  return changed;
+}
+
+function openTrailSLModal(hid) {
+  const h = D.holdings.find(x => x.id == hid);
+  if (!h) return;
+  const ltp = h.ltp || h.avgPrice;
+  const current = h.trailSlPct || '';
+  const high = h.trailSlHigh || ltp;
+  const sl = h.stopLoss || +(ltp * 0.88).toFixed(2);
+  const content = document.createElement('div');
+  content.innerHTML = `
+    <div style="padding:18px">
+      <div style="font-size:14px;font-weight:800;margin-bottom:4px;color:var(--t1)">${h.symbol} — Trailing Stop Loss</div>
+      <div style="font-size:11px;color:var(--t4);margin-bottom:16px">Sets SL at X% below the highest price seen. Auto-raises as stock climbs.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+        <div style="padding:10px;background:var(--s2);border-radius:8px;text-align:center">
+          <div style="font-size:9px;color:var(--t4)">LTP</div><div style="font-size:14px;font-weight:700;color:var(--t1)">₹${f(ltp)}</div>
+        </div>
+        <div style="padding:10px;background:var(--s2);border-radius:8px;text-align:center">
+          <div style="font-size:9px;color:var(--t4)">Tracked High</div><div style="font-size:14px;font-weight:700;color:var(--cyn)">₹${f(high)}</div>
+        </div>
+        <div style="padding:10px;background:rgba(239,68,68,.07);border-radius:8px;text-align:center">
+          <div style="font-size:9px;color:var(--t4)">Current SL</div><div style="font-size:14px;font-weight:700;color:var(--red)">₹${f(sl)}</div>
+        </div>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:11px;color:var(--t4);display:block;margin-bottom:6px">Trail % below highest price seen:</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          ${[8,10,12,15].map(p => `<button onclick="document.getElementById('trail-pct-inp').value=${p}" class="btn btn-g btn-sm">${p}%</button>`).join('')}
+        </div>
+        <input type="number" id="trail-pct-inp" class="fi" value="${current}" placeholder="e.g. 12" min="2" max="40" step="0.5" style="width:100%">
+        <div style="font-size:10px;color:var(--t4);margin-top:4px" id="trail-preview">
+          ${current ? `Stop will be at ₹${f(+(high*(1-current/100)).toFixed(2))} (${current}% below ₹${f(high)})` : 'Enter % to preview stop price'}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        ${h.trailSlPct ? `<button class="btn btn-red btn-sm" onclick="_removeTrailSL(${hid})">Remove Trailing SL</button>` : ''}
+        <button class="btn btn-g btn-sm" onclick="this.closest('.mb').style.display='none'">Cancel</button>
+        <button class="btn btn-p" onclick="_saveTrailSL(${hid})">✓ Set Trailing SL</button>
+      </div>
+    </div>`;
+  content.querySelector('#trail-pct-inp')?.addEventListener('input', function() {
+    const pct = parseFloat(this.value) || 0;
+    const preview = content.querySelector('#trail-preview');
+    if (preview && pct > 0) preview.textContent = `Stop will be at ₹${f(+(high*(1-pct/100)).toFixed(2))} (${pct}% below high of ₹${f(high)})`;
+  });
+
+  // Reuse a simple modal
+  let mb = document.getElementById('trail-sl-mb');
+  if (!mb) {
+    mb = document.createElement('div');
+    mb.id = 'trail-sl-mb';
+    mb.className = 'mb';
+    mb.innerHTML = '<div class="md" style="max-width:420px"><div class="md-h"><div class="md-title">Trailing Stop Loss</div><button class="x-btn" onclick="this.closest(\'.mb\').style.display=\'none\'">✕</button></div><div id="trail-sl-body"></div></div>';
+    document.body.appendChild(mb);
+  }
+  document.getElementById('trail-sl-body').innerHTML = '';
+  document.getElementById('trail-sl-body').appendChild(content);
+  mb.style.display = 'flex';
+}
+
+function _saveTrailSL(hid) {
+  const h = D.holdings.find(x => x.id == hid);
+  if (!h) return;
+  const pct = parseFloat(document.getElementById('trail-pct-inp')?.value) || 0;
+  if (pct < 1 || pct > 50) { toast('Enter a % between 1 and 50', 'error'); return; }
+  const ltp = h.ltp || h.avgPrice;
+  h.trailSlPct = pct;
+  h.trailSlHigh = Math.max(h.trailSlHigh || 0, ltp, h.avgPrice);
+  h.stopLoss = +(h.trailSlHigh * (1 - pct / 100)).toFixed(2);
+  save('holdings');
+  document.getElementById('trail-sl-mb').style.display = 'none';
+  toast(`${h.symbol} trailing SL set at ${pct}% — stop ₹${f(h.stopLoss)}`, 'success');
+  renderHoldings();
+}
+
+function _removeTrailSL(hid) {
+  const h = D.holdings.find(x => x.id == hid);
+  if (!h) return;
+  delete h.trailSlPct; delete h.trailSlHigh;
+  save('holdings');
+  document.getElementById('trail-sl-mb').style.display = 'none';
+  toast(`${h.symbol} trailing SL removed`, 'info');
+  renderHoldings();
+}
+
+// Hook into refreshAll to auto-update trailing SLs on price update
+(function() {
+  const _origRefreshAll = window.refreshAll;
+  if (typeof _origRefreshAll !== 'function') return;
+  window.refreshAll = async function() {
+    const result = await _origRefreshAll.apply(this, arguments);
+    let changed = false;
+    D.holdings.forEach(h => { if (h.ltp && _applyTrailingSL(h, h.ltp)) changed = true; });
+    if (changed) { save('holdings'); }
+    return result;
+  };
+})();
+
+// ── 5. PER-STOCK XIRR VS ACTUAL NIFTY ──────────────────────────────
+// Fetches Nifty 50 (^NSEI) 2Y daily history once per session,
+// then computes actual Nifty CAGR over each stock's holding period.
+// ────────────────────────────────────────────────────────────────────
+let _niftyHistory = null; // Map: dateStr (YYYY-MM-DD) → closing price
+let _niftyFetching = false;
+
+async function _ensureNiftyHistory() {
+  if (_niftyHistory) return true;
+  if (_niftyFetching) return false;
+  _niftyFetching = true;
+  try {
+    // Check localStorage cache first (valid for 4 hours)
+    const cached = localStorage.getItem('ss_nifty_hist');
+    if (cached) {
+      try {
+        const { ts, data } = JSON.parse(cached);
+        if (Date.now() - ts < 4 * 3600000) { _niftyHistory = data; _niftyFetching = false; return true; }
+      } catch(e) {}
+    }
+    const series = await fetchYFSeries('^NSEI', '2y', '1d');
+    if (!series || !series.length) { _niftyFetching = false; return false; }
+    // Build date→price map
+    const map = {};
+    series.forEach(pt => {
+      if (pt.date && pt.close) {
+        const d = new Date(pt.date * 1000);
+        const key = d.toISOString().split('T')[0];
+        map[key] = pt.close;
+      }
+    });
+    _niftyHistory = map;
+    localStorage.setItem('ss_nifty_hist', JSON.stringify({ ts: Date.now(), data: map }));
+    _niftyFetching = false;
+    return true;
+  } catch(e) { _niftyFetching = false; return false; }
+}
+
+function _getNiftyReturnSince(buyDateStr) {
+  if (!_niftyHistory || !buyDateStr) return null;
+  const keys = Object.keys(_niftyHistory).sort();
+  if (!keys.length) return null;
+  // Find nearest date on or after buyDate
+  let buyPrice = null;
+  for (let i = 0; i < keys.length; i++) {
+    if (keys[i] >= buyDateStr) { buyPrice = _niftyHistory[keys[i]]; break; }
+  }
+  if (!buyPrice) buyPrice = _niftyHistory[keys[0]]; // fallback to earliest
+  // Get latest price
+  const latestPrice = _niftyHistory[keys[keys.length - 1]];
+  const days = hDays(buyDateStr) || 1;
+  if (days < 30) return null;
+  const annualised = Math.pow(latestPrice / buyPrice, 365 / days) - 1;
+  return isFinite(annualised) ? annualised : null;
+}
+
+// Kick off Nifty history load silently on page ready
+setTimeout(() => _ensureNiftyHistory(), 3000);
+
+// Patch the CAGR cell renderer to use actual Nifty data
+// We override the 'cagr' case by adding a post-render pass
+function _refreshNiftyCagrCells() {
+  if (!_niftyHistory) return;
+  document.querySelectorAll('[data-nifty-buydate]').forEach(cell => {
+    const buyDate = cell.dataset.niftyBuydate;
+    const stockCagr = parseFloat(cell.dataset.stockCagr);
+    const days = parseInt(cell.dataset.days) || 0;
+    if (!buyDate || days < 30) return;
+    const niftyCagr = _getNiftyReturnSince(buyDate);
+    if (niftyCagr === null) return;
+    const beat = stockCagr > niftyCagr * 100;
+    const nPct = (niftyCagr * 100).toFixed(1);
+    const cc = stockCagr > niftyCagr * 100 ? 'var(--grn)' : stockCagr > 0 ? 'var(--yel)' : 'var(--red)';
+    cell.innerHTML = `
+      <div style="font-size:11.5px;font-weight:700;color:${cc};font-family:var(--mono)">${stockCagr>=0?'+':''}${stockCagr.toFixed(1)}%</div>
+      <div style="font-size:8.5px;color:var(--t4);margin-top:1px">${beat?'▲':'▼'} Nifty ${niftyCagr>=0?'+':''}${nPct}%</div>`;
+  });
+}
+
+// After _ensureNiftyHistory completes, update all rendered cells
+(function() {
+  const _origEnsure = _ensureNiftyHistory;
+  window._ensureNiftyHistory = async function() {
+    const ok = await _origEnsure();
+    if (ok) _refreshNiftyCagrCells();
+    return ok;
+  };
+})();
+
+// ── 6. SECTOR BET VS NIFTY 500 ─────────────────────────────────────
+// Approximate Nifty 500 sector weights (updated 2025).
+// Shows overweight/underweight vs index in the sector map.
+// ────────────────────────────────────────────────────────────────────
+const NIFTY500_WEIGHTS = {
+  'Banking & Finance':   26,
+  'Technology':          16,
+  'Energy & Power':      11,
+  'Consumer Goods':       9,
+  'Pharma & Healthcare':  7,
+  'Auto & EV':            7,
+  'Infrastructure':       5,
+  'Metals & Mining':      5,
+  'Defence & Aerospace':  3,
+  'Telecom':              3,
+  'Chemicals':            3,
+  'Real Estate':          2,
+  'Others':               3,
+};
+
+// Patch renderSectorMap to add overweight/underweight badges
+(function() {
+  const _origRenderSectorMap = window.renderSectorMap;
+  if (typeof _origRenderSectorMap !== 'function') return;
+  window.renderSectorMap = function() {
+    _origRenderSectorMap();
+    const grid = document.getElementById('sector-grid');
+    if (!grid) return;
+    const totalCv = D.holdings.reduce((s,h) => s + h.qty*(h.ltp||h.avgPrice), 0);
+    // Inject overweight/underweight into each tile
+    grid.querySelectorAll('.sector-tile').forEach(tile => {
+      const nameEl = tile.querySelector('.st-name');
+      if (!nameEl) return;
+      const sec = nameEl.textContent.trim();
+      const hs = D.holdings.filter(h => _normSector(h.sector||'') === sec);
+      const cv = hs.reduce((s,h) => s + h.qty*(h.ltp||h.avgPrice), 0);
+      const portfolioPct = totalCv > 0 ? cv/totalCv*100 : 0;
+      const indexPct = NIFTY500_WEIGHTS[sec] || 0;
+      if (!indexPct && portfolioPct === 0) return;
+      const delta = portfolioPct - indexPct;
+      if (Math.abs(delta) < 0.5) return;
+      const badge = document.createElement('div');
+      const isOver = delta > 0;
+      badge.style.cssText = `margin-top:5px;font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;display:inline-block;
+        background:${isOver?'rgba(239,68,68,.12)':'rgba(34,197,94,.10)'};
+        color:${isOver?'var(--red)':'var(--grn)'};
+        border:1px solid ${isOver?'rgba(239,68,68,.25)':'rgba(34,197,94,.2)'}`;
+      badge.title = `Your portfolio: ${portfolioPct.toFixed(1)}% | Nifty 500: ${indexPct}%`;
+      badge.textContent = `${isOver?'▲ OW':'▼ UW'} ${Math.abs(delta).toFixed(1)}% vs N500`;
+      // Remove existing badge if any
+      tile.querySelector('.ow-badge')?.remove();
+      badge.className = 'ow-badge';
+      tile.appendChild(badge);
+    });
+  };
+})();
+
+// ── 7. DAILY P&L SPARKLINE ─────────────────────────────────────────
+// Tracks portfolio value at each price refresh (max 80 pts/day).
+// Renders a tiny SVG sparkline next to Today's P&L on dashboard.
+// ────────────────────────────────────────────────────────────────────
+function _trackPortfolioSnapshot() {
+  const cv = D.holdings.reduce((s,h) => s + h.qty*(h.ltp||h.avgPrice), 0);
+  if (!cv) return;
+  const today = new Date().toISOString().split('T')[0];
+  const key = 'ss_pnl_snaps_' + today;
+  let snaps = [];
+  try { snaps = JSON.parse(localStorage.getItem(key) || '[]'); } catch(e) {}
+  snaps.push({ t: Date.now(), v: cv });
+  if (snaps.length > 80) snaps = snaps.slice(-80);
+  try { localStorage.setItem(key, JSON.stringify(snaps)); } catch(e) {}
+  _renderDailySparkline(snaps);
+}
+
+function _renderDailySparkline(snaps) {
+  const el = document.getElementById('ds-sparkline');
+  if (!el) return;
+  if (!snaps || snaps.length < 2) { el.innerHTML = ''; return; }
+  const W = 80, H = 28;
+  const vals = snaps.map(s => s.v);
+  const mn = Math.min(...vals), mx = Math.max(...vals);
+  const range = mx - mn || 1;
+  const pts = vals.map((v, i) => {
+    const x = (i / (vals.length - 1)) * W;
+    const y = H - ((v - mn) / range) * (H - 4) - 2;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const last = vals[vals.length - 1], first = vals[0];
+  const isUp = last >= first;
+  const col = isUp ? 'var(--grn)' : 'var(--red)';
+  const fillPts = `0,${H} ${pts} ${W},${H}`;
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="display:block" title="Portfolio value today — ${snaps.length} data points">
+    <defs><linearGradient id="spk-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${col}" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="${col}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <polygon points="${fillPts}" fill="url(#spk-grad)"/>
+    <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+// Patch renderSummary to track snapshots + load today's sparkline on render
+(function() {
+  const _origRenderSummary = window.renderSummary;
+  if (typeof _origRenderSummary !== 'function') return;
+  window.renderSummary = function() {
+    _origRenderSummary.apply(this, arguments);
+    // Track snapshot only when LTP data is live (not just avg prices)
+    const hasLive = D.holdings.some(h => h.ltpUpdatedAt && (Date.now() - new Date(h.ltpUpdatedAt).getTime()) < 3600000);
+    if (hasLive) _trackPortfolioSnapshot();
+    // Always load today's snaps for sparkline display
+    const today = new Date().toISOString().split('T')[0];
+    let snaps = [];
+    try { snaps = JSON.parse(localStorage.getItem('ss_pnl_snaps_' + today) || '[]'); } catch(e) {}
+    _renderDailySparkline(snaps);
+  };
+})();
+
+// Patch renderHoldings to add data attributes for Nifty CAGR cells
+(function() {
+  const _origRenderHoldings = window.renderHoldings;
+  if (typeof _origRenderHoldings !== 'function') return;
+  window.renderHoldings = function() {
+    _origRenderHoldings.apply(this, arguments);
+    // After render, tag CAGR cells with data attrs for Nifty refresh
+    document.querySelectorAll('[data-hid]').forEach(row => {
+      const hid = +row.dataset.hid;
+      const h = D.holdings.find(x => x.id === hid);
+      if (!h || !h.buyDate) return;
+      const days = hDays(h.buyDate) || 0;
+      if (days < 30) return;
+      const ltp = h.ltp || h.avgPrice;
+      const cagr = (Math.pow(ltp/h.avgPrice, 365/days) - 1) * 100;
+      // Find the CAGR cell (8th column in basic group — approximate via querySelectorAll)
+      const cells = row.querySelectorAll('td');
+      cells.forEach(td => {
+        // Identify CAGR cell by its content pattern (+X.X% with ▲/▼)
+        if (td.textContent.match(/[▲▼]\s*(beats|N50|Nifty)/)) {
+          td.dataset.niftyBuydate = h.buyDate;
+          td.dataset.stockCagr = cagr.toFixed(2);
+          td.dataset.days = days;
+        }
+      });
+    });
+    if (_niftyHistory) _refreshNiftyCagrCells();
+    else _ensureNiftyHistory();
+  };
+})();
+
+// Also patch openAvgDown to show thesis if present (accountability)
+(function() {
+  const _orig = window.openAvgDown;
+  if (typeof _orig !== 'function') return;
+  window.openAvgDown = function(hid) {
+    _orig(hid);
+    const h = D.holdings.find(x => x.id == hid);
+    if (!h || !h.thesis) return;
+    const curEl = document.getElementById('avgdown-current');
+    if (!curEl) return;
+    const thesisDiv = document.createElement('div');
+    thesisDiv.style.cssText = 'margin-top:8px;padding:8px 10px;background:rgba(79,142,247,.08);border-left:3px solid var(--ac);border-radius:0 6px 6px 0;font-size:11px;color:var(--t2);line-height:1.4';
+    thesisDiv.innerHTML = `<span style="font-size:9px;font-weight:700;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:3px">💡 Original thesis</span>${h.thesis}`;
+    curEl.appendChild(thesisDiv);
+  };
+})();
 
 </script>
 
