@@ -19355,8 +19355,8 @@ function _removeTrailSL(hid) {
 // Fetches Nifty 50 (^NSEI) 2Y daily history once per session,
 // then computes actual Nifty CAGR over each stock's holding period.
 // ────────────────────────────────────────────────────────────────────
-let _niftyHistory = null; // Map: dateStr (YYYY-MM-DD) → closing price
-let _niftyFetching = false;
+var _niftyHistory = null; // Map: dateStr (YYYY-MM-DD) → closing price — var avoids TDZ when cagr cell renders before feature pack inits
+var _niftyFetching = false;
 
 async function _ensureNiftyHistory() {
   if (_niftyHistory) return true;
