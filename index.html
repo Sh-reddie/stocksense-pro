@@ -862,6 +862,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="mob-nav-sect">💼 Portfolio</div>
     <div class="mob-nav-item" onclick="mgo('holdings')">📋 Holdings</div>
     <div class="mob-nav-item" onclick="mgo('order-history')">🗂 Order History</div>
+    <div class="mob-nav-item" onclick="mgo('pf-heatmap')">🗺 Portfolio Heatmap</div>
     <div class="mob-nav-item" onclick="mgo('watchlist')">👁 Watchlist</div>
     <div class="mob-nav-item" onclick="mgo('sip')">📈 SIP / DCA</div>
     <div class="mob-nav-item" onclick="mgo('realised')">💰 Realised P&amp;L</div>
@@ -962,6 +963,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-div">Positions</div>
         <div class="tn-drop-item" onclick="go('holdings')">📋 Holdings</div>
         <div class="tn-drop-item" onclick="go('order-history')">🗂 Order History</div>
+        <div class="tn-drop-item" onclick="go('pf-heatmap')">🗺 Heatmap</div>
         <div class="tn-drop-item" onclick="go('watchlist')">👁 Watchlist</div>
         <div class="tn-drop-item" onclick="go('journal')">📒 Trade Journal</div>
         <div class="tn-drop-item" onclick="go('sip')">📈 SIP / DCA Tracker</div>
@@ -2106,6 +2108,30 @@ textarea.fi{resize:vertical;min-height:70px;}
   </div>
 
   <!-- ═══ AI INVESTOR — ADVANCED STRATEGIES ════════════════════════ -->
+  <!-- ── Portfolio Heatmap Section ─────────────────────────────────────── -->
+  <div class="sec" id="sec-pf-heatmap">
+    <div class="sec-head">
+      <div class="sec-title">🗺 Portfolio Heatmap</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select class="fi" id="hmap-mode" style="width:140px" onchange="renderPfHeatmap()">
+          <option value="today">Today's P&L</option>
+          <option value="total">Total P&L</option>
+          <option value="cagr">CAGR %</option>
+        </select>
+        <button class="btn btn-g btn-sm" onclick="renderPfHeatmap()">↻ Refresh</button>
+      </div>
+    </div>
+    <div id="pf-heatmap-grid" style="padding:4px 0"></div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;padding:10px 0;font-size:10px;color:var(--t4)">
+      <span>■ <span style="color:#16a34a">+5%+</span></span>
+      <span>■ <span style="color:#4ade80">+1–5%</span></span>
+      <span>■ <span style="color:var(--t3)">−1–+1%</span></span>
+      <span>■ <span style="color:#f87171">−1–5%</span></span>
+      <span>■ <span style="color:#dc2626">−5%+</span></span>
+      <span style="margin-left:auto">Size = portfolio weight</span>
+    </div>
+  </div>
+
   <div class="sec" id="sec-strategies">
     <div class="sec-head">
       <div class="sec-title">🧠 AI Investor — Advanced Strategies</div>
@@ -3985,6 +4011,22 @@ textarea.fi{resize:vertical;min-height:70px;}
   </div>
 </div>
 
+<!-- ── Average-Down Calculator Modal ─────────────────────────────────────── -->
+<div class="mb" id="m-avgdown">
+  <div class="md" style="max-width:460px;width:100%">
+    <div class="md-h"><div class="md-title">📉 Average-Down Calculator</div><button class="x-btn" onclick="closeM('avgdown')">✕</button></div>
+    <div class="md-b">
+      <div id="avgdown-current" style="margin-bottom:16px;padding:12px;background:var(--s2);border-radius:8px;border:1px solid var(--b1)"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div class="fg" style="margin-bottom:0"><label class="fl">Add Qty *</label><input type="number" class="fi" id="avgdown-qty" min="1" step="1" placeholder="e.g. 5" oninput="calcAvgDown()"></div>
+        <div class="fg" style="margin-bottom:0"><label class="fl">At Price (₹) *</label><input type="number" class="fi" id="avgdown-price" step="0.05" placeholder="LTP" oninput="calcAvgDown()"></div>
+      </div>
+      <div id="avgdown-result"></div>
+    </div>
+    <div class="md-f"><button class="btn btn-g" onclick="closeM('avgdown')">Close</button></div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════
 // NSE STOCK DATABASE (Top 200 + searchable)
@@ -4835,14 +4877,14 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP / DCA Tracker',action:'⚡ Action Center',momentum:'🚀 Momentum Board',risk:'🛡 Risk Console',benchmark:'📊 Benchmark vs Nifty',heatmap:'🔥 Correlation Heatmap',sectormap:'🌡 Sector Rotation Map',rebalancer:'⚖ Portfolio Rebalancer',analysis:'🔍 Stock Deep Dive',plan:'Exit Planner',planner:'📐 Investment Planner',realised:'💰 Realised P&L',dividends:'🏦 Dividends',tax:'🧾 Tax P&L Report',divcal:'🗓 Dividend Calendar',alerts:'🔔 Price Alerts',notifications:'📬 Notifications',calendar:'📅 Earnings Calendar',news:'📰 News & Events',deals:'💼 Bulk & Block Deals',import:'⬆ Import CSV / Excel',settings:'⚙ Settings',strategies:'🧠 AI Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Nifty 500 Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily Market Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 Portfolio Doctor','opportunity':'🏆 Opportunity Ranker','action-plan':'📋 Weekly Action Plan','position-builder':'📐 Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ Stock Comparator','intel-report':'📑 Intelligence Report','watchlist-builder':'🔭 Watchlist Builder','exit-planner':'🚪 Exit Strategy Planner','ai-rebalancer':'⚖️ AI Portfolio Rebalancer','earnings-preview':'📣 Earnings Preview','dividend-opt':'💸 Dividend Optimizer','goal-planner':'🎯 Goal Planner','timeline':'📈 Value Timeline','52week':'📊 52-Week Screener','custom-alerts':'🛎 Custom Alerts','fii-dii':'🏦 FII / DII Flow Tracker','order-history':'📋 Order History'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP / DCA Tracker',action:'⚡ Action Center',momentum:'🚀 Momentum Board',risk:'🛡 Risk Console',benchmark:'📊 Benchmark vs Nifty',heatmap:'🔥 Correlation Heatmap',sectormap:'🌡 Sector Rotation Map',rebalancer:'⚖ Portfolio Rebalancer',analysis:'🔍 Stock Deep Dive',plan:'Exit Planner',planner:'📐 Investment Planner',realised:'💰 Realised P&L',dividends:'🏦 Dividends',tax:'🧾 Tax P&L Report',divcal:'🗓 Dividend Calendar',alerts:'🔔 Price Alerts',notifications:'📬 Notifications',calendar:'📅 Earnings Calendar',news:'📰 News & Events',deals:'💼 Bulk & Block Deals',import:'⬆ Import CSV / Excel',settings:'⚙ Settings',strategies:'🧠 AI Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Nifty 500 Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily Market Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 Portfolio Doctor','opportunity':'🏆 Opportunity Ranker','action-plan':'📋 Weekly Action Plan','position-builder':'📐 Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ Stock Comparator','intel-report':'📑 Intelligence Report','watchlist-builder':'🔭 Watchlist Builder','exit-planner':'🚪 Exit Strategy Planner','ai-rebalancer':'⚖️ AI Portfolio Rebalancer','earnings-preview':'📣 Earnings Preview','dividend-opt':'💸 Dividend Optimizer','goal-planner':'🎯 Goal Planner','timeline':'📈 Value Timeline','52week':'📊 52-Week Screener','custom-alerts':'🛎 Custom Alerts','fii-dii':'🏦 FII / DII Flow Tracker','order-history':'📋 Order History','pf-heatmap':'🗺 Portfolio Heatmap'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
   // Portfolio tab — my money, positions, P&L, income
   holdings:'portfolio', watchlist:'portfolio', sip:'portfolio', realised:'portfolio',
   dividends:'portfolio', divcal:'portfolio', journal:'portfolio', benchmark:'portfolio',
-  timeline:'portfolio', rebalancer:'portfolio', 'order-history':'portfolio',
+  timeline:'portfolio', rebalancer:'portfolio', 'order-history':'portfolio', 'pf-heatmap':'portfolio',
   // Markets tab — what's happening out there
   news:'markets', sectormap:'markets', 'fii-dii':'markets', deals:'markets',
   macro:'markets', calendar:'markets',
@@ -4880,6 +4922,7 @@ function go(id) {
   if(id==='action') renderActionCards();
   if(id==='holdings') renderHoldHeaders();
   if(id==='order-history') renderOrderHistory();
+  if(id==='pf-heatmap') renderPfHeatmap();
   if(id==='alerts') renderAlerts();
   if(id==='notifications') renderNotifs();
   if(id==='calendar') renderCalendar();
@@ -6393,7 +6436,7 @@ async function confirmWlAdd(wid, sym, exch, sector, name) {
 // COLUMN GROUPS
 // ═══════════════════════════════════════════════════
 const COL_DEFS = {
-  basic:  [{k:'stock',l:'Stock'},{k:'qty',l:'Qty'},{k:'avg',l:'Avg Cost'},{k:'ltp',l:'LTP'},{k:'cv',l:'Curr Value'},{k:'chg',l:'Day Chg%'},{k:'pl',l:'P&L'},{k:'plp',l:'P&L%'},{k:'xirr',l:'XIRR'},{k:'sig',l:'Signal'},{k:'forecast',l:'Forecast'},{k:'sent',l:'Sentiment'}],
+  basic:  [{k:'stock',l:'Stock'},{k:'qty',l:'Qty'},{k:'avg',l:'Avg Cost'},{k:'ltp',l:'LTP'},{k:'cv',l:'Curr Value'},{k:'chg',l:'Day Chg%'},{k:'pl',l:'P&L'},{k:'plp',l:'P&L%'},{k:'xirr',l:'XIRR'},{k:'cagr',l:'CAGR vs N50'},{k:'sig',l:'Signal'},{k:'forecast',l:'Forecast'},{k:'sent',l:'Sentiment'}],
   tech:   [{k:'rsi',l:'RSI'},{k:'52h',l:'52W Range'},{k:'atr',l:'ATR'},{k:'vol',l:'Volume'}],
   fund:   [{k:'pe',l:'P/E'},{k:'pb',l:'P/B'},{k:'roe',l:'ROE%'},{k:'de',l:'D/E'},{k:'eps',l:'EPS'}],
   risk:   [{k:'sl',l:'Stop Loss'},{k:'t1',l:'Target 1'},{k:'t2',l:'Target 2'},{k:'days',l:'Days'},{k:'tax',l:'Tax Type'}],
@@ -6507,6 +6550,19 @@ function renderHoldings() {
           const src = h.target1?'🤖':'📐';
           return`<td style="cursor:pointer;white-space:nowrap" onclick="openDetail(${h.id})"><div style="font-family:var(--mono);font-size:11.5px;font-weight:700;color:${clr}">₹${f(tgt)}</div><div style="font-size:9.5px;color:var(--t4);margin-top:1px">${src} ${fP(upPct)} · ${tl}</div></td>`;
         }
+        case 'cagr': {
+          const _days2 = hDays(h.buyDate)||1;
+          const _ltp2 = h.ltp||h.avgPrice;
+          if (!h.avgPrice || _days2 < 30) return `<td style="font-size:10px;color:var(--t4);text-align:center">—</td>`;
+          const _cagr = (Math.pow(_ltp2/h.avgPrice, 365/_days2) - 1) * 100;
+          const _nifty = 12; // Nifty 50 historical ~12% CAGR benchmark
+          const _beat = _cagr > _nifty;
+          const _cc = _cagr > _nifty ? 'var(--grn)' : _cagr > 0 ? 'var(--yel)' : 'var(--red)';
+          return `<td style="text-align:center;white-space:nowrap">
+            <div style="font-size:11.5px;font-weight:700;color:${_cc};font-family:var(--mono)">${_cagr>=0?'+':''}${_cagr.toFixed(1)}%</div>
+            <div style="font-size:8.5px;color:var(--t4);margin-top:1px">${_beat?'▲ beats N50':'▼ N50 +12%'}</div>
+          </td>`;
+        }
         case 'sent': {
           const st = h._sentiment;
           if (!st) return `<td class="sent-cell" style="text-align:center"><button class="btn btn-g btn-xs" onclick="runSentimentSingle(${h.id})" style="font-size:9px;padding:2px 6px">🗞</button></td>`;
@@ -6521,7 +6577,7 @@ function renderHoldings() {
             </div>
           </td>`;
         }
-        case 'act':return`<td style="white-space:nowrap"><button class="btn btn-g btn-xs" onclick="openDetail(${h.id})" style="margin-right:4px">Detail</button><button class="btn btn-yel btn-xs" onclick="openSellModal(${h.id})" style="margin-right:4px" title="Log a sell trade">Sell</button><button class="btn btn-g btn-xs" onclick="openNoteModal(${h.id})" style="margin-right:4px" title="${h.note?'Edit note: '+h.note.replace(/"/g,'&quot;'):'Add conviction note'}">${h.note?'📝':'📋'}</button><button class="btn btn-red btn-xs" onclick="rmHolding(${h.id})">✕</button></td>`;
+        case 'act':return`<td style="white-space:nowrap"><button class="btn btn-g btn-xs" onclick="openDetail(${h.id})" style="margin-right:4px">Detail</button><button class="btn btn-yel btn-xs" onclick="openSellModal(${h.id})" style="margin-right:4px" title="Log a sell trade">Sell</button><button class="btn btn-p btn-xs" onclick="openAvgDown(${h.id})" style="margin-right:4px" title="Average-Down Calculator">Avg↓</button><button class="btn btn-g btn-xs" onclick="openNoteModal(${h.id})" style="margin-right:4px" title="${h.note?'Edit note: '+h.note.replace(/"/g,'&quot;'):'Add conviction note'}">${h.note?'📝':'📋'}</button><button class="btn btn-red btn-xs" onclick="rmHolding(${h.id})">✕</button></td>`;
         default:return'<td>—</td>';
       }
     }
@@ -11166,6 +11222,149 @@ function ohExportCSV() {
   const blob = new Blob([hdr+'\n'+rows.join('\n')], {type:'text/csv'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = 'order_history.csv'; a.click();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// AVERAGE-DOWN CALCULATOR
+// ═══════════════════════════════════════════════════════════════════
+let _avgDownHid = null;
+
+function openAvgDown(hid) {
+  _avgDownHid = hid;
+  const h = D.holdings.find(x => x.id == hid);
+  if (!h) return;
+  const ltp = h.ltp || h.avgPrice;
+  const inv = h.qty * h.avgPrice;
+  const plp = h.avgPrice ? ((ltp - h.avgPrice) / h.avgPrice * 100).toFixed(1) : '0.0';
+  const plCol = parseFloat(plp) >= 0 ? 'var(--grn)' : 'var(--red)';
+  document.getElementById('avgdown-current').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+      <div><div style="font-size:15px;font-weight:800;color:var(--t1)">${h.symbol}</div><div style="font-size:11px;color:var(--t4)">${h.name||''}</div></div>
+      <div style="text-align:right"><div style="font-size:14px;font-weight:700;color:${plCol}">LTP ₹${f(ltp)}</div><div style="font-size:10px;color:var(--t4)">${plp}% from cost</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      <div style="padding:8px;background:var(--bg);border-radius:6px;text-align:center"><div style="font-size:9px;color:var(--t4)">HELD QTY</div><div style="font-size:14px;font-weight:800;color:var(--t1)">${h.qty}</div></div>
+      <div style="padding:8px;background:var(--bg);border-radius:6px;text-align:center"><div style="font-size:9px;color:var(--t4)">AVG COST</div><div style="font-size:14px;font-weight:800;color:var(--t1)">₹${f(h.avgPrice)}</div></div>
+      <div style="padding:8px;background:var(--bg);border-radius:6px;text-align:center"><div style="font-size:9px;color:var(--t4)">INVESTED</div><div style="font-size:14px;font-weight:800;color:var(--t1)">₹${fI(inv)}</div></div>
+    </div>`;
+  const priceEl = document.getElementById('avgdown-price');
+  if (priceEl) priceEl.value = ltp;
+  const qtyEl = document.getElementById('avgdown-qty');
+  if (qtyEl) qtyEl.value = '';
+  document.getElementById('avgdown-result').innerHTML = '';
+  openM('avgdown');
+  setTimeout(() => qtyEl?.focus(), 150);
+}
+
+function calcAvgDown() {
+  const h = D.holdings.find(x => x.id == _avgDownHid);
+  if (!h) return;
+  const addQty   = parseFloat(document.getElementById('avgdown-qty')?.value) || 0;
+  const addPrice = parseFloat(document.getElementById('avgdown-price')?.value) || 0;
+  const resultEl = document.getElementById('avgdown-result');
+  if (!resultEl || !addQty || !addPrice) { if(resultEl) resultEl.innerHTML=''; return; }
+
+  const newQty   = h.qty + addQty;
+  const newCost  = h.qty * h.avgPrice + addQty * addPrice;
+  const newAvg   = newCost / newQty;
+  const addInv   = addQty * addPrice;
+  const ltp      = h.ltp || h.avgPrice;
+  const change   = ((newAvg - h.avgPrice) / h.avgPrice * 100);
+  const newPlPct = ((ltp - newAvg) / newAvg * 100).toFixed(1);
+  const toBreak  = ((newAvg - ltp) / ltp * 100).toFixed(1);
+  const newSL    = +(newAvg * (1 - (D.cfg.sl||12)/100)).toFixed(2);
+  const newT1    = +(newAvg * 1.15).toFixed(2);
+  const rr       = newSL < newT1 ? ((newT1-newAvg)/(newAvg-newSL)).toFixed(1) : '—';
+  const isDown   = addPrice < h.avgPrice;
+  const sigCol   = isDown ? 'var(--grn)' : 'var(--yel)';
+
+  resultEl.innerHTML = `
+  <div style="background:${sigCol}10;border:1.5px solid ${sigCol}30;border-radius:10px;padding:14px;margin-bottom:12px">
+    <div style="font-size:10px;font-weight:800;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">${isDown?'📉 Average Down Result':'📈 Average Up Result'}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div style="padding:12px;background:var(--s2);border-radius:8px;text-align:center">
+        <div style="font-size:9.5px;color:var(--t4);margin-bottom:4px">New Avg Cost</div>
+        <div style="font-size:22px;font-weight:900;color:var(--t1);font-family:var(--mono)">₹${f(newAvg)}</div>
+        <div style="font-size:10px;color:${isDown?'var(--grn)':'var(--red)'};margin-top:3px">${isDown?'▼':'+'}${Math.abs(change).toFixed(1)}% ${isDown?'reduction':'increase'}</div>
+      </div>
+      <div style="padding:12px;background:var(--s2);border-radius:8px;text-align:center">
+        <div style="font-size:9.5px;color:var(--t4);margin-bottom:4px">New Total Qty</div>
+        <div style="font-size:22px;font-weight:900;color:var(--t1);font-family:var(--mono)">${newQty}</div>
+        <div style="font-size:10px;color:var(--t4);margin-top:3px">+₹${fI(addInv)} capital</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      <div style="padding:8px;background:rgba(239,68,68,.07);border-radius:8px;text-align:center">
+        <div style="font-size:9px;color:var(--t4)">Stop Loss</div>
+        <div style="font-size:12px;font-weight:700;color:var(--red)">₹${f(newSL)}</div>
+        <div style="font-size:9px;color:var(--t4);margin-top:1px">at ${D.cfg.sl||12}%</div>
+      </div>
+      <div style="padding:8px;background:rgba(34,197,94,.07);border-radius:8px;text-align:center">
+        <div style="font-size:9px;color:var(--t4)">Target +15%</div>
+        <div style="font-size:12px;font-weight:700;color:var(--grn)">₹${f(newT1)}</div>
+        <div style="font-size:9px;color:var(--t4);margin-top:1px">R:R ${rr}:1</div>
+      </div>
+      <div style="padding:8px;background:var(--s2);border-radius:8px;text-align:center">
+        <div style="font-size:9px;color:var(--t4)">P&L @ LTP</div>
+        <div style="font-size:12px;font-weight:700;color:${parseFloat(newPlPct)>=0?'var(--grn)':'var(--red)'}">${newPlPct}%</div>
+        <div style="font-size:9px;color:var(--t4);margin-top:1px">${parseFloat(toBreak)>0?toBreak+'% to B/E':'In profit'}</div>
+      </div>
+    </div>
+  </div>
+  <div style="font-size:11px;color:var(--t3);padding:8px 10px;background:var(--s2);border-radius:6px;line-height:1.5">
+    Total invested: <strong style="color:var(--t1)">₹${fI(newCost)}</strong>
+    ${parseFloat(toBreak)>0 ? ` · Rise <strong style="color:var(--yel)">${toBreak}%</strong> to break even` : ` · Already profitable at LTP ₹${f(ltp)}`}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PORTFOLIO HEATMAP
+// ═══════════════════════════════════════════════════════════════════
+function renderPfHeatmap() {
+  const grid = document.getElementById('pf-heatmap-grid');
+  if (!grid) return;
+  if (!D.holdings.length) {
+    grid.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t4)">No holdings to display.</div>';
+    return;
+  }
+  const mode = document.getElementById('hmap-mode')?.value || 'today';
+  const totalCV = D.holdings.reduce((s,h) => s + h.qty*(h.ltp||h.avgPrice), 0);
+
+  const cells = D.holdings.map(h => {
+    const ltp = h.ltp || h.avgPrice;
+    const weight = totalCV > 0 ? (h.qty*ltp/totalCV)*100 : 0;
+    let pct, label;
+    if (mode === 'today') {
+      pct = h.chgP || 0;
+      label = (pct>=0?'+':'')+pct.toFixed(2)+'%';
+    } else if (mode === 'total') {
+      pct = h.avgPrice ? ((ltp-h.avgPrice)/h.avgPrice*100) : 0;
+      label = (pct>=0?'+':'')+pct.toFixed(1)+'%';
+    } else { // cagr
+      const days = hDays(h.buyDate)||1;
+      pct = days >= 30 ? (Math.pow(ltp/h.avgPrice, 365/days)-1)*100 : 0;
+      label = (pct>=0?'+':'')+pct.toFixed(1)+'%';
+    }
+    // Color gradient
+    const bg = pct >= 5 ? '#15803d' : pct >= 1 ? '#22c55e' : pct >= 0 ? '#4ade80' :
+               pct >= -1 ? '#94a3b8' : pct >= -5 ? '#f87171' : '#dc2626';
+    const txtCol = Math.abs(pct) >= 1 ? '#fff' : 'var(--t2)';
+    // Size: min 80px, max 300px proportional to weight
+    const minSz = 72, maxSz = 260;
+    const sz = Math.round(minSz + (maxSz - minSz) * Math.min(weight / 20, 1)); // 20% = max size
+    return { h, pct, weight, label, bg, txtCol, sz };
+  }).sort((a,b) => b.weight - a.weight);
+
+  grid.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0">
+    ${cells.map(c => `
+    <div onclick="openDetail(${c.h.id})" title="${c.h.name||c.h.symbol} · ${c.weight.toFixed(1)}% of portfolio"
+      style="width:${c.sz}px;height:${c.sz}px;background:${c.bg};border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:opacity .15s;padding:6px;box-sizing:border-box;overflow:hidden"
+      onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+      <div style="font-weight:800;font-size:${c.sz>100?14:11}px;color:${c.txtCol};text-align:center;line-height:1.2;word-break:break-all">${c.h.symbol}</div>
+      <div style="font-size:${c.sz>100?13:10}px;font-weight:700;color:${c.txtCol};opacity:.95;margin-top:3px">${c.label}</div>
+      ${c.sz>90?`<div style="font-size:9px;color:${c.txtCol};opacity:.7;margin-top:2px">${c.weight.toFixed(1)}%</div>`:''}
+    </div>`).join('')}
+  </div>`;
 }
 
 // Pre-process Zerodha tradebook: aggregate BUY trades by symbol → weighted avg
@@ -17908,25 +18107,47 @@ function renderTaxOptimizer() {
   $('topt-total-tax') && ($('topt-total-tax').textContent = '₹'+fI(totalEstTax));
   $('topt-ltcg-save') && ($('topt-ltcg-save').textContent = '₹'+fI(ltcgSavings));
 
-  // Near-LTCG alert banner
-  const nearLTCG = positions.filter(p => !p.isLTCG && p.daysToLTCG > 0 && p.daysToLTCG <= 45 && p.unrealisedPL > 0);
+  // Full LTCG countdown calendar — ALL pre-threshold holdings
+  const allPreLtcg = positions.filter(p => !p.isLTCG && p.daysToLTCG > 0).sort((a,b) => a.daysToLTCG - b.daysToLTCG);
   const alertEl = $('topt-ltcg-alert');
   if (alertEl) {
-    if (nearLTCG.length) {
-      alertEl.innerHTML = `<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:10px;padding:12px 16px;margin-bottom:4px">
-        <div style="font-size:12px;font-weight:600;color:var(--yel);margin-bottom:8px">⏳ ${nearLTCG.length} holding${nearLTCG.length>1?'s':''} about to cross the 1-year LTCG threshold — consider waiting</div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px">
-          ${nearLTCG.map(p => `<div style="background:var(--s2);border-radius:6px;padding:6px 10px;font-size:11px">
-            <span class="sym" style="font-size:12px">${p.h.symbol}</span>
-            <span style="color:var(--t3);margin:0 4px">·</span>
-            <span style="color:var(--yel)">${p.daysToLTCG}d left</span>
-            <span style="color:var(--t3);margin:0 4px">·</span>
-            <span style="color:var(--grn)">Save ₹${fI(p.taxSavingIfWait)}</span>
-          </div>`).join('')}
+    if (allPreLtcg.length) {
+      const totalSaving = allPreLtcg.reduce((s,p) => s + p.taxSavingIfWait, 0);
+      alertEl.innerHTML = `
+      <div style="margin-bottom:14px;border:1px solid var(--b1);border-radius:10px;overflow:hidden">
+        <div style="padding:12px 16px;background:var(--s2);border-bottom:1px solid var(--b1);display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--t1)">⏳ LTCG Countdown — ${allPreLtcg.length} stocks below 1-year threshold</div>
+            <div style="font-size:11px;color:var(--t4);margin-top:2px">Waiting could save up to <strong style="color:var(--grn)">₹${fI(totalSaving)}</strong> in tax (STCG 20% → LTCG 12.5%)</div>
+          </div>
+        </div>
+        <div style="max-height:320px;overflow-y:auto">
+          ${allPreLtcg.map(p => {
+            const urgCol = p.daysToLTCG <= 30 ? 'var(--red)' : p.daysToLTCG <= 90 ? 'var(--yel)' : 'var(--grn)';
+            const urgBadge = p.daysToLTCG <= 30 ? '🔴 URGENT' : p.daysToLTCG <= 90 ? '🟡 SOON' : '🟢 OK';
+            const ltcgDate = new Date(new Date(p.h.buyDate).getTime() + 365*86400000);
+            const ltcgDateStr = ltcgDate.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+            return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--b2);border-left:3px solid ${urgCol}">
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-weight:700;font-size:13px;color:var(--t1)">${p.h.symbol}</span>
+                  <span style="font-size:10px;padding:1px 7px;border-radius:10px;background:${urgCol}18;color:${urgCol};font-weight:700;border:1px solid ${urgCol}33">${urgBadge} · ${p.daysToLTCG}d left</span>
+                  <span style="font-size:10px;color:var(--t4)">LTCG from ${ltcgDateStr}</span>
+                </div>
+                <div style="font-size:10.5px;color:var(--t3);margin-top:3px">
+                  ${p.h.qty} shares · ${p.unrealisedPL > 0 ? `Gain ₹${fI(p.unrealisedPL)} · <span style="color:var(--red)">STCG tax ₹${fI(p.estTax)}</span>` : `Loss ₹${fI(Math.abs(p.unrealisedPL))} — consider harvesting`}
+                </div>
+              </div>
+              ${p.taxSavingIfWait > 0 ? `<div style="text-align:right;flex-shrink:0">
+                <div style="font-size:9.5px;color:var(--t4)">Potential saving</div>
+                <div style="font-size:14px;font-weight:800;color:var(--grn)">₹${fI(p.taxSavingIfWait)}</div>
+              </div>` : ''}
+            </div>`;
+          }).join('')}
         </div>
       </div>`;
     } else {
-      alertEl.innerHTML = '';
+      alertEl.innerHTML = `<div style="padding:12px 16px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:8px;font-size:12px;color:var(--grn);margin-bottom:14px">✅ All holdings have crossed the LTCG threshold (held >365 days)</div>`;
     }
   }
 
