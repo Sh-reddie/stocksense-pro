@@ -14994,8 +14994,12 @@ async function scoreSentiment(sym, headlines, sector) {
     : `No live headlines — use your knowledge of ${sym}${sector?' ('+sector+' sector)':''} and current Indian market conditions.`;
   const src = hasNews ? 'news' : 'ai-knowledge';
   const prompt = `Indian equity analyst. Stock: ${sym}. ${ctx} Rate overall sentiment as Bullish, Neutral, or Bearish.
-Reply JSON: {"sentiment":"Bullish","score":7,"reason":"<15 words>","catalyst":"<10 words>","risk":"<10 words>","source":"${src}"}`;
-  return await claudeJSON(prompt);
+Reply ONLY compact JSON: {"sentiment":"Bullish|Neutral|Bearish","score":<1-10>,"reason":"<15 words>","catalyst":"<10 words>","risk":"<10 words>","source":"${src}"}`;
+  const raw = await claudeJSON(prompt);
+  // claudeJSON returns raw string — parse it
+  if (raw && typeof raw === 'object' && raw.sentiment) return raw; // already parsed (shouldn't happen but safe)
+  if (typeof raw === 'string' && raw.startsWith('⚠')) return null; // error string
+  return extractJSON(raw) || null;
 }
 
 // Score all holdings 3 at a time
