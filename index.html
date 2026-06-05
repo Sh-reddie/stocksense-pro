@@ -1316,6 +1316,20 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <select class="fi" id="h-filter-sector" style="width:140px" onchange="renderHoldings()"><option value="">All Sectors</option></select>
         <select class="fi" id="h-filter-sig" style="width:120px" onchange="renderHoldings()"><option value="">All Signals</option><option>BUY</option><option>STRONG BUY</option><option>HOLD</option><option>SELL</option></select>
+        <select class="fi" id="h-sort" style="width:170px" onchange="renderHoldings()" title="Sort holdings">
+          <option value="default">📋 Default (Buy Order)</option>
+          <option value="sym-az">🔤 Symbol A → Z</option>
+          <option value="sym-za">🔤 Symbol Z → A</option>
+          <option value="plp-desc">💹 P&amp;L% Best First</option>
+          <option value="plp-asc">💹 P&amp;L% Worst First</option>
+          <option value="pl-desc">💰 P&amp;L ₹ Largest First</option>
+          <option value="cv-desc">📦 Position Size (Largest)</option>
+          <option value="chg-desc">📅 Today's Movers</option>
+          <option value="xirr-desc">⚡ XIRR Best First</option>
+          <option value="days-desc">⏳ Held Longest First</option>
+          <option value="days-asc">⏳ Held Shortest First</option>
+          <option value="signal">🚦 Signal (Buy → Sell)</option>
+        </select>
         <button class="btn btn-g" onclick="refreshAll()">↻ Refresh</button>
         <button class="btn btn-g btn-sm" id="sent-run-all-btn" onclick="runSentimentAll()" title="AI-score news sentiment for all holdings">🗞 Sentiment</button>
         <button class="btn btn-g" onclick="go('import')">⬆ Import CSV</button>
@@ -1468,6 +1482,14 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="sec-title">Watchlist</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span style="font-size:11px;color:var(--t4)">Press <kbd style="background:var(--s3);border:1px solid var(--b2);border-radius:3px;padding:1px 5px;font-family:var(--mono)">/</kbd> to search</span>
+        <select class="fi" id="wl-sort" style="width:160px" onchange="renderWatchlist()" title="Sort watchlist">
+          <option value="score">🏆 Entry Score</option>
+          <option value="sym-az">🔤 Symbol A → Z</option>
+          <option value="sym-za">🔤 Symbol Z → A</option>
+          <option value="chg-desc">📅 Today's Movers</option>
+          <option value="52w-asc">📉 52W Low (Most Upside)</option>
+          <option value="added">🕐 Recently Added</option>
+        </select>
         <button class="btn btn-g btn-sm" onclick="rankAllWatchlist()" title="AI-score all watchlist stocks and sort by opportunity (1-10)">🏆 AI Rank All</button>
         <button class="btn btn-red btn-sm" onclick="clearSection('watchlist')">🗑 Clear</button>
         <button class="btn btn-p" onclick="openSpotlight('watchlist')">+ Watch Stock</button>
@@ -1500,7 +1522,18 @@ textarea.fi{resize:vertical;min-height:70px;}
 
   <!-- ═══ REALISED P&L ═══════════════════════════════════════ -->
   <div class="sec" id="sec-realised">
-    <div class="sec-head"><div class="sec-title">Realised P&L</div><div style="display:flex;gap:8px"><button class="btn btn-g" onclick="go('import')">⬆ Import CSV</button><button class="btn btn-red btn-sm" onclick="clearSection('realised')">🗑 Clear</button><button class="btn btn-p" onclick="openM('addtrade')">+ Add Trade</button></div></div>
+    <div class="sec-head"><div class="sec-title">Realised P&L</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select class="fi" id="rl-sort" style="width:170px" onchange="renderRealised()" title="Sort trades">
+        <option value="date-desc">📅 Date (Newest First)</option>
+        <option value="date-asc">📅 Date (Oldest First)</option>
+        <option value="pl-desc">💰 P&amp;L ₹ (Best First)</option>
+        <option value="pl-asc">💰 P&amp;L ₹ (Worst First)</option>
+        <option value="plp-desc">💹 P&amp;L % (Best First)</option>
+        <option value="plp-asc">💹 P&amp;L % (Worst First)</option>
+        <option value="days-desc">⏳ Hold Days (Longest)</option>
+        <option value="sym-az">🔤 Symbol A → Z</option>
+      </select>
+      <button class="btn btn-g" onclick="go('import')">⬆ Import CSV</button><button class="btn btn-red btn-sm" onclick="clearSection('realised')">🗑 Clear</button><button class="btn btn-p" onclick="openM('addtrade')">+ Add Trade</button></div></div>
     <div class="sg sg-4 gap">
       <div class="sc c1"><div class="sc-lbl">Total Realised</div><div class="sc-val" id="rpl-tot">₹0</div><div class="sc-sub" id="rpl-ct">0 trades</div></div>
       <div class="sc c3"><div class="sc-lbl">Wins</div><div class="sc-val up" id="rpl-wins">0</div><div class="sc-sub" id="rpl-wr">Win rate 0%</div></div>
@@ -3356,6 +3389,13 @@ textarea.fi{resize:vertical;min-height:70px;}
           <option value="near-low">Near 52W Low (&lt;20%)</option>
           <option value="breakout">Breakout Zone (90-100%)</option>
           <option value="oversold">Deeply Oversold (&lt;10%)</option>
+        </select>
+        <select class="fi" id="w52-sort" onchange="render52Week()" style="width:160px" title="Sort">
+          <option value="pos-desc">📈 52W Position (Near High)</option>
+          <option value="pos-asc">📉 52W Position (Near Low)</option>
+          <option value="chg-desc">🔥 Day Chg% (Top Movers)</option>
+          <option value="chg-asc">🧊 Day Chg% (Biggest Drop)</option>
+          <option value="sym-az">🔤 Symbol A → Z</option>
         </select>
         <button class="btn btn-p btn-sm" onclick="render52Week()">↻ Refresh</button>
       </div>
@@ -12316,7 +12356,7 @@ function render52Week() {
     <th>Position</th><th>Status</th><th>Day Chg</th>
   </tr></thead><tbody>${filtered.map(s => {
     const barW = Math.max(2, Math.min(100, s.pos));
-    return `<tr>
+    return `<tr data-sym="${s.sym}" data-pos="${s.pos}" data-chg="${(s.chgP||0).toFixed(2)}">
       <td><span class="sym" onclick="openDetail('${s.sym}','${s.sym}.NS')" style="cursor:pointer">${s.sym}</span></td>
       <td style="font-size:12px;color:var(--t3);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name}</td>
       <td><span class="tag" style="font-size:10px;background:${s.src==='H'?'var(--s3)':'var(--s2)'}">${s.src==='H'?'Holding':'Watch'}</span></td>
@@ -18042,7 +18082,7 @@ function renderTaxHarvesting() {
     html += '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Stock</th><th>Avg Cost</th><th>LTP</th><th>Loss%</th><th>Loss ₹</th><th>Days Held</th><th>Type</th><th>Tax Saving</th><th>Recommendation</th></tr></thead><tbody>' +
       losses.map(r => {
         const rec = r.days < 365 && r.days > 330 ? '⚠ LTCG in '+(365-r.days)+'d — wait!' : r.lossP > 20 ? '⚡ Harvest — large loss' : r.taxSaving > 5000 ? '✓ Consider harvesting' : '→ Monitor';
-        return `<tr>
+        return `<tr data-sym="${r.h.symbol}" data-loss="${r.totalLoss.toFixed(0)}" data-saving="${r.taxSaving.toFixed(0)}" data-lossp="${r.lossP.toFixed(2)}" data-days="${r.days}">
           <td><div class="sym">${r.h.symbol}</div><div class="snm">${r.h.name}</div></td>
           <td class="mn">₹${f(r.h.avgPrice)}</td>
           <td class="mn">₹${f(r.h.ltp)}</td>
@@ -19162,7 +19202,7 @@ function renderLtcgCalendar() {
       else if (r.gain <= 0) { verdict = '↓ At loss'; vColor = 'var(--t4)'; }
       else { verdict = `${r.daysToLTCG}d remaining`; vColor = 'var(--t3)'; }
       const urgBar = !r.isLTCG && r.daysToLTCG > 0 ? `<div style="height:3px;background:var(--b2);border-radius:2px;margin-top:3px;overflow:hidden"><div style="height:3px;background:${r.daysToLTCG<=30?'var(--yel)':'var(--ac)'};width:${Math.min(100,Math.round((365-r.daysToLTCG)/365*100))}%"></div></div>` : '';
-      return `<tr style="${r.daysToLTCG <= 14 && !r.isLTCG && r.taxSaving > 200 ? 'background:rgba(251,191,36,.05)' : ''}">
+      return `<tr data-sym="${r.h.symbol}" data-days-ltcg="${r.daysToLTCG}" data-saving="${r.taxSaving.toFixed(0)}" data-gain="${r.gain.toFixed(0)}" data-held="${r.days}" style="${r.daysToLTCG <= 14 && !r.isLTCG && r.taxSaving > 200 ? 'background:rgba(251,191,36,.05)' : ''}">
         <td><div class="sym">${r.h.symbol}</div><div class="snm">${r.h.name}</div>${urgBar}</td>
         <td class="mn">${r.days}d</td>
         <td class="mn" style="color:${r.isLTCG?'var(--grn)':r.daysToLTCG<=30?'var(--yel)':'var(--t2)'};font-weight:700">${r.isLTCG ? '✅ LTCG' : r.daysToLTCG + 'd'}</td>
@@ -19605,6 +19645,327 @@ function _renderDailySparkline(snaps) {
     curEl.appendChild(thesisDiv);
   };
 })();
+
+// ═══════════════════════════════════════════════════════════════════
+// SORT CONTROLS — v3 — investor-grade sorting across all tabs
+// ═══════════════════════════════════════════════════════════════════
+
+// ── HOLDINGS SORT ────────────────────────────────────────────────────
+// Patches renderHoldings to sort rows before rendering, using #h-sort.
+// Sort options: default, sym-az, sym-za, plp-desc, plp-asc, pl-desc,
+//   cv-desc, chg-desc, xirr-desc, days-desc, days-asc, signal
+// ─────────────────────────────────────────────────────────────────────
+(function() {
+  const _origRH = window.renderHoldings;
+  if (typeof _origRH !== 'function') return;
+  const SIG_ORDER = { 'STRONG BUY': 0, 'BUY': 1, 'BUY MORE': 1, 'HOLD': 2, 'REDUCE': 3, 'SELL': 3, 'EXIT': 4 };
+
+  window.renderHoldings = function() {
+    // Inject sort into D.holdings temporarily via a wrapper
+    const sort = document.getElementById('h-sort')?.value || 'default';
+    if (sort !== 'default') {
+      const orig = [...D.holdings];
+      D.holdings = _sortHoldings([...D.holdings], sort, SIG_ORDER);
+      _origRH.apply(this, arguments);
+      D.holdings = orig;
+    } else {
+      _origRH.apply(this, arguments);
+    }
+    // Re-add sort indicator to header
+    _markHoldSortHeader(sort);
+  };
+})();
+
+function _sortHoldings(rows, sort, SIG_ORDER) {
+  return rows.sort((a, b) => {
+    const ltpA = a.ltp || a.avgPrice, ltpB = b.ltp || b.avgPrice;
+    const plpA = a.avgPrice ? (ltpA - a.avgPrice) / a.avgPrice * 100 : 0;
+    const plpB = b.avgPrice ? (ltpB - b.avgPrice) / b.avgPrice * 100 : 0;
+    switch (sort) {
+      case 'sym-az':   return (a.symbol||'').localeCompare(b.symbol||'');
+      case 'sym-za':   return (b.symbol||'').localeCompare(a.symbol||'');
+      case 'plp-desc': return plpB - plpA;
+      case 'plp-asc':  return plpA - plpB;
+      case 'pl-desc':  return ((ltpB - b.avgPrice) * b.qty) - ((ltpA - a.avgPrice) * a.qty);
+      case 'cv-desc':  return (ltpB * b.qty) - (ltpA * a.qty);
+      case 'chg-desc': return Math.abs(b.chgP || 0) - Math.abs(a.chgP || 0);
+      case 'xirr-desc': {
+        const xa = calcHoldingXIRR ? (calcHoldingXIRR(a) ?? -99) : plpA;
+        const xb = calcHoldingXIRR ? (calcHoldingXIRR(b) ?? -99) : plpB;
+        return xb - xa;
+      }
+      case 'days-desc': return (hDays(b.buyDate)||0) - (hDays(a.buyDate)||0);
+      case 'days-asc':  return (hDays(a.buyDate)||0) - (hDays(b.buyDate)||0);
+      case 'signal': {
+        const sa = SIG_ORDER[a.signal?.split(/[|,\/]/)[0]?.trim()] ?? 2;
+        const sb = SIG_ORDER[b.signal?.split(/[|,\/]/)[0]?.trim()] ?? 2;
+        return sa - sb;
+      }
+      default: return 0;
+    }
+  });
+}
+
+function _markHoldSortHeader(sort) {
+  // Add a subtle ↕ indicator next to the sort select label
+  const sel = document.getElementById('h-sort');
+  if (!sel) return;
+  sel.style.borderColor = sort !== 'default' ? 'var(--ac)' : '';
+}
+
+// ── WATCHLIST SORT ────────────────────────────────────────────────────
+// Patches renderWatchlist to sort by #wl-sort before splitting sections.
+// ─────────────────────────────────────────────────────────────────────
+(function() {
+  const _origWL = window.renderWatchlist;
+  if (typeof _origWL !== 'function') return;
+  window.renderWatchlist = function() {
+    const sort = document.getElementById('wl-sort')?.value || 'score';
+    // Store for the function to pick up via a global flag
+    window._wlSort = sort;
+    _origWL.apply(this, arguments);
+  };
+})();
+
+// Patch the sort inside renderWatchlist by overriding the sort expression
+// renderWatchlist already sorts by entryScore — we wrap the sorted array
+// by monkey-patching Array.prototype.sort temporarily is unsafe,
+// so instead we override the entire sort step via a post-render reorder.
+// Simpler: patch renderWatchlist fully with the sort-aware version.
+(function() {
+  const _origWL2 = window.renderWatchlist;
+  if (typeof _origWL2 !== 'function') return;
+  window.renderWatchlist = function() {
+    const sort = document.getElementById('wl-sort')?.value || 'score';
+    // Temporarily reorder D.watchlist for the render
+    const orig = [...D.watchlist];
+    D.watchlist = _sortWatchlist([...D.watchlist], sort);
+    _origWL2.apply(this, arguments);
+    D.watchlist = orig;
+    // Highlight sort select if non-default
+    const sel = document.getElementById('wl-sort');
+    if (sel) sel.style.borderColor = sort !== 'score' ? 'var(--ac)' : '';
+  };
+})();
+
+function _sortWatchlist(list, sort) {
+  return list.sort((a, b) => {
+    switch (sort) {
+      case 'sym-az':   return (a.symbol||'').localeCompare(b.symbol||'');
+      case 'sym-za':   return (b.symbol||'').localeCompare(a.symbol||'');
+      case 'chg-desc': return Math.abs(b.chgP||0) - Math.abs(a.chgP||0);
+      case '52w-asc': {
+        // 52W position: (ltp - l52) / (h52 - l52) — lower = more upside
+        const posA = (a.h52 && a.l52 && a.h52 > a.l52) ? (a.ltp - a.l52) / (a.h52 - a.l52) : 1;
+        const posB = (b.h52 && b.l52 && b.h52 > b.l52) ? (b.ltp - b.l52) / (b.h52 - b.l52) : 1;
+        return posA - posB;
+      }
+      case 'added':    return (b.id||0) - (a.id||0); // id is timestamp
+      case 'score':
+      default:
+        return (b.entryScore ?? -1) - (a.entryScore ?? -1);
+    }
+  });
+}
+
+// ── REALISED P&L SORT ────────────────────────────────────────────────
+// Patches renderRealised to sort by #rl-sort before rendering table.
+// ─────────────────────────────────────────────────────────────────────
+(function() {
+  const _origRL = window.renderRealised;
+  if (typeof _origRL !== 'function') return;
+  window.renderRealised = function() {
+    const sort = document.getElementById('rl-sort')?.value || 'date-desc';
+    const orig = [...D.realised];
+    D.realised = _sortRealised([...D.realised], sort);
+    _origRL.apply(this, arguments);
+    D.realised = orig;
+    const sel = document.getElementById('rl-sort');
+    if (sel) sel.style.borderColor = sort !== 'date-desc' ? 'var(--ac)' : '';
+  };
+})();
+
+function _sortRealised(list, sort) {
+  return list.sort((a, b) => {
+    switch (sort) {
+      case 'date-asc':  return (a.sellDate||'').localeCompare(b.sellDate||'');
+      case 'date-desc': return (b.sellDate||'').localeCompare(a.sellDate||'');
+      case 'pl-desc':   return (b.pl||0) - (a.pl||0);
+      case 'pl-asc':    return (a.pl||0) - (b.pl||0);
+      case 'plp-desc':  return (b.plPct||0) - (a.plPct||0);
+      case 'plp-asc':   return (a.plPct||0) - (b.plPct||0);
+      case 'days-desc': return (b.holdDays||0) - (a.holdDays||0);
+      case 'sym-az':    return (a.symbol||'').localeCompare(b.symbol||'');
+      default:          return (b.sellDate||'').localeCompare(a.sellDate||'');
+    }
+  });
+}
+
+// ── 52-WEEK SORT ──────────────────────────────────────────────────────
+// Patches render52Week to sort by #w52-sort before rendering rows.
+// ─────────────────────────────────────────────────────────────────────
+(function() {
+  const _orig52 = window.render52Week;
+  if (typeof _orig52 !== 'function') return;
+  window.render52Week = function() {
+    window._w52SortOverride = document.getElementById('w52-sort')?.value || 'pos-desc';
+    _orig52.apply(this, arguments);
+    const sel = document.getElementById('w52-sort');
+    if (sel) sel.style.borderColor = window._w52SortOverride !== 'pos-desc' ? 'var(--ac)' : '';
+  };
+})();
+
+// Hook into the render52Week row-sorting step by patching Array.prototype.sort
+// is risky; instead we post-process the rendered table rows.
+// The cleanest approach: patch the sort of the items array inside render52Week.
+// Since we can't easily intercept mid-function, we post-process after render.
+(function() {
+  const _orig52b = window.render52Week;
+  if (typeof _orig52b !== 'function') return;
+  window.render52Week = function() {
+    _orig52b.apply(this, arguments);
+    const sort = window._w52SortOverride || 'pos-asc';
+    if (sort === 'pos-desc') return; // default, already sorted by render52Week (b.pos - a.pos)
+    // Re-sort the rendered table rows
+    const tbody = document.querySelector('#sec-52week tbody');
+    if (!tbody) return;
+    const rows = [...tbody.querySelectorAll('tr[data-pos]')];
+    if (!rows.length) return;
+    rows.sort((a, b) => {
+      const posA = parseFloat(a.dataset.pos) || 50;
+      const posB = parseFloat(b.dataset.pos) || 50;
+      const chgA = parseFloat(a.dataset.chg) || 0;
+      const chgB = parseFloat(b.dataset.chg) || 0;
+      const symA = a.dataset.sym || '';
+      const symB = b.dataset.sym || '';
+      switch (sort) {
+        case 'pos-desc': return posB - posA;
+        case 'chg-desc': return chgB - chgA;
+        case 'chg-asc':  return chgA - chgB;
+        case 'sym-az':   return symA.localeCompare(symB);
+        default:         return posA - posB;
+      }
+    });
+    rows.forEach(r => tbody.appendChild(r));
+  };
+})();
+
+// ── LTCG CALENDAR SORT ───────────────────────────────────────────────
+// renderLtcgCalendar was added in Feature Pack v2.
+// We patch it to add a sort dropdown and respect #ltcg-sort.
+// ─────────────────────────────────────────────────────────────────────
+(function() {
+  const _origLC = window.renderLtcgCalendar;
+  if (typeof _origLC !== 'function') return;
+  window.renderLtcgCalendar = function() {
+    _origLC.apply(this, arguments);
+    // Inject sort control above the table
+    const el = document.getElementById('tax-ltcg-cal-content');
+    if (!el) return;
+    // Add sort row if not present
+    if (el.querySelector('#ltcg-sort')) { _applyLtcgSort(); return; }
+    const sortRow = document.createElement('div');
+    sortRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap';
+    sortRow.innerHTML = `<label style="font-size:11px;color:var(--t4);white-space:nowrap">Sort by:</label>
+      <select class="fi" id="ltcg-sort" style="width:200px" onchange="_applyLtcgSort()">
+        <option value="days-asc">⏳ Days to LTCG (Soonest First)</option>
+        <option value="saving-desc">💰 Tax Saving (Highest First)</option>
+        <option value="gain-desc">💹 Gain at LTP (Highest First)</option>
+        <option value="days-held-desc">📅 Days Held (Longest First)</option>
+        <option value="sym-az">🔤 Symbol A → Z</option>
+      </select>`;
+    // Insert before the first table/warning
+    const firstTable = el.querySelector('div[style*="overflow-x"]') || el.querySelector('table');
+    if (firstTable) el.insertBefore(sortRow, firstTable.closest ? (firstTable.closest('div[style*="overflow-x"]') || firstTable) : firstTable);
+    else el.prepend(sortRow);
+  };
+})();
+
+function _applyLtcgSort() {
+  const sort = document.getElementById('ltcg-sort')?.value || 'days-asc';
+  const tbody = document.querySelector('#tax-ltcg-cal-content table tbody');
+  if (!tbody) return;
+  const rows = [...tbody.querySelectorAll('tr[data-sym]')];
+  if (!rows.length) return;
+  rows.sort((a, b) => {
+    const daysA = parseInt(a.dataset.daysLtcg) || 9999;
+    const daysB = parseInt(b.dataset.daysLtcg) || 9999;
+    const savA  = parseFloat(a.dataset.saving) || 0;
+    const savB  = parseFloat(b.dataset.saving) || 0;
+    const gainA = parseFloat(a.dataset.gain) || 0;
+    const gainB = parseFloat(b.dataset.gain) || 0;
+    const heldA = parseInt(a.dataset.held) || 0;
+    const heldB = parseInt(b.dataset.held) || 0;
+    const symA  = a.dataset.sym || '';
+    const symB  = b.dataset.sym || '';
+    switch (sort) {
+      case 'saving-desc':   return savB - savA;
+      case 'gain-desc':     return gainB - gainA;
+      case 'days-held-desc':return heldB - heldA;
+      case 'sym-az':        return symA.localeCompare(symB);
+      default:              return daysA - daysB;
+    }
+  });
+  rows.forEach(r => tbody.appendChild(r));
+  const sel = document.getElementById('ltcg-sort');
+  if (sel) sel.style.borderColor = sort !== 'days-asc' ? 'var(--ac)' : '';
+}
+
+// ── TAX HARVESTING SORT ───────────────────────────────────────────────
+// Patches renderTaxHarvesting to add a sort dropdown and sort the loss rows.
+// ─────────────────────────────────────────────────────────────────────
+(function() {
+  const _origTH = window.renderTaxHarvesting;
+  if (typeof _origTH !== 'function') return;
+  window.renderTaxHarvesting = function() {
+    _origTH.apply(this, arguments);
+    const el = document.getElementById('tax-harvest-content');
+    if (!el || el.querySelector('#th-sort')) { _applyHarvestSort(); return; }
+    const sortRow = document.createElement('div');
+    sortRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap';
+    sortRow.innerHTML = `<label style="font-size:11px;color:var(--t4);white-space:nowrap">Sort by:</label>
+      <select class="fi" id="th-sort" style="width:200px" onchange="_applyHarvestSort()">
+        <option value="loss-desc">💸 Total Loss ₹ (Largest First)</option>
+        <option value="saving-desc">💰 Tax Saving (Highest First)</option>
+        <option value="lossp-desc">📉 Loss % (Worst First)</option>
+        <option value="days-desc">📅 Days Held (Longest First)</option>
+        <option value="sym-az">🔤 Symbol A → Z</option>
+      </select>`;
+    const table = el.querySelector('table');
+    if (table) el.insertBefore(sortRow, table.closest('div[style*="overflow-x"]') || table);
+    else el.appendChild(sortRow);
+  };
+})();
+
+function _applyHarvestSort() {
+  const sort = document.getElementById('th-sort')?.value || 'loss-desc';
+  const tbody = document.querySelector('#tax-harvest-content table tbody');
+  if (!tbody) return;
+  const rows = [...tbody.querySelectorAll('tr[data-sym]')];
+  if (!rows.length) return;
+  rows.sort((a, b) => {
+    const lossA  = parseFloat(a.dataset.loss) || 0;
+    const lossB  = parseFloat(b.dataset.loss) || 0;
+    const savA   = parseFloat(a.dataset.saving) || 0;
+    const savB   = parseFloat(b.dataset.saving) || 0;
+    const losspA = parseFloat(a.dataset.lossp) || 0;
+    const losspB = parseFloat(b.dataset.lossp) || 0;
+    const daysA  = parseInt(a.dataset.days) || 0;
+    const daysB  = parseInt(b.dataset.days) || 0;
+    const symA   = a.dataset.sym || '';
+    const symB   = b.dataset.sym || '';
+    switch (sort) {
+      case 'saving-desc': return savB - savA;
+      case 'lossp-desc':  return losspB - losspA;
+      case 'days-desc':   return daysB - daysA;
+      case 'sym-az':      return symA.localeCompare(symB);
+      default:            return lossB - lossA;
+    }
+  });
+  rows.forEach(r => tbody.appendChild(r));
+  const sel = document.getElementById('th-sort');
+  if (sel) sel.style.borderColor = sort !== 'loss-desc' ? 'var(--ac)' : '';
+}
 
 </script>
 
