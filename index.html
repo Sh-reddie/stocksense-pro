@@ -1335,6 +1335,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         </select>
         <button class="btn btn-g" onclick="refreshAll()">↻ Refresh</button>
         <button class="btn btn-g btn-sm" id="sent-run-all-btn" onclick="runSentimentAll()" title="AI-score news sentiment for all holdings">🗞 Sentiment</button>
+        <button class="btn btn-yel btn-sm" id="reanalyse-stale-btn" onclick="reanalyseStale()" title="Re-analyse holdings whose AI signal is >7 days old">🔄 Refresh Stale</button>
         <button class="btn btn-g" onclick="go('import')">⬆ Import CSV</button>
         <button class="btn btn-red btn-sm" onclick="clearSection('holdings')">🗑 Clear</button>
         <button class="btn btn-p" onclick="openSpotlight('holdings')">+ Add Stock</button>
@@ -6018,6 +6019,48 @@ async function refreshAllFallback() {
   toast(updated > 0 ? `✓ Fallback: ${updated} prices updated` : '⚠ All proxies failed. Check network.', updated > 0 ? 'ok' : 'error');
 }
 
+// Retry price fetch for a single stale holding, swapping exchange if primary fails
+async function retryStalePrice(hid) {
+  const h = D.holdings.find(x => x.id == hid);
+  if (!h) return;
+  const origExch = h.exchange || 'NSE';
+  const altExch  = origExch === 'NSE' ? 'BSE' : 'NSE';
+  // Show spinner in the row
+  const row = document.querySelector(`tr[data-hid="${hid}"]`);
+  if (row) row.style.opacity = '0.5';
+  toast(`↻ Retrying price for ${h.symbol}…`);
+
+  // Try: cached mapped sym → primary exchange → alt exchange → search → AI lookup
+  const attempts = [
+    ..._yfCandidates(h.symbol, origExch),
+    ..._yfCandidates(h.symbol, altExch),
+  ];
+  let got = null;
+  for (const sym of attempts) {
+    const r = await fetchPriceRace(_yfBaseSymbol(sym), origExch).catch(() => null);
+    if (r?.ltp > 0) { got = r; break; }
+  }
+  if (!got) {
+    // Auto-discover: search YF for the symbol
+    const disc = await _searchYFSymbol(h.symbol, origExch).catch(() => null)
+               || await _searchYFSymbol(h.symbol, altExch).catch(() => null);
+    if (disc) {
+      const r = await fetchPriceRace(_yfBaseSymbol(disc), origExch).catch(() => null);
+      if (r?.ltp > 0) { _symMapSave(h.symbol, disc); got = r; }
+    }
+  }
+  if (got?.ltp > 0) {
+    h.ltp = got.ltp; h.chg = got.chg || 0; h.chgP = got.chgP || 0;
+    if (got.h52) h.h52 = got.h52; if (got.l52) h.l52 = got.l52;
+    h.ltpStale = false; h.ltpUpdatedAt = new Date().toISOString();
+    save('holdings'); renderHoldings();
+    toast(`✅ ${h.symbol} → ₹${f(got.ltp)}`, 'ok');
+  } else {
+    if (row) row.style.opacity = '';
+    toast(`⚠ ${h.symbol}: all price sources failed. Try refreshing later.`, 'error');
+  }
+}
+
 // ═══════════════════════════════════════════════════
 // INDICES  (uses batch quote API — 1 call for all 7)
 // ═══════════════════════════════════════════════════
@@ -6602,13 +6645,32 @@ function renderHoldings() {
         case 'stock':return`<td onclick="openDetail(${h.id})" style="cursor:pointer"><div class="sym">${h.symbol}</div><div class="snm">${h.name}</div></td>`;
         case 'qty':return`<td class="mn">${h.qty}</td>`;
         case 'avg':return`<td class="mn">₹${f(h.avgPrice)}</td>`;
-        case 'ltp':{const staleInd=h.ltpStale?` <span title="Live price unavailable — showing avg buy price. Click ↻ to retry." style="color:var(--yel);font-size:10px;cursor:help">⚠</span>`:'';const _sm=!h.ltpStale&&h.ltpUpdatedAt?Math.round((Date.now()-new Date(h.ltpUpdatedAt).getTime())/60000):null;const ageStr=_sm!==null&&_sm>5?`<div style="font-size:9px;color:var(--t4);line-height:1.2;margin-top:1px">${_sm<60?_sm+'m':Math.round(_sm/60)+'h'} ago</div>`:'';return`<td class="mn">₹${f(ltp)}${staleInd}${ageStr}</td>`; }
+        case 'ltp':{
+          const staleInd = h.ltpStale
+            ? ` <span title="Live price unavailable — click ↻ to retry with alternate exchange" style="color:var(--yel);font-size:10px;cursor:pointer" onclick="event.stopPropagation();retryStalePrice(${h.id})">↻</span>`
+            : '';
+          const _sm = !h.ltpStale && h.ltpUpdatedAt ? Math.round((Date.now()-new Date(h.ltpUpdatedAt).getTime())/60000) : null;
+          const ageStr = _sm !== null && _sm > 5
+            ? `<div style="font-size:9px;color:var(--t4);line-height:1.2;margin-top:1px">${_sm<60?_sm+'m':Math.round(_sm/60)+'h'} ago</div>`
+            : '';
+          return`<td class="mn">₹${f(ltp)}${staleInd}${ageStr}</td>`;
+        }
         case 'cv':return`<td class="mn" style="font-weight:600">₹${fI(cv)}</td>`;
         case 'chg':return`<td class="mn ${cls(h.chgP||0)}">${fP(h.chgP||0)}</td>`;
         case 'pl':return`<td class="mn ${cls(pl)}">${pl>=0?'+':''}₹${fI(Math.abs(pl))}</td>`;
         case 'plp':return`<td class="mn ${cls(plp)}">${fP(plp)}</td>`;
         case 'xirr':{const xr=calcHoldingXIRR(h);return`<td class="mn" style="color:${xr!==null&&xr>=0?'var(--grn)':xr!==null?'var(--red)':'var(--t4)'};font-family:var(--mono)">${xr!==null&&isFinite(xr)?(xr>=0?'+':'')+f(xr*100,1)+'%':'—'}</td>`;}
-        case 'sig':return`<td>${tagSig(h.signal)}</td>`;
+        case 'sig':{
+          const staleDays = h.lastAnalysed ? Math.floor((Date.now()-new Date(h.lastAnalysed))/(864e5)) : null;
+          const staleChip = staleDays === null
+            ? `<div style="font-size:9px;color:var(--t4);margin-top:3px;cursor:pointer" onclick="event.stopPropagation();openDetail(${h.id});sdTab('ai',document.getElementById('sdt-ai'))">No AI yet</div>`
+            : staleDays > 14
+              ? `<div style="font-size:9px;color:var(--red);margin-top:3px;cursor:pointer" title="Re-analyse now" onclick="event.stopPropagation();openDetail(${h.id});sdTab('ai',document.getElementById('sdt-ai'));_sdRunAI(${h.id})">⚠ ${staleDays}d old</div>`
+              : staleDays > 7
+                ? `<div style="font-size:9px;color:var(--yel);margin-top:3px">${staleDays}d old</div>`
+                : `<div style="font-size:9px;color:var(--t4);margin-top:3px">${staleDays}d old</div>`;
+          return`<td>${tagSig(h.signal)}${staleChip}</td>`;
+        }
         case 'rsi':return`<td class="mn ${rsic}">${rsi}</td>`;
         case '52h': {
           const pct52=h.h52&&h.l52&&h.h52>h.l52?((ltp-h.l52)/(h.h52-h.l52)*100):null;
@@ -7249,6 +7311,32 @@ function psSearch(q) {
 
 
 
+// Re-analyse only holdings whose signal is stale (>7 days) or never analysed
+async function reanalyseStale() {
+  const STALE_DAYS = 7;
+  const stale = D.holdings.filter(h => {
+    if (!h.lastAnalysed) return true;
+    return Math.floor((Date.now() - new Date(h.lastAnalysed)) / 864e5) > STALE_DAYS;
+  });
+  if (!stale.length) { toast('✅ All signals are fresh (≤7 days old)', 'ok'); return; }
+  const btn = document.getElementById('reanalyse-stale-btn');
+  if (btn) { btn.disabled = true; btn.textContent = `⏳ Analysing ${stale.length} stale…`; }
+  toast(`🔄 Re-analysing ${stale.length} holding${stale.length>1?'s':''} with signals >7d old…`);
+  const BATCH = 3, DELAY = 4000;
+  const ctx = D._marketCtx || await getMarketContext();
+  D._marketCtx = ctx;
+  for (let i = 0; i < stale.length; i += BATCH) {
+    window._claudeJSONFastFailed = false;
+    await Promise.all(stale.slice(i, i + BATCH).map(h => analyseHolding(h, ctx)));
+    if (i + BATCH < stale.length) await new Promise(r => setTimeout(r, DELAY));
+  }
+  save('holdings');
+  renderHoldings();
+  renderActionCardsV4();
+  if (btn) { btn.disabled = false; btn.textContent = '🔄 Refresh Stale'; }
+  toast(`✅ Re-analysed ${stale.length} holding${stale.length>1?'s':''}`, 'ok');
+}
+
 async function runAllAI() {
   if(!D.holdings.length && !D.watchlist.length){toast('Add holdings or watchlist stocks first','error');return;}
   // Pre-flight: API key check
@@ -7705,22 +7793,79 @@ function renderActionCardsV4() {
     const urg=h.urgency||'STABLE',urgIcon=urg==='ACT TODAY'?'🔴':urg==='WATCH'?'🟡':'🟢';
     const cardCls=urg==='ACT TODAY'?'urgent':urg==='WATCH'?'watch':'opp';
     const sig=h.signal||'HOLD';let sigCls='t-hold';if(sig.includes('BUY'))sigCls='t-buy';if(sig==='REDUCE'||sig==='EXIT')sigCls='t-sell';
+    const staleDays = h.lastAnalysed ? Math.floor((Date.now()-new Date(h.lastAnalysed))/864e5) : null;
+    const staleWarn = staleDays !== null && staleDays > 7 ? `<span style="font-size:10px;color:${staleDays>14?'var(--red)':'var(--yel)'};margin-left:6px">⚠ ${staleDays}d old</span>` : '';
     return `<div class="ac-card ${cardCls}">
       <div class="ac-head">
-        <div style="display:flex;align-items:center;gap:10px">${urgIcon}<div><span class="sym">${h.symbol}</span><span style="font-size:11px;color:var(--t3);margin-left:8px">${h.name}</span><span class="tag ${sigCls}" style="margin-left:8px">${sig}</span></div></div>
+        <div style="display:flex;align-items:center;gap:10px">${urgIcon}<div><span class="sym">${h.symbol}</span><span style="font-size:11px;color:var(--t3);margin-left:8px">${h.name}</span><span class="tag ${sigCls}" style="margin-left:8px">${sig}</span>${staleWarn}</div></div>
         <div style="text-align:right;font-family:var(--mono);font-size:12px"><div>₹${f(ltp)}</div><div class="${cls(plp)}">${fP(plp)} · ${days}d · <span class="tag ${days>=365?'t-ltcg':'t-stcg'}">${days>=365?'LTCG':'STCG'}</span></div></div>
       </div>
       ${h.aiAction?`<div class="ac-reason"><strong style="color:var(--t1)">Action:</strong> ${h.aiAction}</div>`:''}
       ${h.aiReasoning?`<div class="ac-reason" style="margin-top:4px">${h.aiReasoning}</div>`:''}
       ${(h.bullCase||h.bearCase)?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;margin-bottom:10px">${h.bullCase?`<div style="background:rgba(45,211,111,.06);border:1px solid rgba(45,211,111,.15);border-radius:6px;padding:8px"><span style="color:var(--grn);font-weight:600">🐂</span> ${h.bullCase}</div>`:''}${h.bearCase?`<div style="background:rgba(240,82,82,.06);border:1px solid rgba(240,82,82,.15);border-radius:6px;padding:8px"><span style="color:var(--red);font-weight:600">🐻</span> ${h.bearCase}</div>`:''}</div>`:''}
+      <!-- Inline analysis panel (hidden until expanded) -->
+      <div id="ac-inline-${h.id}" style="display:none;margin-bottom:10px;padding:12px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;font-size:12px"></div>
       <div class="ac-btns">
-        <button class="btn btn-g btn-sm" onclick="go('analysis');setTimeout(()=>{document.getElementById('ai-sel').value='${h.id}';loadStockAnalysis()},100)">🔍 Deep Analysis</button>
-        <button class="btn btn-g btn-sm" onclick="go('plan')">📋 Exit Planner</button>
-        ${urg==='ACT TODAY'&&(sig==='EXIT'||sig==='REDUCE')?`<button class="btn btn-red btn-sm" onclick="if(confirm('Exit ${h.symbol}?'))rmHolding(${h.id})">⚡ Exit Now</button>`:''}
-        ${sig.includes('BUY')?`<button class="btn btn-grn btn-sm" onclick="startWlBuy && document.getElementById('wlf-qty-${h.id}')">+ Add More</button>`:''}
+        <button class="btn btn-p btn-sm" id="ac-analyse-btn-${h.id}" onclick="_acInlineAnalyse(${h.id})" title="Run AI analysis inline without leaving this page">🤖 ${h.aiAction?'Re-analyse':'Analyse'}</button>
+        <button class="btn btn-g btn-sm" onclick="openDetail(${h.id});sdTab('ai',document.getElementById('sdt-ai'))">📋 Full Detail</button>
+        ${urg==='ACT TODAY'&&(sig==='EXIT'||sig==='REDUCE')?`<button class="btn btn-red btn-sm" onclick="openSellModal(${h.id})">💰 Sell</button>`:''}
+        ${sig.includes('BUY')?`<button class="btn btn-grn btn-sm" onclick="openDetail(${h.id})">+ Add More</button>`:''}
       </div>
     </div>`;
   }).join('');
+}
+
+// Inline AI analysis in Action Cards — runs without navigating away
+async function _acInlineAnalyse(hid) {
+  const h = D.holdings.find(x => x.id == hid);
+  if (!h) return;
+  const panel = document.getElementById(`ac-inline-${hid}`);
+  const btn   = document.getElementById(`ac-analyse-btn-${hid}`);
+  if (!panel) return;
+
+  // Toggle: if already showing analysis, collapse it
+  if (panel.style.display !== 'none' && panel.dataset.loaded === 'true') {
+    panel.style.display = 'none';
+    panel.dataset.loaded = '';
+    if (btn) btn.textContent = h.aiAction ? '🤖 Re-analyse' : '🤖 Analyse';
+    return;
+  }
+
+  // Show loading state
+  panel.style.display = 'block';
+  panel.dataset.loaded = '';
+  panel.innerHTML = '<div style="display:flex;align-items:center;gap:8px;color:var(--t4)"><div class="spin" style="width:14px;height:14px;border-width:2px"></div> Analysing ' + h.symbol + '…</div>';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Analysing…'; }
+
+  try {
+    const ctx = D._marketCtx || await getMarketContext();
+    D._marketCtx = ctx;
+    await analyseHolding(h, ctx);
+    save('holdings');
+
+    // Render compact inline result
+    const ltp = h.ltp || h.avgPrice;
+    const isBuy = h.signal?.includes('BUY'), isHold = h.signal === 'HOLD';
+    const sigCol = isBuy ? 'var(--grn)' : isHold ? 'var(--yel)' : 'var(--red)';
+    panel.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:14px;font-weight:800;color:${sigCol}">${h.signal||'HOLD'}</span>
+        <span style="font-size:10px;color:var(--t4)">Conf ${h.confidence||'—'}/10 · ${new Date(h.lastAnalysed).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
+      </div>
+      ${h.aiAction ? `<div style="font-size:12px;color:var(--t1);font-weight:600;margin-bottom:6px">${h.aiAction}</div>` : ''}
+      ${h.aiReasoning ? `<div style="font-size:11px;color:var(--t3);margin-bottom:8px;line-height:1.5">${h.aiReasoning}</div>` : ''}
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:10px;text-align:center">
+        ${h.stopLoss ? `<div style="background:rgba(239,68,68,.07);border-radius:6px;padding:5px"><div style="color:var(--t4)">SL</div><div style="color:var(--red);font-weight:700">₹${f(h.stopLoss)}</div></div>` : ''}
+        ${h.target1  ? `<div style="background:rgba(34,197,94,.07);border-radius:6px;padding:5px"><div style="color:var(--t4)">T1</div><div style="color:var(--grn);font-weight:700">₹${f(h.target1)}</div></div>` : ''}
+        ${h.target2  ? `<div style="background:rgba(79,142,247,.07);border-radius:6px;padding:5px"><div style="color:var(--t4)">T2</div><div style="color:var(--cyn);font-weight:700">₹${f(h.target2)}</div></div>` : ''}
+      </div>`;
+    panel.dataset.loaded = 'true';
+    if (btn) { btn.disabled = false; btn.textContent = '▲ Collapse'; }
+    renderActionCardsV4(); // refresh card to show updated signal/stale badge
+  } catch(e) {
+    panel.innerHTML = `<div style="color:var(--red);font-size:11px">⚠ Analysis failed: ${e.message}</div>`;
+    if (btn) { btn.disabled = false; btn.textContent = '🤖 Retry'; }
+  }
 }
 
 function renderDashActionsV4() {
@@ -18123,13 +18268,22 @@ function renderTaxHarvesting() {
       <button class="btn btn-p" onclick="aiHarvestStrategy()">🤖 Get Harvesting Strategy</button>
     </div>`;
 
+  // Build profit side for pairing
+  const gains = D.holdings.filter(h => h.ltp && h.ltp > h.avgPrice).map(h => {
+    const days = hDays(h.buyDate) || 0;
+    const gainAmt = (h.ltp - h.avgPrice) * h.qty;
+    const taxRate = days >= 365 ? 0.125 : 0.20;
+    const estTax  = gainAmt * taxRate;
+    return { h, days, gainAmt, estTax, taxType: days >= 365 ? 'LTCG' : 'STCG' };
+  }).sort((a,b) => b.estTax - a.estTax);
+
   if (!losses.length) {
     html += '<div style="text-align:center;padding:40px;color:var(--t4)">No holdings currently at a loss. Great portfolio performance!</div>';
   } else {
-    html += '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Stock</th><th>Avg Cost</th><th>LTP</th><th>Loss%</th><th>Loss ₹</th><th>Days Held</th><th>Type</th><th>Tax Saving</th><th>Recommendation</th></tr></thead><tbody>' +
+    html += '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Stock</th><th>Avg Cost</th><th>LTP</th><th>Loss%</th><th>Loss ₹</th><th>Days Held</th><th>Type</th><th>Tax Saving</th><th>Action</th></tr></thead><tbody>' +
       losses.map(r => {
-        const rec = r.days < 365 && r.days > 330 ? '⚠ LTCG in '+(365-r.days)+'d — wait!' : r.lossP > 20 ? '⚡ Harvest — large loss' : r.taxSaving > 5000 ? '✓ Consider harvesting' : '→ Monitor';
-        return `<tr data-sym="${r.h.symbol}" data-loss="${r.totalLoss.toFixed(0)}" data-saving="${r.taxSaving.toFixed(0)}" data-lossp="${r.lossP.toFixed(2)}" data-days="${r.days}">
+        const rec = r.days < 365 && r.days > 330 ? '⚠ LTCG in '+(365-r.days)+'d — wait!' : r.lossP > 20 ? '⚡ Harvest now' : r.taxSaving > 5000 ? '✓ Consider' : '→ Monitor';
+        return `<tr>
           <td><div class="sym">${r.h.symbol}</div><div class="snm">${r.h.name}</div></td>
           <td class="mn">₹${f(r.h.avgPrice)}</td>
           <td class="mn">₹${f(r.h.ltp)}</td>
@@ -18138,10 +18292,64 @@ function renderTaxHarvesting() {
           <td class="mn">${r.days}d</td>
           <td><span class="tag ${r.isLTCG?'t-ltcg':'t-stcg'}">${r.isLTCG?'LTCG':'STCG'}</span></td>
           <td class="mn up">₹${fI(r.taxSaving)}</td>
-          <td style="font-size:11px">${rec}</td>
+          <td><button class="btn btn-yel btn-xs" onclick="openSellModal(${r.h.id})" title="Harvest this loss">🌾 Harvest</button></td>
         </tr>`;
       }).join('') +
       '</tbody></table></div>';
+
+    // ── Profit / Loss Pairing Section ──────────────────────────────────
+    if (gains.length) {
+      html += `
+        <div class="pn gap" style="margin-top:16px">
+          <div class="pn-h"><div class="pn-t">🔗 Harvest Pairs — Offset Gains with Losses</div></div>
+          <div class="pn-b">
+            <div style="font-size:11px;color:var(--t4);margin-bottom:12px">
+              Sell a loss stock to offset gains from a profit stock — reduces your net STCG/LTCG tax bill.
+              Match by tax type for maximum benefit (STCG loss offsets STCG gain; LTCG loss offsets LTCG gain).
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px">`;
+
+      // Pair each loss with the best same-type gain to offset it
+      losses.slice(0, 5).forEach(loss => {
+        const sameTax = gains.filter(g => g.taxType === loss.h.taxType).sort((a,b) => b.estTax - a.estTax)[0]
+                     || gains[0]; // cross-type fallback
+        if (!sameTax) return;
+        const netSaving = Math.min(loss.totalLoss * (loss.isLTCG ? 0.125 : 0.20), sameTax.estTax);
+        const typeBadge = loss.h.taxType === sameTax.taxType
+          ? `<span class="tag t-ltcg" style="font-size:9px">Same type ✓</span>`
+          : `<span class="tag t-stcg" style="font-size:9px">Cross type</span>`;
+        html += `
+          <div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:12px">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <!-- Loss side -->
+              <div style="flex:1;min-width:120px">
+                <div style="font-size:9px;color:var(--t4);text-transform:uppercase;margin-bottom:3px">Sell (Harvest Loss)</div>
+                <div style="font-weight:700;color:var(--t1)">${loss.h.symbol}</div>
+                <div style="font-size:11px;color:var(--red)">Loss ₹${fI(loss.totalLoss)} (${fP(-loss.lossP)})</div>
+                <div style="font-size:10px;color:var(--t4)">${loss.days}d · <span class="tag ${loss.isLTCG?'t-ltcg':'t-stcg'}" style="font-size:9px">${loss.h.taxType}</span></div>
+              </div>
+              <div style="font-size:18px;color:var(--t4)">⟷</div>
+              <!-- Gain side -->
+              <div style="flex:1;min-width:120px">
+                <div style="font-size:9px;color:var(--t4);text-transform:uppercase;margin-bottom:3px">Offset Against Gain</div>
+                <div style="font-weight:700;color:var(--t1)">${sameTax.h.symbol}</div>
+                <div style="font-size:11px;color:var(--grn)">Gain ₹${fI(sameTax.gainAmt)}</div>
+                <div style="font-size:10px;color:var(--t4)">${sameTax.days}d · <span class="tag ${sameTax.taxType==='LTCG'?'t-ltcg':'t-stcg'}" style="font-size:9px">${sameTax.taxType}</span> · Tax ₹${fI(sameTax.estTax)}</div>
+              </div>
+              <!-- Saving + actions -->
+              <div style="min-width:130px;text-align:right">
+                ${typeBadge}
+                <div style="font-size:13px;font-weight:800;color:var(--grn);margin-top:4px">Save ≈ ₹${fI(netSaving)}</div>
+                <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap">
+                  <button class="btn btn-yel btn-xs" onclick="openSellModal(${loss.h.id})" title="Sell ${loss.h.symbol} to harvest loss">🌾 Harvest ${loss.h.symbol}</button>
+                </div>
+              </div>
+            </div>
+          </div>`;
+      });
+
+      html += '</div></div></div>';
+    }
   }
 
   html += '<div class="pn gap" style="margin-top:16px"><div class="pn-h"><div class="pn-t">🤖 AI Harvesting Strategy</div></div><div class="pn-b"><div class="ai-box"><div class="ai-txt" id="harvest-ai-txt" style="color:var(--t4)">Click "Get Harvesting Strategy" for personalised advice.</div></div></div></div>';
@@ -20224,17 +20432,24 @@ function _checkConcentration() {
   if (!el) return;
   const total = D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
   if (!total) { el.style.display='none'; return; }
-  const concentrated = D.holdings.filter(h=>(h.qty*(h.ltp||h.avgPrice)/total*100)>=10)
-    .map(h=>({sym:h.symbol, pct:(h.qty*(h.ltp||h.avgPrice)/total*100).toFixed(1)}))
-    .sort((a,b)=>b.pct-a.pct);
+  const concentrated = D.holdings
+    .filter(h => (h.qty*(h.ltp||h.avgPrice)/total*100) >= 10)
+    .map(h => ({ h, pct: (h.qty*(h.ltp||h.avgPrice)/total*100) }))
+    .sort((a,b) => b.pct - a.pct);
   if (!concentrated.length) { el.style.display='none'; return; }
-  el.style.display='block';
-  el.innerHTML = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-    <span style="font-size:13px">⚠️</span>
-    <span style="font-size:12px;font-weight:700;color:var(--yel)">Concentration Risk:</span>
-    ${concentrated.map(s=>`<span style="font-size:12px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:2px 8px;color:var(--yel)">${s.sym} ${s.pct}%</span>`).join('')}
-    <span style="font-size:11px;color:var(--t4)">— stocks ≥10% of portfolio. Diversification recommended.</span>
-  </div>`;
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:13px">⚠️</span>
+      <span style="font-size:12px;font-weight:700;color:var(--yel)">Concentration Risk:</span>
+      ${concentrated.map(({h, pct}) => `
+        <span style="display:inline-flex;align-items:center;gap:6px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:2px 8px">
+          <span style="font-size:12px;color:var(--yel);font-weight:700">${h.symbol} ${pct.toFixed(1)}%</span>
+          <button class="btn btn-yel btn-xs" style="padding:1px 7px;font-size:10px" onclick="openSellModal(${h.id})" title="Reduce ${h.symbol} position">Reduce →</button>
+          <button class="btn btn-g btn-xs" style="padding:1px 7px;font-size:10px" onclick="go('plan')" title="View exit strategy">Exit Plan</button>
+        </span>`).join('')}
+      <span style="font-size:11px;color:var(--t4)">Stocks ≥10% of portfolio · ideal max 20–25% per position</span>
+    </div>`;
 }
 
 // ── TRADE JOURNAL SORT ────────────────────────────────────────────
