@@ -1403,7 +1403,7 @@ textarea.fi{resize:vertical;min-height:70px;}
           <button class="btn btn-xs" id="mom-1m" onclick="setMomTf('1m')" style="background:transparent;color:var(--t3)">1M</button>
           <button class="btn btn-xs" id="mom-3m" onclick="setMomTf('3m')" style="background:transparent;color:var(--t3)">3M</button>
         </div>
-        <select class="fi" id="mom-sort" style="width:160px" onchange="calcMomentum()" title="Sort">
+        <select class="fi" id="mom-sort" style="width:160px" onchange="_applyMomSort()" title="Sort">
           <option value="score-desc">🔥 Momentum Score</option>
           <option value="chg-desc">📅 Day Chg% (Best)</option>
           <option value="chg-asc">📅 Day Chg% (Worst)</option>
@@ -20237,40 +20237,41 @@ function _sortJournal(trades, sort) {
 }
 
 // ── MOMENTUM BOARD SORT ───────────────────────────────────────────
-(function() {
-  const _origCM = window.calcMomentumV4;
-  if (typeof _origCM !== 'function') return;
-  window.calcMomentumV4 = function() {
-    _origCM.apply(this, arguments);
-    const sort = document.getElementById('mom-sort')?.value || 'score-desc';
-    if (sort === 'score-desc') return; // default already applied
-    const tbody = document.getElementById('mom-tbody');
-    if (!tbody) return;
-    const rows = [...tbody.querySelectorAll('tr[style*="border-left"]')];
-    if (!rows.length) return;
-    // Parse data from cells (rank=0, sym=1, ltp=2, chg=3, plp=4)
-    rows.sort((a, b) => {
-      const cells = (r) => r.querySelectorAll('td');
-      const getCells = (r) => [...cells(r)];
-      const txt = (r, i) => getCells(r)[i]?.textContent?.trim() || '';
-      const num = (r, i) => parseFloat(txt(r, i).replace(/[+₹%,]/g,'')) || 0;
-      switch (sort) {
-        case 'chg-desc': return num(b, 3) - num(a, 3);
-        case 'chg-asc':  return num(a, 3) - num(b, 3);
-        case 'plp-desc': return num(b, 4) - num(a, 4);
-        case 'plp-asc':  return num(a, 4) - num(b, 4);
-        case 'sym-az':   return txt(a, 1).localeCompare(txt(b, 1));
-        default: return 0;
-      }
-    });
-    // Re-number ranks after sort
-    rows.forEach((r, i) => { tbody.appendChild(r); const rk = r.querySelector('td:first-child'); if(rk) rk.textContent = i+1; });
-    const sel = document.getElementById('mom-sort');
-    if (sel) sel.style.borderColor = sort !== 'score-desc' ? 'var(--ac)' : '';
-  };
-  // Also patch the alias
-  window.calcMomentum = window.calcMomentumV4;
-})();
+// Standalone sort function called directly from onchange="_applyMomSort()"
+// avoids the const-binding shadowing issue with calcMomentum.
+// After calcMomentumV4 renders rows in score-desc order, this re-sorts.
+// ─────────────────────────────────────────────────────────────────
+function _applyMomSort() {
+  const sort = document.getElementById('mom-sort')?.value || 'score-desc';
+  const sel  = document.getElementById('mom-sort');
+  const tbody = document.getElementById('mom-tbody');
+  if (!tbody) return;
+  if (sort === 'score-desc') {
+    // Re-render in default order
+    if (sel) sel.style.borderColor = '';
+    calcMomentumV4(); return;
+  }
+  const rows = [...tbody.querySelectorAll('tr[style*="border-left"]')];
+  if (!rows.length) return;
+  const txt = (r, i) => [...r.querySelectorAll('td')][i]?.textContent?.trim() || '';
+  const num = (r, i) => parseFloat(txt(r, i).replace(/[+₹%,]/g,'')) || 0;
+  rows.sort((a, b) => {
+    switch (sort) {
+      case 'chg-desc':  return num(b, 3) - num(a, 3);
+      case 'chg-asc':   return num(a, 3) - num(b, 3);
+      case 'plp-desc':  return num(b, 4) - num(a, 4);
+      case 'plp-asc':   return num(a, 4) - num(b, 4);
+      case 'sym-az':    return txt(a, 1).localeCompare(txt(b, 1));
+      default:          return 0;
+    }
+  });
+  rows.forEach((r, i) => {
+    tbody.appendChild(r);
+    const rk = r.querySelector('td:first-child');
+    if (rk) rk.textContent = i + 1;
+  });
+  if (sel) sel.style.borderColor = 'var(--ac)';
+}
 
 function _applyHarvestSort() {
   const sort = document.getElementById('th-sort')?.value || 'loss-desc';
