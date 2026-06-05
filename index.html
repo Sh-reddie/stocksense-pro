@@ -6379,7 +6379,7 @@ async function confirmAddWatch() {
   const p = s._price, fn = s._fund;
 
   const w = {
-    id: Date.now(), symbol: s.sym,
+    id: Date.now() + Math.random(), symbol: s.sym,
     name: p?.name || s.name, exchange: s.exch,
     sector: s.sector, mcap: s.mcap,
     ltp: p?.ltp || null, chgP: p?.chgP || null,
@@ -6457,7 +6457,7 @@ function toggleWlExpand(id) {
 }
 function startWlBuy(id){document.querySelectorAll('.wl-card').forEach(c=>c.classList.remove('buying'));document.getElementById('wlc-'+id)?.classList.add('buying');document.getElementById('wlf-qty-'+id)?.focus();}
 function cancelWlBuy(id){document.getElementById('wlc-'+id)?.classList.remove('buying');}
-function rmWatch(id){D.watchlist=D.watchlist.filter(w=>w.id!==id);save('watchlist');renderWatchlist();toast('Removed from watchlist');}
+function rmWatch(id){D.watchlist=D.watchlist.filter(w=>w.id!=id);save('watchlist');renderWatchlist();toast('Removed from watchlist');}
 
 function toggleWlAlertForm(id) {
   const el = document.getElementById('wlaf-'+id);
@@ -6466,7 +6466,7 @@ function toggleWlAlertForm(id) {
   el.style.display = open ? 'none' : 'block';
   if (!open) {
     // Show existing active alerts for this symbol
-    const w = D.watchlist.find(x=>x.id===id);
+    const w = D.watchlist.find(x=>x.id==id);
     if (!w) return;
     const existing = loadAlerts().filter(a=>a.sym===w.symbol && !a.triggered);
     const activeEl = document.getElementById('wlaf-active-'+id);
@@ -7557,7 +7557,7 @@ async function rankAllWatchlist() {
   toast(`✅ Ranking done — ${enterNow} ENTER NOW · ${avoid} AVOID · rest WAIT`, 'success');
 }
 async function _wlAnalyseSingle(id) {
-  const w = D.watchlist.find(x => x.id === id);
+  const w = D.watchlist.find(x => x.id == id);
   if (!w) return;
   // Disable button and show loading
   const btn = document.getElementById('wl-ai-btn-' + id);
@@ -9266,7 +9266,7 @@ function _sdAiContent(h) {
   if(!h||!h.aiAction){
     const hasKey = !!(localStorage.getItem('orKey')||'').trim();
     el.innerHTML = hasKey
-      ? `<div style="padding:30px;text-align:center"><div style="font-size:36px;margin-bottom:12px">🤖</div><div style="color:var(--t1);font-size:14px;font-weight:700;margin-bottom:6px">No AI analysis yet</div><div style="color:var(--t4);font-size:12px;margin-bottom:18px;line-height:1.5">Get signal, stop-loss, targets, bull &amp; bear thesis — all in one click</div><button class="btn btn-p" onclick="_sdRunAI()" style="padding:10px 24px;font-size:13px">⚡ Run AI Analysis</button></div>`
+      ? `<div style="padding:30px;text-align:center"><div style="font-size:36px;margin-bottom:12px">🤖</div><div style="color:var(--t1);font-size:14px;font-weight:700;margin-bottom:6px">No AI analysis yet</div><div style="color:var(--t4);font-size:12px;margin-bottom:18px;line-height:1.5">Get signal, stop-loss, targets, bull &amp; bear thesis — all in one click</div><button class="btn btn-p" onclick="_sdRunAI(${h.id})" style="padding:10px 24px;font-size:13px">⚡ Run AI Analysis</button></div>`
       : `<div style="padding:30px;text-align:center"><div style="font-size:36px;margin-bottom:12px">🔑</div><div style="color:var(--t1);font-size:14px;font-weight:700;margin-bottom:6px">AI Not Configured</div><div style="color:var(--t4);font-size:12px;margin-bottom:18px">Add your free OpenRouter API key in Settings</div><button class="btn btn-p" onclick="closeM('stockdetail');go('settings')">Open Settings</button></div>`;
     return;
   }
@@ -9379,7 +9379,7 @@ function _sdAiContent(h) {
 
   <!-- ⑦ ACTIONS -->
   <div style="display:flex;gap:8px;flex-wrap:wrap">
-    <button class="btn btn-g btn-sm" onclick="_sdRunAI()" style="flex:1;min-width:120px">↻ Re-analyse</button>
+    <button class="btn btn-g btn-sm" onclick="_sdRunAI(${h.id})" style="flex:1;min-width:120px">↻ Re-analyse</button>
     <button class="btn btn-g btn-sm" onclick="sdTab('chart',document.getElementById('sdt-chart'))" style="flex:1;min-width:100px">📈 Chart</button>
     ${h.stopLoss?`<button class="btn btn-g btn-sm" onclick="closeM('stockdetail');go('alerts')" style="flex:1;min-width:100px">🔔 Set Alert</button>`:''}
   </div>`;
@@ -9581,13 +9581,16 @@ function _sdAutoRunAI() {
     : !!(localStorage.getItem('apiKey')||'').trim();
   // Only auto-run if: no existing analysis AND API key is set
   if (!h.aiAction && hasKey) {
-    setTimeout(() => _sdRunAI(), 80); // small delay so tab animation completes first
+    const capturedId = _sdHid; // capture NOW — _sdHid may change before timer fires
+    setTimeout(() => _sdRunAI(capturedId), 80); // small delay so tab animation completes first
   }
 }
 
-async function _sdRunAI() {
-  if(!_sdHid) return;
-  const h = D.holdings.find(x=>x.id==_sdHid);
+async function _sdRunAI(id) {
+  // Prefer explicit id (baked from template) over global _sdHid to avoid stale-reference bugs
+  const hid = (id !== undefined && id !== null) ? id : _sdHid;
+  if(!hid) return;
+  const h = D.holdings.find(x=>x.id==hid);
   if(!h) return;
   const el = document.getElementById('sd-ai-content');
   if(el) el.innerHTML='<div class="ai-ld" style="padding:20px"><div class="spin"></div>Running AI analysis…</div>';
@@ -10473,7 +10476,7 @@ async function genActionPlan() { await runAllAI(); }
 
 
 async function quickAddToHoldings(wid) {
-  const w = D.watchlist.find(x => x.id === wid);
+  const w = D.watchlist.find(x => x.id == wid);
   if(!w) return;
   // If inline form already open, just close it
   const form = document.getElementById('wlf-'+wid);
@@ -16941,9 +16944,9 @@ function _pbGetStock() {
   const val = document.getElementById('pb-stock-sel')?.value;
   if (!val) return null;
   const [sym, src, id] = val.split('|');
-  const numId = parseInt(id);
-  if (src === 'holdings') return D.holdings.find(h => h.id === numId) || D.holdings.find(h => h.symbol === sym);
-  return D.watchlist.find(w => w.id === numId) || D.watchlist.find(w => w.symbol === sym);
+  const numId = parseFloat(id); // parseFloat preserves decimal in Date.now()+Math.random() IDs
+  if (src === 'holdings') return D.holdings.find(h => h.id == numId) || D.holdings.find(h => h.symbol === sym);
+  return D.watchlist.find(w => w.id == numId) || D.watchlist.find(w => w.symbol === sym);
 }
 
 function buildPosition() {
@@ -17885,7 +17888,7 @@ async function runEntryTriggerAI(wId, sym) {
   if (!el) return;
   el.textContent = '⏳…';
 
-  const w = D.watchlist.find(x => x.id === wId);
+  const w = D.watchlist.find(x => x.id == wId);
   if (!w) { el.textContent = '—'; return; }
 
   const g = _entryGates(w);
