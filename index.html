@@ -4582,6 +4582,23 @@ function _pfKey(k) { return _pfId === 'default' ? k : _pfId + '_' + k; }
 function _pfLoad(k, fb) {
   try { return JSON.parse(localStorage.getItem(_pfKey(k)) || fb); } catch(e) { return JSON.parse(fb); }
 }
+// Backfill missing IDs on any watchlist array loaded from storage.
+// Older items were added before the id field existed — without this they all
+// render onclick="_wlAnalyseSingle(undefined)" and click the wrong stock.
+function _backfillWlIds(arr) {
+  if (!Array.isArray(arr)) return arr;
+  let changed = false;
+  arr.forEach(w => {
+    if (w.id == null || w.id !== w.id /* NaN check */) {
+      w.id = Date.now() + Math.random();
+      changed = true;
+    }
+  });
+  if (changed) {
+    try { localStorage.setItem(_pfKey('watchlist'), JSON.stringify(arr)); } catch(e) {}
+  }
+  return arr;
+}
 function pfList() {
   try { return JSON.parse(localStorage.getItem('ss_portfolios') || 'null') || [{id:'default',name:'My Portfolio',color:'#4f8ef7'}]; }
   catch(e) { return [{id:'default',name:'My Portfolio',color:'#4f8ef7'}]; }
@@ -4594,7 +4611,7 @@ function switchPortfolio(id) {
   localStorage.setItem('ss_active_pf', _pfId);
   D.holdings  = _pfLoad('holdings','[]');
   D.realised  = _pfLoad('realised','[]');
-  D.watchlist = _pfLoad('watchlist','[]');
+  D.watchlist = _backfillWlIds(_pfLoad('watchlist','[]'));
   D.dividends = _pfLoad('dividends','[]');
   D.orders    = _pfLoad('orders','[]');
   D.cfg       = _pfLoad('cfg','{"risk":"aggressive","hor":"medium","pt":20,"sl":12,"ref":60}');
@@ -4687,7 +4704,7 @@ function closePfManage() {
 let D = {
   holdings:  _pfLoad('holdings','[]'),
   realised:  _pfLoad('realised','[]'),
-  watchlist: _pfLoad('watchlist','[]'),
+  watchlist: _backfillWlIds(_pfLoad('watchlist','[]')),
   dividends: _pfLoad('dividends','[]'),
   orders:    _pfLoad('orders','[]'),
   cfg:       _pfLoad('cfg','{"risk":"aggressive","hor":"medium","pt":20,"sl":12,"ref":60}'),
@@ -4738,7 +4755,7 @@ const _kv = {
         let changed = false;
         for (const k of keys) {
           if (data[k] !== undefined) {
-            D[k] = data[k];
+            D[k] = k === 'watchlist' ? _backfillWlIds(data[k]) : data[k];
             try { localStorage.setItem(k, JSON.stringify(D[k])); } catch(e) {}
             changed = true;
           }
@@ -7557,6 +7574,12 @@ async function rankAllWatchlist() {
   toast(`✅ Ranking done — ${enterNow} ENTER NOW · ${avoid} AVOID · rest WAIT`, 'success');
 }
 async function _wlAnalyseSingle(id) {
+  // Guard: undefined/null id means the item was saved before the id field existed.
+  // _backfillWlIds() should have fixed this on load, but catch any edge-cases here.
+  if (id == null || id !== id /* NaN */) {
+    toast('⚠ This watchlist item has no ID — please reload the page to fix it', 'error');
+    return;
+  }
   const w = D.watchlist.find(x => x.id == id);
   if (!w) return;
   // Disable button and show loading
