@@ -1574,7 +1574,7 @@ textarea.fi{resize:vertical;min-height:70px;}
 
   <!-- ═══ TAX ═══════════════════════════════════════ -->
   <div class="sec" id="sec-tax">
-    <div class="sec-head"><div class="sec-title">Tax P&L Report</div><div style="display:flex;gap:8px"><select class="fi" id="tax-fy" style="width:150px" onchange="renderTax()"><option value="2025-26">FY 2025-26</option><option value="2024-25">FY 2024-25</option></select><button class="btn btn-g" onclick="exportTaxCSV()">⬇ CSV</button><button class="btn btn-g" onclick="exportExcel()" title="Full portfolio Excel for CA">📊 Excel</button><button class="btn btn-p" onclick="genTaxAI()">🤖 Tax Advisory</button></div></div>
+    <div class="sec-head"><div class="sec-title">Tax P&L Report</div><div style="display:flex;gap:8px;flex-wrap:wrap"><select class="fi" id="tax-fy" style="width:150px" onchange="renderTax()"><option value="2025-26">FY 2025-26</option><option value="2024-25">FY 2024-25</option></select><button class="btn btn-g" onclick="exportTaxCSV()">⬇ CSV</button><button class="btn btn-g" onclick="exportExcel()" title="Full portfolio Excel for CA">📊 Excel</button><button class="btn btn-p" onclick="exportPDF()" title="One-page PDF report with tax summary for CA — browser Print to save">🖨 PDF for CA</button><button class="btn btn-g btn-sm" onclick="genTaxAI()">🤖 Tax Advisory</button></div></div>
     <div class="tabs"><div class="tab on" onclick="stab('tx','tax-main')">📊 P&amp;L Report</div><div class="tab" onclick="stab('tx','tax-harvest');renderTaxHarvesting()">🌾 Harvesting</div><div class="tab" onclick="stab('tx','tax-optimizer');renderTaxOptimizer()" style="font-weight:600;color:var(--ac)">🧮 AI Optimizer</div><div class="tab" onclick="stab('tx','tax-ltcg-cal');renderLtcgCalendar()" style="font-weight:700;color:var(--yel)">📅 LTCG Calendar</div></div>
     <div id="tax-main" class="tp on">
       <div class="sg sg-4 gap">
@@ -1855,7 +1855,13 @@ textarea.fi{resize:vertical;min-height:70px;}
           <span style="display:flex;align-items:center;gap:5px"><span class="bm-legend-dot" style="background:var(--yel)"></span><span class="bm-legend-lbl">Midcap 50</span></span>
         </div>
       </div>
-      <div class="pn-b"><canvas id="bm-chart" height="220" style="width:100%"></canvas></div>
+      <div class="pn-b">
+        <canvas id="bm-chart" height="220" style="width:100%"></canvas>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+          <div id="bm-chart-note" style="font-size:10px;color:var(--t4)">Loading…</div>
+          <button class="btn btn-g btn-xs" onclick="tlSnapshot();loadBenchmark();toast('Snapshot saved ✓','ok')" title="Save today's portfolio value for the actual performance curve">📸 Snapshot Today</button>
+        </div>
+      </div>
     </div>
     <div class="pn">
       <div class="pn-h"><div class="pn-t">Stock-by-Stock Contribution</div></div>
@@ -2459,6 +2465,16 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
     <div class="g21 gap" style="margin-bottom:18px">
       <div class="pn"><div class="pn-h"><div class="pn-t">🎛 Filters</div></div><div class="pn-b" style="display:flex;flex-direction:column;gap:10px">
+        <!-- ── Quick Presets ─────────────────────────────────── -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--b1)">
+          <span style="font-size:10px;color:var(--t4);align-self:center;white-space:nowrap">Quick:</span>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('garp')"     title="PE<25, ROE>15%, 52W<75%">💎 GARP</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('momentum')" title="Near 52W high, strong signal">🚀 Momentum</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('deepvalue')" title="PE<15, near 52W low — contrarian">🛒 Deep Value</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('quality')"  title="ROE>20%, low debt">🏆 Quality</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('contrarian')" title="Down >25% from 52W high, but profitable">↩ Contrarian</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('reset')"    style="color:var(--t4)">✕ Reset</button>
+        </div>
         <div class="fg"><label class="fl">Sector</label>
           <select class="fi" id="scr-sector">
             <option value="">All Sectors</option>
@@ -3561,6 +3577,17 @@ textarea.fi{resize:vertical;min-height:70px;}
             <button class="btn" style="font-size:12px;padding:6px 14px" onclick="LK._lock()">Lock Now</button>
             <button class="btn" style="font-size:12px;padding:6px 14px;color:var(--red)" onclick="LK._startPINChange()">Change PIN</button>
           </div>
+        </div></div>
+        <!-- ── Push Notifications ─────────────────────────────────── -->
+        <div class="pn"><div class="pn-h"><div class="pn-t">🔔 Push Notifications</div></div><div class="pn-b" style="display:flex;flex-direction:column;gap:12px">
+          <div style="font-size:11px;color:var(--t4);line-height:1.6">Get instant browser notifications when a price alert triggers, a stop-loss is breached, or a target is hit — even when the app tab is closed.</div>
+          <div id="push-status" style="font-size:12px;color:var(--t4)">Checking browser support…</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-p btn-sm" id="push-enable-btn" onclick="enablePushNotifications()" style="display:none">🔔 Enable Push Alerts</button>
+            <button class="btn btn-g btn-sm" id="push-disable-btn" onclick="disablePushNotifications()" style="display:none">🔕 Disable</button>
+            <button class="btn btn-g btn-sm" id="push-test-btn" onclick="testPushNotification()" style="display:none">🧪 Send Test</button>
+          </div>
+          <div style="font-size:10px;color:var(--t4)">Alerts sent for: price targets hit · stop-loss breaches · concentration >25% · AI signals updated</div>
         </div></div>
         <div class="pn"><div class="pn-h"><div class="pn-t">⚙ Risk Profile</div></div><div class="pn-b">
           <div class="fr gap"><div class="fg" style="margin-bottom:0"><label class="fl">Risk Tolerance</label><select class="fi" id="cfg-risk"><option value="conservative">Conservative</option><option value="moderate">Moderate</option><option value="aggressive" selected>Aggressive</option></select></div><div class="fg" style="margin-bottom:0"><label class="fl">Horizon</label><select class="fi" id="cfg-hor"><option value="short">Short &lt;3M</option><option value="medium" selected>Medium 3-12M</option><option value="long">Long &gt;1Y</option></select></div></div>
@@ -8745,14 +8772,33 @@ async function exportExcel() {
   XLSX.writeFile(wb, `StockSense_${today}.xlsx`);
   toast('✅ Excel exported — StockSense_'+today+'.xlsx');
 }
-function exportPDF() {
+function exportPDF(fyParam) {
+  const fy    = fyParam || document.getElementById('tax-fy')?.value || '2025-26';
   const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
   const inv = D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0);
   const cv  = D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
   const pl  = cv - inv;
   const plp = inv>0?pl/inv*100:0;
-  const rpl = D.realised.reduce((s,r)=>s+r.pl,0);
-  const divIncome = (D.dividends||[]).reduce((s,d)=>s+(d.amtPerShare||0)*(d.shares||0),0);
+  // Filter realised trades for selected FY
+  const fyStart = fy.split('-')[0] + '-04-01'; // e.g. 2025-04-01
+  const fyEnd   = (parseInt(fy.split('-')[0])+1) + '-03-31';
+  const fyTrades = D.realised.filter(r => r.sellDate >= fyStart && r.sellDate <= fyEnd);
+  const rpl  = fyTrades.reduce((s,r)=>s+r.pl,0);
+  const rplAll = D.realised.reduce((s,r)=>s+r.pl,0);
+  const stcgGains = fyTrades.filter(r=>r.taxType==='STCG'&&r.pl>0).reduce((s,r)=>s+r.pl,0);
+  const stcgLoss  = fyTrades.filter(r=>r.taxType==='STCG'&&r.pl<0).reduce((s,r)=>s+r.pl,0);
+  const ltcgGains = fyTrades.filter(r=>r.taxType==='LTCG'&&r.pl>0).reduce((s,r)=>s+r.pl,0);
+  const ltcgLoss  = fyTrades.filter(r=>r.taxType==='LTCG'&&r.pl<0).reduce((s,r)=>s+r.pl,0);
+  const LTCG_EXEMPTION = 125000;
+  const netSTCG = Math.max(0, stcgGains + stcgLoss); // net after losses
+  const netLTCG = Math.max(0, ltcgGains + ltcgLoss);
+  const taxSTCG = netSTCG * 0.20;
+  const taxLTCG = Math.max(0, netLTCG - LTCG_EXEMPTION) * 0.125;
+  const totalTax = taxSTCG + taxLTCG;
+  const divIncome = (D.dividends||[]).reduce((s,d)=>s+(d.amtPerShare||0)*(d.qty||d.shares||0),0);
+  // XIRR
+  const xirr = typeof calcPortfolioXIRR === 'function' ? calcPortfolioXIRR() : null;
+  const xirrStr = xirr !== null && isFinite(xirr) ? (xirr*100>=0?'+':'')+(xirr*100).toFixed(1)+'%' : '—';
 
   // Sector allocation
   const sectorMap = {};
@@ -8782,54 +8828,118 @@ function exportPDF() {
     const days=hDays(h.buyDate)||0; return days>=335 && days<365;
   }).map(h=>`<li>${h.symbol} — ${365-(hDays(h.buyDate)||0)} days to LTCG (hold until ${new Date(new Date(h.buyDate).getTime()+365*864e5).toLocaleDateString('en-IN')})</li>`).join('');
 
+  // Realised trades table for selected FY
+  const realisedRows = fyTrades.length
+    ? fyTrades.sort((a,b)=>b.pl-a.pl).map(r=>`<tr>
+        <td><b>${r.symbol}</b></td><td>${r.qty}</td>
+        <td>₹${f(r.buyPrice)}</td><td>${r.buyDate||'—'}</td>
+        <td>₹${f(r.sellPrice)}</td><td>${r.sellDate||'—'}</td>
+        <td>${r.holdDays||'—'}d</td>
+        <td style="color:${r.pl>=0?'#16a34a':'#dc2626'}">${r.pl>=0?'+':''}₹${fI(Math.abs(r.pl))}</td>
+        <td><span style="background:${r.taxType==='LTCG'?'#dcfce7':'#fef9c3'};color:${r.taxType==='LTCG'?'#166534':'#854d0e'};padding:1px 5px;border-radius:3px;font-size:10px">${r.taxType}</span></td>
+      </tr>`).join('')
+    : `<tr><td colspan="9" style="text-align:center;color:#94a3b8;padding:16px">No closed trades in FY ${fy}</td></tr>`;
+
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>StockSense Portfolio Report — ${today}</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#1a1a2e;background:#fff;padding:24px}
+  body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#1a1a2e;background:#fff;padding:24px;max-width:1000px}
   h1{font-size:20px;font-weight:800;color:#1a1a2e}
-  h2{font-size:13px;font-weight:700;color:#1a1a2e;margin:20px 0 8px;border-bottom:2px solid #e5e7eb;padding-bottom:4px}
-  .hero{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:16px 0}
-  .card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px}
-  .card .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:3px}
-  .card .val{font-size:16px;font-weight:800;font-family:monospace}
+  h2{font-size:12px;font-weight:700;color:#1a1a2e;margin:20px 0 6px;border-bottom:2px solid #e5e7eb;padding-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+  .hero{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:14px 0}
+  .card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 10px}
+  .card .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:2px}
+  .card .val{font-size:15px;font-weight:800;font-family:'Courier New',monospace}
   .up{color:#16a34a}.dn{color:#dc2626}
-  table{width:100%;border-collapse:collapse;margin-bottom:8px}
-  th{background:#f1f5f9;font-size:10px;font-weight:700;padding:5px 8px;text-align:left;border-bottom:1px solid #e2e8f0}
-  td{padding:5px 8px;border-bottom:1px solid #f1f5f9;font-size:11px;vertical-align:middle}
-  .alert-box{background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:10px 14px;margin:8px 0;font-size:11px}
-  .footer{margin-top:24px;font-size:9px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:8px}
-  @media print{body{padding:0} .no-print{display:none}}
+  table{width:100%;border-collapse:collapse;margin-bottom:6px;font-size:11px}
+  th{background:#f1f5f9;font-size:9px;font-weight:700;padding:4px 6px;text-align:left;border:1px solid #e2e8f0;text-transform:uppercase}
+  td{padding:4px 6px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+  .alert-box{background:#fef9c3;border:1px solid #fde047;border-radius:5px;padding:8px 12px;margin:8px 0;font-size:11px}
+  .tax-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:12px 14px;margin:8px 0}
+  .tax-row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #d1fae5;font-size:11px}
+  .tax-total{font-weight:800;font-size:13px;color:#dc2626;border-top:2px solid #16a34a;padding-top:6px;margin-top:4px}
+  .footer{margin-top:20px;font-size:9px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:8px;line-height:1.6}
+  @media print{
+    body{padding:0;font-size:11px}
+    .no-print{display:none}
+    h2{page-break-after:avoid}
+    table{page-break-inside:auto}
+    tr{page-break-inside:avoid}
+    .page-break{page-break-before:always}
+  }
 </style></head><body>
-<div style="display:flex;justify-content:space-between;align-items:center">
-  <div><h1>📊 StockSense Portfolio Report</h1><div style="font-size:11px;color:#64748b;margin-top:2px">Generated: ${today}</div></div>
-  <button class="no-print" onclick="window.print()" style="padding:8px 16px;background:#4f8ef7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px">🖨 Print / Save PDF</button>
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+  <div>
+    <h1>📊 Portfolio Report — FY ${fy}</h1>
+    <div style="font-size:11px;color:#64748b;margin-top:2px">Generated: ${today} &nbsp;·&nbsp; ${D.holdings.length} open positions &nbsp;·&nbsp; ${fyTrades.length} closed trades this FY</div>
+  </div>
+  <button class="no-print" onclick="window.print()" style="padding:7px 14px;background:#4f8ef7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;flex-shrink:0">🖨 Print / Save PDF</button>
 </div>
 
+<!-- ── PORTFOLIO SUMMARY ── -->
 <div class="hero">
   <div class="card"><div class="lbl">Invested</div><div class="val">₹${fI(inv)}</div></div>
   <div class="card"><div class="lbl">Current Value</div><div class="val">₹${fI(cv)}</div></div>
-  <div class="card"><div class="lbl">Unrealised P&L</div><div class="val ${pl>=0?'up':'dn'}">${pl>=0?'+':''}₹${fI(Math.abs(pl))}</div></div>
-  <div class="card"><div class="lbl">P&L %</div><div class="val ${plp>=0?'up':'dn'}">${fP(plp)}</div></div>
-  <div class="card"><div class="lbl">Realised P&L</div><div class="val ${rpl>=0?'up':'dn'}">${rpl>=0?'+':''}₹${fI(Math.abs(rpl))}</div></div>
+  <div class="card"><div class="lbl">Unrealised P&amp;L</div><div class="val ${pl>=0?'up':'dn'}">${pl>=0?'+':''}₹${fI(Math.abs(pl))}</div></div>
+  <div class="card"><div class="lbl">Return %</div><div class="val ${plp>=0?'up':'dn'}">${fP(plp)}</div></div>
+  <div class="card"><div class="lbl">XIRR (annualised)</div><div class="val ${xirr!==null&&xirr>=0?'up':xirr!==null?'dn':''}">${xirrStr}</div></div>
 </div>
-<div class="hero" style="grid-template-columns:repeat(3,1fr)">
-  <div class="card"><div class="lbl">Positions</div><div class="val">${D.holdings.length}</div></div>
-  <div class="card"><div class="lbl">Closed Trades</div><div class="val">${D.realised.length}</div></div>
-  <div class="card"><div class="lbl">Dividend Income</div><div class="val up">₹${fI(divIncome)}</div></div>
+<div class="hero" style="grid-template-columns:repeat(4,1fr)">
+  <div class="card"><div class="lbl">Realised P&amp;L (FY ${fy})</div><div class="val ${rpl>=0?'up':'dn'}">${rpl>=0?'+':''}₹${fI(Math.abs(rpl))}</div></div>
+  <div class="card"><div class="lbl">Dividend Income</div><div class="val">${divIncome>0?'₹'+fI(divIncome):'—'}</div></div>
+  <div class="card"><div class="lbl">STCG (net)</div><div class="val ${netSTCG>0?'dn':'up'}">₹${fI(netSTCG)}</div></div>
+  <div class="card"><div class="lbl">LTCG (net)</div><div class="val ${netLTCG>0?'dn':'up'}">₹${fI(netLTCG)}</div></div>
 </div>
 
-${ltcgAlerts?`<div class="alert-box">⏳ <b>LTCG Countdown — hold these to save tax:</b><ul style="margin-top:4px;padding-left:16px">${ltcgAlerts}</ul></div>`:''}
+<!-- ── TAX SUMMARY ── -->
+<h2>⚖ Estimated Tax Liability — FY ${fy}</h2>
+<div class="tax-box">
+  <div class="tax-row"><span>STCG (₹${fI(stcgGains)} gains − ₹${fI(Math.abs(stcgLoss))} losses = ₹${fI(netSTCG)} net)</span><span>@ 20% = <b>₹${fI(taxSTCG)}</b></span></div>
+  <div class="tax-row"><span>LTCG (₹${fI(ltcgGains)} gains − ₹${fI(Math.abs(ltcgLoss))} losses − ₹1.25L exemption = ₹${fI(Math.max(0,netLTCG-LTCG_EXEMPTION))} taxable)</span><span>@ 12.5% = <b>₹${fI(taxLTCG)}</b></span></div>
+  <div class="tax-total" style="display:flex;justify-content:space-between">
+    <span>Estimated Total Tax (excl. cess &amp; surcharge)</span>
+    <span>₹${fI(totalTax)}</span>
+  </div>
+  <div style="font-size:9px;color:#4b5563;margin-top:6px">⚠ Rates per Finance Act 2024 (post 23 Jul 2024): STCG @20%, LTCG @12.5% with ₹1.25L annual exemption. Add 4% health &amp; education cess. Verify with a qualified CA before filing.</div>
+</div>
 
-<h2>Holdings</h2>
-<table><thead><tr><th>Stock</th><th>Qty</th><th>Avg Buy</th><th>LTP</th><th>P&L</th><th>P&L%</th><th>Hold</th><th>Tax</th></tr></thead>
-<tbody>${holdRows}</tbody></table>
+${ltcgAlerts?`<div class="alert-box">⏳ <b>Hold these to qualify for LTCG rate:</b><ul style="margin-top:4px;padding-left:16px">${ltcgAlerts}</ul></div>`:''}
 
+<!-- ── OPEN POSITIONS ── -->
+<h2>Open Positions (${D.holdings.length} stocks)</h2>
+<table><thead><tr><th>Stock</th><th>Qty</th><th>Avg Cost</th><th>LTP</th><th>P&amp;L</th><th>P&amp;L%</th><th>Hold Days</th><th>Tax Type</th><th>Signal</th></tr></thead>
+<tbody>${holdRows}</tbody>
+<tfoot><tr style="background:#f8fafc;font-weight:700">
+  <td colspan="3">TOTAL</td>
+  <td>₹${fI(cv)}</td>
+  <td style="color:${pl>=0?'#16a34a':'#dc2626'}">${pl>=0?'+':''}₹${fI(Math.abs(pl))}</td>
+  <td style="color:${plp>=0?'#16a34a':'#dc2626'}">${fP(plp)}</td>
+  <td colspan="3"></td>
+</tr></tfoot></table>
+
+<!-- ── SECTOR ALLOCATION ── -->
 <h2>Sector Allocation</h2>
 <table><thead><tr><th>Sector</th><th>Value</th><th>Weight</th></tr></thead>
 <tbody>${sectorRows}</tbody></table>
 
-<div class="footer">⚠ This report is for informational purposes only. Not SEBI-registered financial advice. Consult a registered advisor before making any investment decisions. | StockSense Pro</div>
+<!-- ── REALISED P&L ── -->
+<div class="page-break"></div>
+<h2>Realised P&amp;L — FY ${fy} (${fyTrades.length} trades)</h2>
+<table><thead><tr><th>Symbol</th><th>Qty</th><th>Buy ₹</th><th>Buy Date</th><th>Sell ₹</th><th>Sell Date</th><th>Days</th><th>P&amp;L</th><th>Type</th></tr></thead>
+<tbody>${realisedRows}</tbody>
+${fyTrades.length?`<tfoot><tr style="background:#f8fafc;font-weight:700">
+  <td colspan="7">TOTAL</td>
+  <td style="color:${rpl>=0?'#16a34a':'#dc2626'}">${rpl>=0?'+':''}₹${fI(Math.abs(rpl))}</td>
+  <td></td>
+</tr></tfoot>`:''}
+</table>
+
+<div class="footer">
+  ⚠ <b>Disclaimer:</b> This report is auto-generated by StockSense Pro for informational purposes only. Not SEBI-registered financial advice. Tax calculations are estimates using Finance Act 2024 rates and do not account for carry-forward losses, other income, deductions, or surcharge. Verify all figures with a qualified Chartered Accountant before filing your ITR.<br>
+  Generated by StockSense Pro &nbsp;·&nbsp; ${today} &nbsp;·&nbsp; For personal use only
+</div>
 </body></html>`;
 
   const win = window.open('','_blank','width=900,height=700');
@@ -11458,6 +11568,57 @@ async function ohHandleFile(file) {
 
   renderOrderHistory();
   toast('Order History imported — ' + newOrders.length + ' orders', 'ok');
+
+  // ── Auto-journal prompt for new holdings ──────────────────────────────
+  // After a short delay so the UI settles, offer to capture entry thesis
+  // for each newly-created holding that doesn't already have a thesis.
+  setTimeout(() => _promptJournalTheses(), 1200);
+}
+
+// Show a compact modal prompting the user to capture entry thesis for new holdings
+function _promptJournalTheses() {
+  const needThesis = D.holdings.filter(h => !h.thesis && !h.notes);
+  if (!needThesis.length) return;
+  const MAX_SHOW = 5; // Don't overwhelm — show at most 5
+  const shown = needThesis.slice(0, MAX_SHOW);
+
+  // Build the modal content
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  modal.innerHTML = `
+    <div style="background:var(--s1);border:1px solid var(--b2);border-radius:16px;padding:24px;max-width:480px;width:92%;max-height:85vh;overflow-y:auto">
+      <div style="font-size:15px;font-weight:800;color:var(--t1);margin-bottom:4px">📒 Capture Entry Thesis</div>
+      <div style="font-size:11px;color:var(--t4);margin-bottom:18px">Why did you buy these? A sentence per stock builds your journal. Skip any you don't want to log.</div>
+      ${shown.map(h => `
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <span style="font-weight:700;color:var(--t1)">${h.symbol}</span>
+            <span style="font-size:10px;color:var(--t4)">${h.qty} shares · avg ₹${f(h.avgPrice)}</span>
+          </div>
+          <input type="text" id="jt-${h.id}" placeholder="e.g. Bet on defence capex, SL at ₹300, target ₹420 in 12M"
+            style="width:100%;box-sizing:border-box;background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:8px 10px;color:var(--t1);font-size:12px;outline:none;transition:border-color .15s"
+            onfocus="this.style.borderColor='var(--ac)'" onblur="this.style.borderColor='var(--b1)'">
+        </div>`).join('')}
+      ${needThesis.length > MAX_SHOW ? `<div style="font-size:10px;color:var(--t4);margin-bottom:12px">+${needThesis.length-MAX_SHOW} more holdings — you can add thesis via Holdings → Detail → Edit anytime.</div>` : ''}
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-g btn-sm" onclick="this.closest('div[style*=fixed]').remove()">Skip</button>
+        <button class="btn btn-p btn-sm" onclick="_saveJournalTheses(${JSON.stringify(shown.map(h=>h.id))})">Save Theses →</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function _saveJournalTheses(ids) {
+  let saved = 0;
+  ids.forEach(id => {
+    const h = D.holdings.find(x => x.id == id);
+    const inp = document.getElementById('jt-' + id);
+    if (!h || !inp) return;
+    const thesis = inp.value.trim();
+    if (thesis) { h.thesis = thesis; saved++; }
+  });
+  if (saved) { save('holdings'); toast(`✅ ${saved} thesis note${saved>1?'s':''} saved`, 'ok'); }
+  document.querySelector('div[style*="z-index:9999"]')?.remove();
 }
 
 function ohExportCSV() {
@@ -12377,6 +12538,122 @@ function syncAlerts() {
   toast('✅ Alerts synced from AI signals — ' + alerts.filter(a=>a.src==='ai').length + ' alerts set');
 }
 
+// ── PUSH NOTIFICATION SYSTEM ────────────────────────────────────────────────
+const VAPID_PUBLIC_KEY = 'BAGwFvjEBVSieZpJCRmGeRA0xH9DLGntLVHDnG3bh88d8FjTe3b6coW5RC7xRjyUCdzFh0hDQB7axQop0mD613c';
+
+function _b64uToUint8(b64u) {
+  const pad = b64u.replace(/-/g,'+').replace(/_/g,'/');
+  return Uint8Array.from(atob(pad), c => c.charCodeAt(0));
+}
+
+let _pushSubscription = null;
+
+async function _initPushUI() {
+  const statusEl  = document.getElementById('push-status');
+  const enableBtn = document.getElementById('push-enable-btn');
+  const disableBtn= document.getElementById('push-disable-btn');
+  const testBtn   = document.getElementById('push-test-btn');
+  if (!statusEl) return;
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    statusEl.innerHTML = '<span style="color:var(--yel)">⚠ Push notifications not supported in this browser.</span>';
+    return;
+  }
+
+  const reg  = await navigator.serviceWorker.ready;
+  const sub  = await reg.pushManager.getSubscription();
+  _pushSubscription = sub;
+
+  if (sub) {
+    statusEl.innerHTML = '<span style="color:var(--grn)">✅ Push notifications enabled</span>';
+    if (disableBtn) disableBtn.style.display = '';
+    if (testBtn)    testBtn.style.display = '';
+  } else {
+    statusEl.innerHTML = '<span style="color:var(--t4)">Push notifications not enabled. Click below to activate.</span>';
+    if (enableBtn) enableBtn.style.display = '';
+  }
+}
+
+async function enablePushNotifications() {
+  const btn = document.getElementById('push-enable-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Enabling…'; }
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') {
+      toast('⚠ Notification permission denied — enable in browser settings', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '🔔 Enable Push Alerts'; }
+      return;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: _b64uToUint8(VAPID_PUBLIC_KEY),
+    });
+    _pushSubscription = sub;
+    // Store subscription in localStorage for the CF Function to use
+    localStorage.setItem('ss_push_sub', JSON.stringify(sub.toJSON()));
+    // Also push to KV so CF can find it server-side
+    if (_kv.isHosted) {
+      const payload = { pushSubscription: sub.toJSON() };
+      fetch('/api/data', { method:'POST', headers:{'Content-Type':'application/json','X-SS-Token': _kv._token()}, body: JSON.stringify(payload) }).catch(()=>{});
+    }
+    toast('✅ Push notifications enabled!', 'ok');
+    _initPushUI();
+  } catch(e) {
+    toast('⚠ Could not enable push: ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '🔔 Enable Push Alerts'; }
+  }
+}
+
+async function disablePushNotifications() {
+  if (_pushSubscription) { await _pushSubscription.unsubscribe(); _pushSubscription = null; }
+  localStorage.removeItem('ss_push_sub');
+  toast('🔕 Push notifications disabled');
+  _initPushUI();
+}
+
+async function testPushNotification() {
+  const sub = _pushSubscription || JSON.parse(localStorage.getItem('ss_push_sub') || 'null');
+  if (!sub) { toast('Enable push notifications first', 'error'); return; }
+  const btn = document.getElementById('push-test-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
+  try {
+    const r = await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: sub, title: '🧪 StockSense Test Alert', message: 'Push notifications are working! Alerts will fire when prices hit your targets.', tag: 'ss-test' }),
+    });
+    const j = await r.json();
+    if (j.ok) toast('✅ Test notification sent — check your browser!', 'ok');
+    else toast('⚠ Push failed: ' + (j.error || 'unknown'), 'error');
+  } catch(e) { toast('⚠ Push test failed: ' + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '🧪 Send Test'; } }
+}
+
+// Send a push notification via the CF Function
+async function _sendPush(title, message, tag, url) {
+  const sub = _pushSubscription?.toJSON() || JSON.parse(localStorage.getItem('ss_push_sub') || 'null');
+  if (!sub || !_kv.isHosted) return; // only on hosted site
+  fetch('/api/notify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subscription: sub, title, message, tag: tag || 'ss-alert', url: url || '/' }),
+  }).catch(() => {});
+}
+
+// Init push UI when Settings tab is opened
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(_initPushUI, 1000); // after SW registers
+});
+
+// Also re-init when Settings section is shown
+(function() {
+  const origGo = window.go;
+  if (typeof origGo === 'function') {
+    window.go = function(id) { origGo(id); if (id === 'settings') _initPushUI(); };
+  }
+})();
+
 function checkAlerts() {
   const alerts = loadAlerts();
   let hitCount = 0;
@@ -12387,10 +12664,14 @@ function checkAlerts() {
     const triggered = a.type === 'above' ? ltp >= a.price : ltp <= a.price;
     if(triggered && !a.triggered) {
       a.triggered = true; a.triggeredAt = new Date().toISOString(); hitCount++;
-      const msg = `🔔 ${a.sym} — ${a.label} hit! ₹${ltp.toFixed(2)} ${a.type==='above'?'≥':'≤'} ₹${a.price}`;
+      const dir  = a.type === 'above' ? '▲' : '▼';
+      const msg  = `${dir} ${a.sym} — ${a.label} hit! ₹${ltp.toFixed(2)} ${a.type==='above'?'≥':'≤'} ₹${a.price}`;
       toast(msg, a.type === 'below' ? 'error' : 'success');
       addNotif('alert', msg, a.sym);
-      if('Notification' in window && Notification.permission === 'granted') new Notification('StockSense Alert', { body: msg, icon: '📈' });
+      // Browser notification (tab open)
+      if('Notification' in window && Notification.permission === 'granted') new Notification('StockSense Alert', { body: msg, icon: '/icon-192.png' });
+      // Push notification (even when tab closed)
+      _sendPush(`🔔 ${a.sym} Alert`, msg, 'ss-price-alert', '/?tab=alerts');
     }
   });
   saveAlerts(alerts);
@@ -13091,39 +13372,109 @@ async function loadBenchmark() {
 function drawBmChart(n50Data, nscData, portRet, n50Ret, nscRet) {
   const canvas = document.getElementById('bm-chart');
   if(!canvas) return;
-  const ctx2 = canvas.getContext('2d');
   if(_bmChart) { _bmChart.destroy(); _bmChart=null; }
 
-  // Build normalised series (base 100)
-  const norm = arr => {
-    if(!arr||arr.length<2) return [];
-    const base = arr[0].v;
-    return arr.map(p=>({ x: p.t.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}), y: +(p.v/base*100).toFixed(2) }));
-  };
+  // ── Use real portfolio snapshots when available ──────────────────────
+  const snaps = tlLoadSnaps ? tlLoadSnaps() : [];
+  const hasRealSnaps = snaps.length >= 3;
 
-  // Portfolio: single two-point line (since we only have cost vs current)
-  const labels = n50Data ? n50Data.map(p=>p.t.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})) : ['Start','Now'];
+  let labels, datasets = [];
 
-  const datasets = [];
-  if(n50Data && n50Data.length>1) {
-    const base50 = n50Data[0].v;
-    datasets.push({ label:'Nifty 50', data: n50Data.map(p=>+(p.v/base50*100).toFixed(2)), borderColor:'#2dd36f', backgroundColor:'rgba(45,211,111,.07)', borderWidth:2, pointRadius:0, tension:0.3, fill:false });
+  if (hasRealSnaps && n50Data && n50Data.length > 1) {
+    // Align snapshot dates with Nifty dates for a true apples-to-apples chart
+    // Build Nifty date→value map from n50Data
+    const n50Map = {};
+    n50Data.forEach(p => {
+      const d = p.t.toISOString().split('T')[0];
+      n50Map[d] = p.v;
+    });
+
+    // Find first snapshot date and corresponding Nifty price
+    const firstSnap = snaps[0];
+    const firstDate = firstSnap.date;
+    const snapBase = firstSnap.current || 1;
+
+    // Get Nifty base price at or near first snapshot date
+    const n50Dates = Object.keys(n50Map).sort();
+    let n50BaseDate = n50Dates.find(d => d >= firstDate) || n50Dates[0];
+    const n50Base = n50Map[n50BaseDate] || n50Data[0].v;
+
+    // Build aligned date list from first snapshot to now
+    const alignedDates = snaps.map(s => s.date);
+    labels = alignedDates.map(d => {
+      const dt = new Date(d);
+      return dt.toLocaleDateString('en-IN', { day:'2-digit', month:'short' });
+    });
+
+    // Portfolio series: actual snapshot values normalized to 100
+    const portSeries = snaps.map(s => +((s.current / snapBase) * 100).toFixed(2));
+
+    // Nifty series: interpolated to snapshot dates
+    const n50Series = snaps.map(s => {
+      // Find closest Nifty price on or before snapshot date
+      const closest = n50Dates.filter(d => d <= s.date).pop() || n50Dates[0];
+      const price = n50Map[closest] || n50Base;
+      return +((price / n50Base) * 100).toFixed(2);
+    });
+
+    datasets.push({
+      label: 'My Portfolio (actual)',
+      data: portSeries,
+      borderColor: '#4f8ef7', backgroundColor: 'rgba(79,142,247,.12)',
+      borderWidth: 2.5, pointRadius: 0, tension: 0.3, fill: true
+    });
+    datasets.push({
+      label: 'Nifty 50',
+      data: n50Series,
+      borderColor: '#2dd36f', backgroundColor: 'rgba(45,211,111,.04)',
+      borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false
+    });
+
+    // Midcap 50 — interpolate similarly
+    if (nscData && nscData.length > 1) {
+      const nscMap = {};
+      nscData.forEach(p => { nscMap[p.t.toISOString().split('T')[0]] = p.v; });
+      const nscDates = Object.keys(nscMap).sort();
+      const nscBase = nscMap[nscDates.find(d => d >= firstDate) || nscDates[0]] || nscData[0].v;
+      const nscSeries = snaps.map(s => {
+        const closest = nscDates.filter(d => d <= s.date).pop() || nscDates[0];
+        return +((nscMap[closest] || nscBase) / nscBase * 100).toFixed(2);
+      });
+      datasets.push({
+        label: 'Midcap 50',
+        data: nscSeries,
+        borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,.04)',
+        borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false, borderDash: [4,4]
+      });
+    }
+
+    // Update legend to indicate real data
+    const noteEl = document.getElementById('bm-chart-note');
+    if (noteEl) noteEl.textContent = `${snaps.length} daily snapshots · actual portfolio curve`;
+
+  } else {
+    // Fallback: straight portfolio line (no snapshots yet)
+    labels = n50Data ? n50Data.map(p=>p.t.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})) : ['Start','Now'];
+    if(n50Data && n50Data.length>1) {
+      const base50 = n50Data[0].v;
+      datasets.push({ label:'Nifty 50', data: n50Data.map(p=>+(p.v/base50*100).toFixed(2)), borderColor:'#2dd36f', backgroundColor:'rgba(45,211,111,.07)', borderWidth:2, pointRadius:0, tension:0.3, fill:false });
+    }
+    if(nscData && nscData.length>1) {
+      const baseNsc = nscData[0].v;
+      datasets.push({ label:'Midcap 50', data: nscData.map(p=>+(p.v/baseNsc*100).toFixed(2)), borderColor:'#fbbf24', backgroundColor:'rgba(251,191,36,.07)', borderWidth:2, pointRadius:0, tension:0.3, fill:false });
+    }
+    const pts = (n50Data||[{t:new Date()}]).map((_,i,arr)=>100 + (portRet||0)*(i/(arr.length-1||1)));
+    datasets.push({ label:'My Portfolio (estimated)', data: pts, borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,.08)', borderWidth:2.5, pointRadius:0, tension:0.1, fill:true, borderDash:[6,3] });
+    const noteEl = document.getElementById('bm-chart-note');
+    if (noteEl) noteEl.textContent = `No snapshots yet — take daily snapshots in Value Timeline for actual curve`;
   }
-  if(nscData && nscData.length>1) {
-    const baseNsc = nscData[0].v;
-    datasets.push({ label:'Midcap 50', data: nscData.map(p=>+(p.v/baseNsc*100).toFixed(2)), borderColor:'#fbbf24', backgroundColor:'rgba(251,191,36,.07)', borderWidth:2, pointRadius:0, tension:0.3, fill:false });
-  }
-  // Portfolio straight line
-  const pts = (n50Data||[{t:new Date()}]).map((_,i,arr)=>100 + (portRet||0)*(i/(arr.length-1||1)));
-  datasets.push({ label:'My Portfolio', data: pts, borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,.08)', borderWidth:2.5, pointRadius:0, tension:0.1, fill:true, borderDash:[] });
 
+  const load = () => _drawChart(canvas, labels, datasets);
   if(typeof Chart === 'undefined') {
-    // Load Chart.js dynamically
     const s = document.createElement('script');
     s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
-    s.onload = () => _drawChart(canvas, labels, datasets);
-    document.head.appendChild(s);
-  } else { _drawChart(canvas, labels, datasets); }
+    s.onload = load; document.head.appendChild(s);
+  } else { load(); }
 }
 
 function _drawChart(canvas, labels, datasets) {
@@ -13478,7 +13829,9 @@ function checkStopLosses() {
       // First time we detect this breach — notify + beep
       const recentlySeen = D.notifs.some(n => n.sym===h.symbol && n.type==='alert' && n.msg.includes('Stop-loss') && (Date.now()-new Date(n.ts).getTime()) < 1800000);
       if (!recentlySeen) {
-        addNotif('alert', `🚨 Stop-loss breached: ${h.symbol} — LTP ₹${f(h.ltp)} has fallen to or below your stop-loss of ₹${f(h.stopLoss)} (${(((h.ltp-h.stopLoss)/h.stopLoss)*100).toFixed(1)}% below). Consider reviewing your position.`, h.symbol);
+        const slMsg = `🚨 Stop-loss breached: ${h.symbol} — LTP ₹${f(h.ltp)} ≤ SL ₹${f(h.stopLoss)} (${(((h.ltp-h.stopLoss)/h.stopLoss)*100).toFixed(1)}% below). Consider reviewing your position.`;
+        addNotif('alert', slMsg, h.symbol);
+        _sendPush(`🚨 SL Breach: ${h.symbol}`, slMsg, 'ss-sl-' + h.symbol, '/?tab=holdings');
         newBreaches++;
       }
     }
@@ -14542,6 +14895,40 @@ const NIFTY500_LIST = [
 let _scrResults = [];
 
 function renderScreener() { /* open with default filters visible */ }
+
+// Apply a named filter preset and immediately run the screener
+function applyScreenerPreset(preset) {
+  const set = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
+  // Reset all first
+  set('scr-sector',''); set('scr-pe','40'); set('scr-roe','12');
+  set('scr-52w','75'); set('scr-mcap',''); set('scr-signal','');
+  switch(preset) {
+    case 'garp':
+      // Growth At Reasonable Price: solid ROE, fair PE, not at highs
+      set('scr-pe','25'); set('scr-roe','15'); set('scr-52w','75');
+      toast('📋 GARP: PE<25 · ROE>15% · not at 52W high'); break;
+    case 'momentum':
+      // Near 52W high = breakout candidates
+      set('scr-52w','100'); set('scr-signal','buy'); set('scr-roe','10');
+      toast('🚀 Momentum: Buy signal · no PE/52W cap'); break;
+    case 'deepvalue':
+      // Cheap stocks near 52W lows — contrarian picks
+      set('scr-pe','15'); set('scr-52w','30'); set('scr-roe','8');
+      toast('🛒 Deep Value: PE<15 · 52W pos <30% · ROE>8%'); break;
+    case 'quality':
+      // High ROE, low debt proxy (PE as valuation check)
+      set('scr-pe','50'); set('scr-roe','20');
+      toast('🏆 Quality: ROE>20% · PE<50 (quality at any price)'); break;
+    case 'contrarian':
+      // Down significantly from 52W high but still profitable
+      set('scr-52w','40'); set('scr-roe','10'); set('scr-pe','35');
+      toast('↩ Contrarian: 52W pos <40% · profitable (ROE>10%)'); break;
+    case 'reset':
+    default:
+      toast('Filters reset'); return;
+  }
+  runScreener();
+}
 
 async function runScreener() {
   const sector   = document.getElementById('scr-sector')?.value || '';
