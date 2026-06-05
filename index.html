@@ -19748,22 +19748,29 @@ function _markHoldSortHeader(sort) {
   };
 })();
 
-// Patch the sort inside renderWatchlist by overriding the sort expression
-// renderWatchlist already sorts by entryScore — we wrap the sorted array
-// by monkey-patching Array.prototype.sort temporarily is unsafe,
-// so instead we override the entire sort step via a post-render reorder.
-// Simpler: patch renderWatchlist fully with the sort-aware version.
+// Watchlist sort: the original renderWatchlist() re-sorts internally by entryScore.
+// Fix: temporarily inject synthetic entryScore values reflecting the desired sort order.
+// This makes the internal sort produce our desired ordering (within each decision section).
 (function() {
   const _origWL2 = window.renderWatchlist;
   if (typeof _origWL2 !== 'function') return;
   window.renderWatchlist = function() {
     const sort = document.getElementById('wl-sort')?.value || 'score';
-    // Temporarily reorder D.watchlist for the render
-    const orig = [...D.watchlist];
-    D.watchlist = _sortWatchlist([...D.watchlist], sort);
-    _origWL2.apply(this, arguments);
-    D.watchlist = orig;
-    // Highlight sort select if non-default
+    if (sort !== 'score') {
+      // Sort all items by desired key
+      const ordered = _sortWatchlist([...D.watchlist], sort);
+      // Assign synthetic entryScores: first item gets highest (100), descending by 1
+      // This ensures the internal entryScore sort produces our desired order within each section
+      const scoreMap = {};
+      ordered.forEach((w, i) => { scoreMap[w.id] = 100 - i; });
+      // Backup and replace
+      D.watchlist.forEach(w => { w._origScore = w.entryScore; w.entryScore = scoreMap[w.id] ?? (w.entryScore ?? 0); });
+      _origWL2.apply(this, arguments);
+      // Restore original scores
+      D.watchlist.forEach(w => { w.entryScore = w._origScore; delete w._origScore; });
+    } else {
+      _origWL2.apply(this, arguments);
+    }
     const sel = document.getElementById('wl-sort');
     if (sel) sel.style.borderColor = sort !== 'score' ? 'var(--ac)' : '';
   };
