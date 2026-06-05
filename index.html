@@ -19735,46 +19735,65 @@ function _markHoldSortHeader(sort) {
 }
 
 // ── WATCHLIST SORT ────────────────────────────────────────────────────
-// Patches renderWatchlist to sort by #wl-sort before splitting sections.
+// Post-render DOM sort: after renderWatchlist() builds the grid, re-order
+// cards within each decision-section container to match the chosen sort key.
 // ─────────────────────────────────────────────────────────────────────
-(function() {
-  const _origWL = window.renderWatchlist;
-  if (typeof _origWL !== 'function') return;
-  window.renderWatchlist = function() {
-    const sort = document.getElementById('wl-sort')?.value || 'score';
-    // Store for the function to pick up via a global flag
-    window._wlSort = sort;
-    _origWL.apply(this, arguments);
-  };
-})();
-
-// Watchlist sort: the original renderWatchlist() re-sorts internally by entryScore.
-// Fix: temporarily inject synthetic entryScore values reflecting the desired sort order.
-// This makes the internal sort produce our desired ordering (within each decision section).
 (function() {
   const _origWL2 = window.renderWatchlist;
   if (typeof _origWL2 !== 'function') return;
   window.renderWatchlist = function() {
+    _origWL2.apply(this, arguments);
     const sort = document.getElementById('wl-sort')?.value || 'score';
-    if (sort !== 'score') {
-      // Sort all items by desired key
-      const ordered = _sortWatchlist([...D.watchlist], sort);
-      // Assign synthetic entryScores: first item gets highest (100), descending by 1
-      // This ensures the internal entryScore sort produces our desired order within each section
-      const scoreMap = {};
-      ordered.forEach((w, i) => { scoreMap[w.id] = 100 - i; });
-      // Backup and replace
-      D.watchlist.forEach(w => { w._origScore = w.entryScore; w.entryScore = scoreMap[w.id] ?? (w.entryScore ?? 0); });
-      _origWL2.apply(this, arguments);
-      // Restore original scores
-      D.watchlist.forEach(w => { w.entryScore = w._origScore; delete w._origScore; });
-    } else {
-      _origWL2.apply(this, arguments);
-    }
+    if (sort !== 'score') _applyWlSort(sort);
     const sel = document.getElementById('wl-sort');
     if (sel) sel.style.borderColor = sort !== 'score' ? 'var(--ac)' : '';
   };
 })();
+
+function _applyWlSort(sort) {
+  const grid = document.getElementById('wl-grid');
+  if (!grid) return;
+
+  // wl-cards are NOT direct grid children — renderWatchlist wraps each section's
+  // cards in a flex container div. Group cards by their actual parent container.
+  const parentMap = new Map();
+  grid.querySelectorAll('.wl-card').forEach(card => {
+    const parent = card.parentElement;
+    if (!parentMap.has(parent)) parentMap.set(parent, []);
+    parentMap.get(parent).push(card);
+  });
+
+  const sym   = el => el.querySelector('.sym')?.textContent?.trim() || '';
+  const chg   = el => parseFloat(el.querySelector('[class*="up"],[class*="dn"]')
+                        ?.textContent?.replace(/[+%]/g,'') || '0') || 0;
+  const pos52 = el => {
+    const ltp  = parseFloat(el.querySelector('.sc-price,[style*="font-size:16"]')
+                   ?.textContent?.replace(/[₹,]/g,'') || '0') || 0;
+    const item = D.watchlist.find(w => w.symbol === sym(el));
+    if (!item || !item.h52 || !item.l52 || item.h52 <= item.l52) return 1;
+    return (ltp - item.l52) / (item.h52 - item.l52);
+  };
+  const ts    = el => D.watchlist.find(w => w.symbol === sym(el))?.id || 0;
+
+  parentMap.forEach((cards, container) => {
+    if (cards.length < 2) return;
+    cards.sort((a, b) => {
+      switch (sort) {
+        case 'sym-az':   return sym(a).localeCompare(sym(b));
+        case 'sym-za':   return sym(b).localeCompare(sym(a));
+        case 'chg-desc': return chg(b) - chg(a);
+        case '52w-asc':  return pos52(a) - pos52(b);
+        case 'added':    return ts(b) - ts(a);
+        default: return 0;
+      }
+    });
+    // Pull all cards into a DocumentFragment (removes from DOM), then re-append
+    // in sorted order — one atomic operation, no insertAdjacentElement reversal risk.
+    const frag = document.createDocumentFragment();
+    cards.forEach(card => frag.appendChild(card));
+    container.appendChild(frag);
+  });
+}
 
 function _sortWatchlist(list, sort) {
   return list.sort((a, b) => {
