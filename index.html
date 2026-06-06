@@ -7888,7 +7888,17 @@ async function _acInlineAnalyse(hid) {
       </div>`;
     panel.dataset.loaded = 'true';
     if (btn) { btn.disabled = false; btn.textContent = '▲ Collapse'; }
-    renderActionCardsV4(); // refresh card to show updated signal/stale badge
+    // Update stale badge and signal chip in THIS card's header in-place
+    // (avoids full renderActionCardsV4 which destroys the expanded panel)
+    const card = panel.closest('.ac-card');
+    if (card) {
+      const isBuy = h.signal?.includes('BUY'), isHold = h.signal === 'HOLD';
+      const sigCls = isBuy ? 'tag t-buy' : isHold ? 'tag t-hold' : 'tag t-sell';
+      const sigChip = card.querySelector('.tag.t-buy, .tag.t-hold, .tag.t-sell, .tag.t-sbuy');
+      if (sigChip) { sigChip.className = sigCls; sigChip.textContent = h.signal || 'HOLD'; }
+      const staleEl = card.querySelector('[style*="color:var(--red)"][style*="old"], [style*="color:var(--yel)"][style*="old"]');
+      if (staleEl) staleEl.remove(); // remove old stale warning — just analysed
+    }
   } catch(e) {
     panel.innerHTML = `<div style="color:var(--red);font-size:11px">⚠ Analysis failed: ${e.message}</div>`;
     if (btn) { btn.disabled = false; btn.textContent = '🤖 Retry'; }
