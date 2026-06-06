@@ -1752,16 +1752,30 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="sc c2" style="--cc:var(--yel)"><div class="sv">Near Trigger (&lt;3%)</div><div class="sn" id="alrt-near-count" style="color:var(--yel)">—</div></div>
       <div class="sc c3"><div class="sv">Triggered Today</div><div class="sn" id="alrt-hit-count" style="color:var(--grn)">—</div></div>
     </div>
+    <!-- Bulk action bar (appears when alerts selected) -->
+    <div id="alrt-bulk-bar" style="display:none;padding:10px 14px;background:rgba(79,142,247,.08);border:1px solid rgba(79,142,247,.25);border-radius:8px;margin-bottom:10px;display:none;align-items:center;gap:10px;flex-wrap:wrap">
+      <span id="alrt-bulk-count" style="font-size:12px;font-weight:700;color:var(--ac)">0 selected</span>
+      <button class="btn btn-g btn-xs" onclick="_bulkAlertAction('reset')">↻ Reset Triggered</button>
+      <button class="btn btn-g btn-xs" onclick="_bulkAlertAction('once')">Fire Once</button>
+      <button class="btn btn-g btn-xs" onclick="_bulkAlertAction('every')">🔁 Recurring</button>
+      <button class="btn btn-red btn-xs" onclick="_bulkAlertAction('delete')">🗑 Delete</button>
+      <button class="btn btn-g btn-xs" style="margin-left:auto" onclick="_clearAlertSelection()">✕ Deselect All</button>
+    </div>
+
     <div class="pn" style="margin-bottom:14px">
       <div class="pn-h">
         <div class="pn-t">🤖 AI-Synced Alerts <span style="font-size:10px;font-weight:400;color:var(--t4)">— auto-generated from AI stop-loss &amp; targets</span></div>
+        <button class="btn btn-g btn-xs" onclick="_selectAllAlerts('ai')">Select All</button>
       </div>
       <div class="pn-b" style="padding:0">
         <div id="alrt-ai-list"><div style="color:var(--t4);font-size:12px;padding:20px">Run <strong>AI Analyze All</strong> then click <strong>Sync from Portfolio</strong> to auto-populate alerts.</div></div>
       </div>
     </div>
     <div class="pn">
-      <div class="pn-h"><div class="pn-t">⚙ Custom Alerts</div></div>
+      <div class="pn-h">
+        <div class="pn-t">⚙ Custom Alerts</div>
+        <button class="btn btn-g btn-xs" onclick="_selectAllAlerts('custom')">Select All</button>
+      </div>
       <div class="pn-b" style="padding:0">
         <div id="alrt-custom-list"><div style="color:var(--t4);font-size:12px;padding:20px">No custom alerts. Click <strong>+ Add Alert</strong> to create one.</div></div>
       </div>
@@ -5468,7 +5482,7 @@ async function _proxyFetch(url, timeoutMs = 10000) {
 }
 
 /* v7/finance/quote — batch fetch up to 20 symbols in ONE call */
-const QUOTE_FIELDS = 'regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketPreviousClose,regularMarketVolume,fiftyTwoWeekHigh,fiftyTwoWeekLow,shortName,longName,trailingPE,forwardPE,priceToBook,trailingEps,marketCap,dividendYield,beta,returnOnEquity,debtToEquity,revenueGrowth,earningsGrowth,currentRatio,recommendationKey';
+const QUOTE_FIELDS = 'regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketPreviousClose,regularMarketVolume,averageDailyVolume10Day,fiftyTwoWeekHigh,fiftyTwoWeekLow,shortName,longName,trailingPE,forwardPE,priceToBook,trailingEps,marketCap,dividendYield,beta,returnOnEquity,debtToEquity,revenueGrowth,earningsGrowth,currentRatio,recommendationKey';
 
 async function _fetchQuoteBatch(yfSymbols) {
   if (!yfSymbols.length) return new Map();
@@ -5505,7 +5519,7 @@ async function _fetchQuoteBatch(yfSymbols) {
 function _quoteToPrice(q) {
   if (!q || !q.regularMarketPrice) return null;
   const prev = q.regularMarketPreviousClose || q.regularMarketPrice;
-  return { ltp: +q.regularMarketPrice.toFixed(2), prev: +prev.toFixed(2), chg: +(q.regularMarketChange||0).toFixed(2), chgP: +(q.regularMarketChangePercent||0).toFixed(2), h52: q.fiftyTwoWeekHigh||null, l52: q.fiftyTwoWeekLow||null, vol: q.regularMarketVolume||null, name: q.longName||q.shortName||null };
+  return { ltp: +q.regularMarketPrice.toFixed(2), prev: +prev.toFixed(2), chg: +(q.regularMarketChange||0).toFixed(2), chgP: +(q.regularMarketChangePercent||0).toFixed(2), h52: q.fiftyTwoWeekHigh||null, l52: q.fiftyTwoWeekLow||null, vol: q.regularMarketVolume||null, avgVol: q.averageDailyVolume10Day||null, name: q.longName||q.shortName||null };
 }
 function _quoteToFund(q) {
   if (!q) return null;
@@ -6142,7 +6156,7 @@ async function refreshAll() {
   // ── Apply batch results ────────────────────────────────────────────────────
   D.holdings.forEach(h=>{
     const hit=_lookupQuoteFor(h, quoteMap);
-    if(hit){const {yfSym,q,p}=hit;h.ltp=p.ltp;h.chg=p.chg;h.chgP=p.chgP;h.h52=p.h52||h.h52;h.l52=p.l52||h.l52;h.vol=p.vol;h.ltpStale=false;h.ltpUpdatedAt=new Date().toISOString();if(q)_cacheSet(yfSym,p,q);_symMapSave(h.symbol,yfSym);updated++;}
+    if(hit){const {yfSym,q,p}=hit;h.ltp=p.ltp;h.chg=p.chg;h.chgP=p.chgP;h.h52=p.h52||h.h52;h.l52=p.l52||h.l52;h.vol=p.vol;if(p.avgVol)h.avgVol=p.avgVol;h.ltpStale=false;h.ltpUpdatedAt=new Date().toISOString();if(q)_cacheSet(yfSym,p,q);_symMapSave(h.symbol,yfSym);updated++;}
     else{failedHoldings.push(h);}
   });
   D.watchlist.forEach(w=>{
@@ -7053,7 +7067,7 @@ async function confirmWlAdd(wid, sym, exch, sector, name) {
 const COL_DEFS = {
   basic:  [{k:'stock',l:'Stock'},{k:'qty',l:'Qty'},{k:'avg',l:'Avg Cost'},{k:'ltp',l:'LTP'},{k:'cv',l:'Curr Value'},{k:'chg',l:'Day Chg%'},{k:'pl',l:'P&L'},{k:'plp',l:'P&L%'},{k:'xirr',l:'XIRR'},{k:'cagr',l:'CAGR vs N50'},{k:'sig',l:'Signal'},{k:'forecast',l:'Forecast'},{k:'sent',l:'Sentiment'}],
   tech:   [{k:'rsi',l:'RSI'},{k:'52h',l:'52W Range'},{k:'atr',l:'ATR'},{k:'vol',l:'Volume'}],
-  fund:   [{k:'pe',l:'P/E'},{k:'pb',l:'P/B'},{k:'roe',l:'ROE%'},{k:'de',l:'D/E'},{k:'eps',l:'EPS'}],
+  fund:   [{k:'pe',l:'P/E'},{k:'pb',l:'P/B'},{k:'roe',l:'ROE%'},{k:'de',l:'D/E'},{k:'eps',l:'EPS'},{k:'fscore',l:'F-Score'}],
   risk:   [{k:'sl',l:'Stop Loss'},{k:'t1',l:'Target 1'},{k:'t2',l:'Target 2'},{k:'days',l:'Days'},{k:'tax',l:'Tax Type'}],
 };
 function togCols(grp, btn) {
@@ -7186,6 +7200,7 @@ function renderHoldings() {
         case 'roe':return`<td class="mn">${h.roe?f(h.roe*100,1)+'%':'—'}</td>`;
         case 'de':return`<td class="mn">${f(h.de)}</td>`;
         case 'eps':return`<td class="mn">${h.eps?'₹'+f(h.eps):'—'}</td>`;
+        case 'fscore': { const fs=_piotroski(h); if(!fs.dataPoints) return`<td class="mn" style="color:var(--t4)">—</td>`; const col=fs.score>=7?'var(--grn)':fs.score>=4?'var(--yel)':'var(--red)'; return`<td class="mn"><span title="${fs.signals.map(s=>(s.pass?'✓':'✗')+' '+s.name).join('\n')}" style="cursor:default;font-weight:700;color:${col}">${fs.score}/${fs.dataPoints}</span></td>`; }
         case 'sl':return`<td class="mn dn">₹${f(h.stopLoss)}</td>`;
         case 't1':return`<td class="mn" style="color:var(--cyn)">₹${f(h.target1)}</td>`;
         case 't2':return`<td class="mn" style="color:var(--ac2)">₹${f(h.target2)}</td>`;
@@ -10870,7 +10885,26 @@ function _sdFundContent(h) {
   const partialBadge = h._gfPartial
     ? `<div style="margin-bottom:10px;padding:6px 10px;background:rgba(250,173,20,.1);border:1px solid rgba(250,173,20,.3);border-radius:6px;font-size:11px;color:var(--yel)">⚠ Partial data — Yahoo Finance rate-limited. Showing what was scraped from Google Finance. <button class="btn btn-g btn-xs" onclick="_sdFetchFund()" style="margin-left:6px">↻ Retry Yahoo</button></div>`
     : '';
-  el.innerHTML = partialBadge + funds.map(sec=>`<div class="sd-fund-section"><h4>${sec.title}</h4>${sec.rows.map(([k,v])=>`<div class="sd-fund-row"><span class="sd-fund-key">${k}</span><span class="sd-fund-val">${v}</span></div>`).join('')}</div>`).join('');
+  // Piotroski F-Score block
+  const fs = _piotroski(h);
+  const fsBlock = fs.dataPoints > 0 ? (() => {
+    const col = fs.score >= 7 ? 'var(--grn)' : fs.score >= 4 ? 'var(--yel)' : 'var(--red)';
+    const label = fs.score >= 7 ? 'Strong' : fs.score >= 4 ? 'Moderate' : 'Weak';
+    const bars = fs.signals.map(s => `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--b1)">
+      <span style="width:14px;font-size:11px;text-align:center;color:${s.pass?'var(--grn)':'var(--red)'}">${s.pass?'✓':'✗'}</span>
+      <span style="flex:1;font-size:12px;color:var(--t2)">${s.name}</span>
+      <span style="font-size:10px;color:${s.pass?'var(--grn)':'var(--t4)'}">${s.pass?'+1':'0'}</span>
+    </div>`).join('');
+    return `<div class="sd-fund-section" style="margin-top:12px">
+      <h4 style="display:flex;align-items:center;gap:8px">Piotroski F-Score
+        <span style="font-size:18px;font-weight:800;color:${col}">${fs.score}/${fs.dataPoints}</span>
+        <span style="font-size:11px;padding:2px 8px;border-radius:10px;background:${col}22;color:${col}">${label}</span>
+        <span style="font-size:10px;color:var(--t4);font-weight:400;margin-left:auto">Based on available YF data</span>
+      </h4>
+      <div style="margin-top:6px">${bars}</div>
+    </div>`;
+  })() : '';
+  el.innerHTML = partialBadge + funds.map(sec=>`<div class="sd-fund-section"><h4>${sec.title}</h4>${sec.rows.map(([k,v])=>`<div class="sd-fund-row"><span class="sd-fund-key">${k}</span><span class="sd-fund-val">${v}</span></div>`).join('')}</div>`).join('') + fsBlock;
 }
 
 async function _sdFetchFund() {
@@ -14221,6 +14255,50 @@ async function testOpenRouter() {
 function loadAlerts() { return JSON.parse(localStorage.getItem('ss_alerts')||'[]'); }
 function saveAlerts(a) { localStorage.setItem('ss_alerts', JSON.stringify(a)); }
 
+// ── Bulk Alert Selection ────────────────────────────────────────────────────
+let _selectedAlertIds = new Set();
+
+function _toggleAlertSelect(id, checked) {
+  if (checked) _selectedAlertIds.add(String(id));
+  else _selectedAlertIds.delete(String(id));
+  // Update row highlight without full re-render
+  const row = document.querySelector(`.alrt-row[data-aid="${id}"]`);
+  if (row) row.style.background = checked ? 'rgba(79,142,247,.08)' : '';
+  // Update bulk action bar visibility
+  const bar = document.getElementById('alrt-bulk-bar');
+  if (bar) bar.style.display = _selectedAlertIds.size > 0 ? 'flex' : 'none';
+}
+
+function _selectAllAlerts(type) {
+  const alerts = loadAlerts().filter(a => type === 'ai' ? a.src === 'ai' : a.src !== 'ai');
+  alerts.forEach(a => _selectedAlertIds.add(String(a.id)));
+  renderAlerts();
+}
+
+function _clearAlertSelection() {
+  _selectedAlertIds.clear();
+  renderAlerts();
+}
+
+function _bulkAlertAction(action) {
+  if (!_selectedAlertIds.size) { toast('No alerts selected', 'warn'); return; }
+  if (action === 'delete' && !confirm(`Delete ${_selectedAlertIds.size} alert(s)?`)) return;
+  let alerts = loadAlerts();
+  if (action === 'delete') {
+    alerts = alerts.filter(a => !_selectedAlertIds.has(String(a.id)));
+  } else if (action === 'reset') {
+    alerts.forEach(a => { if (_selectedAlertIds.has(String(a.id))) { a.triggered = false; delete a._lastState; a.triggerCount = 0; } });
+  } else if (action === 'once') {
+    alerts.forEach(a => { if (_selectedAlertIds.has(String(a.id))) a.mode = 'once'; });
+  } else if (action === 'every') {
+    alerts.forEach(a => { if (_selectedAlertIds.has(String(a.id))) { a.mode = 'every'; a.label = a.label.replace(' 🔁','') + ' 🔁'; a.triggered = false; } });
+  }
+  saveAlerts(alerts);
+  toast(`✓ ${action === 'delete' ? 'Deleted' : action === 'reset' ? 'Reset' : action === 'every' ? 'Set recurring' : 'Set one-time'} ${_selectedAlertIds.size} alert(s)`, 'info');
+  _selectedAlertIds.clear();
+  renderAlerts();
+}
+
 function syncAlerts() {
   let alerts = loadAlerts();
   // Remove old AI-synced alerts, keep custom ones
@@ -14481,7 +14559,10 @@ function renderAlerts() {
     const status = (a.mode==='every')
       ? `<span class="alrt-dist ${a._lastState==='triggered'?'near':'far'}">${a._lastState==='triggered'?'● Active':'○ Watching'}${a.triggerCount>0?' (×'+a.triggerCount+')':''}</span>`
       : a.triggered ? '<span style="color:var(--grn);font-size:10px">✓ Triggered</span>' : `<span class="alrt-dist ${distClass}">${dist!==null?(a.type==='above'?'+':'')+distAbs+'% away':'—'}</span>`;
-    return `<div class="alrt-row">
+    const isSelected = _selectedAlertIds.has(String(a.id));
+    return `<div class="alrt-row" data-aid="${a.id}" style="${isSelected?'background:rgba(79,142,247,.08);':''}">
+      <input type="checkbox" ${isSelected?'checked':''} onchange="_toggleAlertSelect('${a.id}',this.checked)"
+        style="width:14px;height:14px;cursor:pointer;flex-shrink:0;accent-color:var(--ac)" title="Select for bulk action">
       <span class="alrt-sym">${a.sym}</span>
       <span class="alrt-type ${typeClass}">${baseLabel}${recurBadge}</span>
       <span class="alrt-val">${a.type==='above'?'↑':'↓'} ₹${(+a.price).toLocaleString('en-IN')}</span>
@@ -14819,6 +14900,11 @@ function checkCustomAlerts() {
     if (a.type === 'pct-drop' && chgP <= -a.val) hit = true;
     if (a.type === 'near-52h' && h52 > 0 && ((h52 - ltp) / h52 * 100) <= a.val) hit = true;
     if (a.type === 'near-52l' && l52 > 0 && ((ltp - l52) / l52 * 100) <= a.val) hit = true;
+    if (a.type === 'vol-spike') {
+      const vol = stock.vol || 0;
+      const avgVol = stock.avgVol || 0;
+      if (vol > 0 && avgVol > 0 && vol >= a.val * avgVol) hit = true;
+    }
     if (hit) {
       a.triggered = true;
       a.triggeredAt = new Date().toISOString();
@@ -24099,6 +24185,39 @@ document.addEventListener('keydown', e => {
       break;
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██  PIOTROSKI F-SCORE  (9-point quality screen from available YF data)
+// ═══════════════════════════════════════════════════════════════════════════
+// Uses: eps, roe, eg (EPS growth), rg (rev growth), de (D/E), cr (current ratio),
+//       pb (P/B), pe + fpe (earnings acceleration), signal (analyst consensus)
+// Score ≥7 = Strong  |  4–6 = Moderate  |  <4 = Weak
+function _piotroski(h) {
+  const signals = [];
+  const add = (name, value, pass) => { if (value != null) signals.push({ name, pass: !!pass }); };
+
+  // Profitability
+  add('EPS Positive',       h.eps,              h.eps > 0);
+  add('ROE Positive',       h.roe,              h.roe > 0);
+  add('EPS Growth',         h.eg,               h.eg > 0);
+  add('Revenue Growth',     h.rg,               h.rg > 0);
+
+  // Leverage & Liquidity
+  add('Low Leverage (D/E<1)',  h.de,            h.de < 1);
+  add('Liquidity (CR>1.5)',    h.cr,            h.cr > 1.5);
+
+  // Efficiency & Valuation
+  add('Not Overvalued (P/B<3)', h.pb,           h.pb < 3 && h.pb > 0);
+  if (h.fpe != null && h.pe != null)
+    signals.push({ name: 'Earnings Accel (FPE<PE)', pass: h.fpe < h.pe });
+
+  // Analyst consensus as proxy for market quality signal
+  const badSig = ['SELL','STRONG SELL','REDUCE'];
+  signals.push({ name: 'Analyst Consensus', pass: !badSig.includes((h.signal||'').toUpperCase()) });
+
+  const passed = signals.filter(s => s.pass).length;
+  return { score: passed, dataPoints: signals.length, signals };
+}
 
 // ── PWA Service Worker Registration ──────────────────
 if ('serviceWorker' in navigator) {
