@@ -1841,6 +1841,20 @@ textarea.fi{resize:vertical;min-height:70px;}
         </div>
       </div>
     </div>
+    <!-- P&L Calendar Heatmap -->
+    <div class="pn gap" id="pnl-heatmap-pn">
+      <div class="pn-h">
+        <div class="pn-t">📅 Daily P&L Heatmap</div>
+        <div style="display:flex;gap:10px;align-items:center;font-size:10px;color:var(--t4)">
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#2dd36f;display:inline-block"></span>Up day</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#f05252;display:inline-block"></span>Down day</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:var(--b2);display:inline-block"></span>No data</span>
+        </div>
+      </div>
+      <div class="pn-b" style="padding:16px;overflow-x:auto">
+        <div id="pnl-heatmap-grid"></div>
+      </div>
+    </div>
     <!-- Daily table -->
     <div class="pn gap">
       <div class="pn-h"><div class="pn-t">Daily Snapshot Log</div></div>
@@ -2006,8 +2020,13 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div class="sec" id="sec-heatmap">
     <div class="sec-head">
       <div class="sec-title">🔥 Correlation Heatmap</div>
-      <button class="btn btn-g" onclick="buildHeatmap()">↻ Rebuild</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g" onclick="buildHeatmap()">↻ Sector Model</button>
+        <button class="btn btn-p" onclick="buildLiveCorrelation()" id="hm-live-btn">📡 Live 90D</button>
+      </div>
     </div>
+    <!-- Live correlation status -->
+    <div id="hm-live-status" style="display:none;font-size:11px;color:var(--t4);margin-bottom:8px;padding:8px 12px;background:var(--s2);border-radius:8px;border:1px solid var(--b2)"></div>
     <div class="g21" style="margin-bottom:16px">
       <div class="sc c1"><div class="sv">Diversification Score</div><div class="sn" id="hm-div-score" style="font-size:26px">—</div><div id="hm-div-label" style="font-size:11px;color:var(--t3)">—</div></div>
       <div class="sc c2"><div class="sv">Avg Correlation</div><div class="sn" id="hm-avg-corr" style="font-size:26px">—</div><div style="font-size:11px;color:var(--t3)">across all pairs</div></div>
@@ -2016,7 +2035,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="g21">
       <div>
         <div class="pn" style="margin-bottom:14px">
-          <div class="pn-h"><div class="pn-t">Correlation Matrix</div><div style="font-size:10px;color:var(--t4)">Based on sector &amp; market-cap overlap</div></div>
+          <div class="pn-h"><div class="pn-t">Correlation Matrix</div><div style="font-size:10px;color:var(--t4)" id="hm-matrix-src">Based on sector &amp; market-cap overlap</div></div>
           <div class="pn-b hm-wrap"><div id="hm-grid"></div></div>
         </div>
       </div>
@@ -3871,6 +3890,24 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="sd-chart-wrap"><canvas id="sd-chart-canvas"></canvas><div id="sd-chart-msg" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--t4);font-size:12px"></div></div>
         <!-- Volume bars row -->
         <div id="sd-vol-wrap" style="height:44px;position:relative;margin-top:2px;display:none"><canvas id="sd-vol-canvas" style="width:100%;height:44px"></canvas></div>
+        <!-- Indicator toggles -->
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <span style="font-size:10px;color:var(--t4);align-self:center">Indicators:</span>
+          <button id="sd-ind-rsi" onclick="_toggleIndicator('rsi',this)"
+            style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:var(--s3);border:1px solid var(--b2);color:var(--t3);cursor:pointer;transition:all .15s">RSI 14</button>
+          <button id="sd-ind-macd" onclick="_toggleIndicator('macd',this)"
+            style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:var(--s3);border:1px solid var(--b2);color:var(--t3);cursor:pointer;transition:all .15s">MACD</button>
+        </div>
+        <!-- RSI panel -->
+        <div id="sd-rsi-wrap" style="display:none;margin-top:4px">
+          <div style="font-size:9px;font-weight:700;color:var(--t4);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;display:flex;justify-content:space-between"><span>RSI (14)</span><span id="sd-rsi-val" style="font-family:var(--mono)"></span></div>
+          <div style="height:70px;position:relative"><canvas id="sd-rsi-canvas" style="width:100%;height:70px"></canvas></div>
+        </div>
+        <!-- MACD panel -->
+        <div id="sd-macd-wrap" style="display:none;margin-top:4px">
+          <div style="font-size:9px;font-weight:700;color:var(--t4);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;display:flex;justify-content:space-between"><span>MACD (12,26,9)</span><span id="sd-macd-val" style="font-family:var(--mono)"></span></div>
+          <div style="height:70px;position:relative"><canvas id="sd-macd-canvas" style="width:100%;height:70px"></canvas></div>
+        </div>
         <div class="sd-stat-grid" id="sd-stats"></div>
       </div>
       <!-- FUNDAMENTALS TAB -->
@@ -6002,6 +6039,7 @@ async function refreshAll() {
   checkAlerts();
   if(typeof checkCustomAlerts==='function') checkCustomAlerts();
   checkTargetHits();
+  check52WAlerts();
   const elapsed=((Date.now()-t0)/1000).toFixed(1);
   const now=new Date().toLocaleTimeString('en-IN');
   const lastEl=document.getElementById('lastRef');
@@ -8589,6 +8627,43 @@ function checkTargetHits() {
   });
 }
 
+// ── 52-Week High / Low Auto-Alerts ───────────────────────────────────────────
+// Fires once per session per holding — keyed in a Set to avoid repeat toasts.
+const _52wAlertFired = new Set();
+
+function check52WAlerts() {
+  if (!D.holdings.length) return;
+  let newHighCount = 0, nearLowCount = 0;
+  D.holdings.forEach(h => {
+    const ltp = h.ltp;
+    if (!ltp || !h.h52 || !h.l52) return;
+
+    // New 52-week high — breakout signal
+    const hiKey = `${h.id}-52hi`;
+    if (ltp >= h.h52 && !_52wAlertFired.has(hiKey)) {
+      _52wAlertFired.add(hiKey);
+      const msg = `🚀 ${h.symbol} at new 52W HIGH ₹${f(ltp)} — breakout. Review targets.`;
+      toast(msg, 'success');
+      addNotif(msg, 'target', h.symbol);
+      _sendPush(`🚀 ${h.symbol} — New 52W High`, msg, 'ss-52hi-'+h.symbol, '/');
+      _playAlertTone('target');
+      newHighCount++;
+    }
+
+    // Within 5% of 52-week low — danger zone
+    const loKey = `${h.id}-52lo`;
+    const pctFromLow = (ltp - h.l52) / h.l52 * 100;
+    if (pctFromLow <= 5 && pctFromLow >= -2 && !_52wAlertFired.has(loKey)) {
+      _52wAlertFired.add(loKey);
+      const msg = `⚠ ${h.symbol} near 52W LOW ₹${f(h.l52)} — only ${pctFromLow.toFixed(1)}% above. Check stop-loss.`;
+      toast(msg, 'error');
+      addNotif(msg, 'alert', h.symbol);
+      _sendPush(`⚠ ${h.symbol} — Near 52W Low`, msg, 'ss-52lo-'+h.symbol, '/');
+      nearLowCount++;
+    }
+  });
+}
+
 function addNotif(msg, type='info') {
   const arr = JSON.parse(localStorage.getItem('ss_notifs')||'[]');
   arr.unshift({ msg, type, ts: new Date().toISOString() });
@@ -9481,6 +9556,7 @@ async function loadSdChart(range, btn) {
   }
 
   _sdLastRange = range;
+  _sdLastSeries = series; // save for indicator re-render
   const intraday = ['1d','5d'].includes(range);
   const labels = series.map(p=>p.t.toLocaleDateString('en-IN',{day:'2-digit',month:'short',hour:intraday?'2-digit':undefined,minute:intraday?'2-digit':undefined}));
   const prices  = series.map(p=>p.c);
@@ -9610,6 +9686,8 @@ async function loadSdChart(range, btn) {
         scales:{ x:{display:false}, y:{display:false,max:maxV*1.5} } }
     });
   }
+  // Render any active indicators (RSI / MACD) with new series data
+  if (_sdActiveIndicators.size > 0) _renderActiveIndicators(series);
 }
 
 // Toggle between line and candlestick
@@ -9619,6 +9697,208 @@ function _toggleChartType() {
   if (btn) btn.innerHTML = _sdChartMode === 'candle' ? '📈 Line' : '🕯 Candles';
   const activeBtn = document.querySelector('.sd-tf.on');
   loadSdChart(_sdLastRange, activeBtn);
+}
+
+// ── Technical Indicator Computations ────────────────────────────────────────
+function _calcEMA(data, period) {
+  const k = 2 / (period + 1);
+  const ema = []; let prev = null;
+  for (const v of data) {
+    if (v == null) { ema.push(null); continue; }
+    prev = prev === null ? v : v * k + prev * (1 - k);
+    ema.push(prev);
+  }
+  return ema;
+}
+
+function _calcRSI(closes, period = 14) {
+  const result = new Array(closes.length).fill(null);
+  if (closes.length < period + 1) return result;
+  let gains = 0, losses = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d > 0) gains += d; else losses -= d;
+  }
+  gains /= period; losses /= period;
+  const rs0 = losses === 0 ? 100 : gains / losses;
+  result[period] = 100 - 100 / (1 + rs0);
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1];
+    gains  = (gains  * (period - 1) + Math.max(0,  d)) / period;
+    losses = (losses * (period - 1) + Math.max(0, -d)) / period;
+    const rs = losses === 0 ? 100 : gains / losses;
+    result[i] = 100 - 100 / (1 + rs);
+  }
+  return result;
+}
+
+function _calcMACD(closes, fast = 12, slow = 26, signal = 9) {
+  const emaFast   = _calcEMA(closes, fast);
+  const emaSlow   = _calcEMA(closes, slow);
+  const macdLine  = emaFast.map((f, i) => f != null && emaSlow[i] != null ? f - emaSlow[i] : null);
+  // Only feed non-null values into signal EMA, pad front with nulls
+  const validMacd = macdLine.filter(v => v != null);
+  const sigRaw    = _calcEMA(validMacd, signal);
+  const nullCount = macdLine.filter(v => v == null).length;
+  const sigLine   = [...new Array(nullCount).fill(null), ...sigRaw];
+  const histogram = macdLine.map((m, i) => m != null && sigLine[i] != null ? m - sigLine[i] : null);
+  return { macd: macdLine, signal: sigLine, histogram };
+}
+
+// ── Generic canvas panel renderer ───────────────────────────────────────────
+function _drawIndicatorPanel(canvasId, series, opts = {}) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const w = canvas.offsetWidth || canvas.parentElement?.offsetWidth || 400;
+  const h = canvas.offsetHeight || 70;
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+
+  const valid = series.main.filter(v => v != null);
+  if (!valid.length) return;
+
+  const isDark   = document.documentElement.getAttribute('data-theme') !== 'light';
+  const gridCol  = isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.06)';
+  const txtCol   = isDark ? '#4a5578' : '#94a3b8';
+  const n        = series.main.length;
+  const padT=6, padB=18, padL=4, padR=38;
+  const cW = w - padL - padR, cH = h - padT - padB;
+
+  const minV = opts.min ?? Math.min(...valid);
+  const maxV = opts.max ?? Math.max(...valid);
+  const range = maxV - minV || 1;
+  const toY   = v => padT + cH - ((v - minV) / range) * cH;
+  const toX   = i => padL + (i / (n - 1 || 1)) * cW;
+
+  // Reference lines (e.g. 70/30 for RSI, 0 for MACD)
+  if (opts.refLines) {
+    ctx.setLineDash([3, 4]); ctx.lineWidth = 1;
+    for (const { val, color } of opts.refLines) {
+      ctx.strokeStyle = color || gridCol;
+      const y = toY(val);
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+      ctx.fillStyle = txtCol; ctx.font = '8px JetBrains Mono,monospace'; ctx.textAlign = 'left';
+      ctx.fillText(String(val), w - padR + 3, y + 3);
+    }
+    ctx.setLineDash([]);
+  }
+
+  // Histogram bars (MACD histogram)
+  if (series.histogram) {
+    const hValid = series.histogram.filter(v => v != null);
+    const hMax   = Math.max(...hValid.map(Math.abs)) || 1;
+    const zero   = toY(Math.max(minV, 0));  // baseline
+    const bw     = Math.max(1, Math.floor(cW / n * 0.65));
+    series.histogram.forEach((v, i) => {
+      if (v == null) return;
+      ctx.fillStyle = v >= 0 ? 'rgba(45,211,111,.55)' : 'rgba(240,82,82,.55)';
+      const x  = toX(i);
+      const y  = toY(v);
+      const bh = Math.abs(zero - y) || 1;
+      ctx.fillRect(x - bw / 2, Math.min(y, zero), bw, bh);
+    });
+  }
+
+  // Main line
+  ctx.strokeStyle = opts.lineColor || '#4f8ef7';
+  ctx.lineWidth   = 1.8;
+  ctx.beginPath();
+  let started = false;
+  series.main.forEach((v, i) => {
+    if (v == null) { started = false; return; }
+    const coloring = opts.colorFn ? opts.colorFn(v) : null;
+    if (coloring) { ctx.stroke(); ctx.beginPath(); ctx.strokeStyle = coloring; started = false; }
+    if (!started) { ctx.moveTo(toX(i), toY(v)); started = true; }
+    else ctx.lineTo(toX(i), toY(v));
+  });
+  ctx.stroke();
+
+  // Signal line (MACD)
+  if (series.signal) {
+    ctx.strokeStyle = '#f97316'; ctx.lineWidth = 1.2; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); started = false;
+    series.signal.forEach((v, i) => {
+      if (v == null) { started = false; return; }
+      if (!started) { ctx.moveTo(toX(i), toY(v)); started = true; }
+      else ctx.lineTo(toX(i), toY(v));
+    });
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // Y axis labels (min/max + last value)
+  ctx.fillStyle = txtCol; ctx.font = '8px JetBrains Mono,monospace'; ctx.textAlign = 'left';
+  const lastVal = valid[valid.length - 1];
+  ctx.fillText(lastVal.toFixed(1), w - padR + 3, toY(lastVal) + 3);
+  if (opts.suffix) ctx.fillText(opts.suffix, w - padR + 3, padT + 8);
+}
+
+// ── Indicator toggle handler ─────────────────────────────────────────────────
+const _sdActiveIndicators = new Set();
+
+function _toggleIndicator(ind, btn) {
+  if (_sdActiveIndicators.has(ind)) {
+    _sdActiveIndicators.delete(ind);
+    btn.style.background = 'var(--s3)'; btn.style.color = 'var(--t3)'; btn.style.borderColor = 'var(--b2)';
+    const wrap = document.getElementById('sd-' + ind + '-wrap');
+    if (wrap) wrap.style.display = 'none';
+  } else {
+    _sdActiveIndicators.add(ind);
+    btn.style.background = 'var(--ac)'; btn.style.color = '#fff'; btn.style.borderColor = 'var(--ac)';
+    // Re-render with current series
+    _renderActiveIndicators(_sdLastSeries);
+  }
+}
+
+let _sdLastSeries = null; // saved after each loadSdChart call
+
+function _renderActiveIndicators(series) {
+  if (!series || series.length < 15) return;
+  _sdLastSeries = series;
+  const closes = series.map(p => p.c);
+
+  if (_sdActiveIndicators.has('rsi')) {
+    const rsi = _calcRSI(closes, 14);
+    const last = rsi.filter(v => v != null).slice(-1)[0];
+    const rsiValEl = document.getElementById('sd-rsi-val');
+    if (rsiValEl && last != null) {
+      rsiValEl.textContent = last.toFixed(1);
+      rsiValEl.style.color = last >= 70 ? 'var(--red)' : last <= 30 ? 'var(--grn)' : 'var(--t2)';
+    }
+    const wrap = document.getElementById('sd-rsi-wrap');
+    if (wrap) wrap.style.display = '';
+    _drawIndicatorPanel('sd-rsi-canvas', { main: rsi }, {
+      min: 0, max: 100,
+      lineColor: last >= 70 ? '#f05252' : last <= 30 ? '#2dd36f' : '#4f8ef7',
+      colorFn: v => v >= 70 ? '#f05252' : v <= 30 ? '#2dd36f' : '#4f8ef7',
+      refLines: [
+        { val: 70, color: 'rgba(240,82,82,.4)' },
+        { val: 30, color: 'rgba(45,211,111,.4)' },
+        { val: 50, color: 'rgba(255,255,255,.06)' },
+      ],
+    });
+  }
+
+  if (_sdActiveIndicators.has('macd')) {
+    const { macd, signal, histogram } = _calcMACD(closes);
+    const lastMacd = macd.filter(v => v != null).slice(-1)[0];
+    const lastSig  = signal.filter(v => v != null).slice(-1)[0];
+    const macdValEl = document.getElementById('sd-macd-val');
+    if (macdValEl && lastMacd != null) {
+      const cross = lastMacd > (lastSig ?? 0);
+      macdValEl.textContent = lastMacd.toFixed(2) + (lastSig != null ? ' / ' + lastSig.toFixed(2) : '');
+      macdValEl.style.color = cross ? 'var(--grn)' : 'var(--red)';
+    }
+    const wrap = document.getElementById('sd-macd-wrap');
+    if (wrap) wrap.style.display = '';
+    const allVals = [...macd, ...signal, ...histogram].filter(v => v != null);
+    const bound   = Math.max(...allVals.map(Math.abs)) * 1.1;
+    _drawIndicatorPanel('sd-macd-canvas', { main: macd, signal, histogram }, {
+      min: -bound, max: bound,
+      lineColor: '#22d3ee',
+      refLines: [{ val: 0, color: 'rgba(255,255,255,.1)' }],
+    });
+  }
 }
 
 function _sdPopulateStats(h, meta) {
@@ -10593,6 +10873,119 @@ function tlSnapshot() {
   tlSaveSnaps(snaps);
 }
 
+function renderPnlHeatmap(allSnaps) {
+  const el = document.getElementById('pnl-heatmap-grid');
+  if (!el) return;
+  if (!allSnaps || allSnaps.length < 2) {
+    el.innerHTML = '<div style="color:var(--t4);font-size:12px;padding:10px">Take at least 2 snapshots to see the heatmap.</div>';
+    return;
+  }
+
+  // Build date → daily P&L% map from consecutive snapshots
+  const sorted  = [...allSnaps].sort((a,b) => a.date.localeCompare(b.date));
+  const pnlByDate = {};
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i-1].value, cur = sorted[i].value;
+    if (prev > 0) pnlByDate[sorted[i].date] = (cur - prev) / prev * 100;
+  }
+
+  // Build a 52-week grid (Mon–Sun columns, week rows)
+  const today = new Date();
+  const startDate = new Date(today);
+  startDate.setDate(today.getDate() - 52 * 7);
+
+  // Find nearest Monday before startDate
+  const dow = startDate.getDay();
+  startDate.setDate(startDate.getDate() - (dow === 0 ? 6 : dow - 1));
+
+  const DAYS = ['M','T','W','T','F','S','S'];
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Collect weeks
+  const weeks = [];
+  let d = new Date(startDate);
+  while (d <= today) {
+    const week = [];
+    for (let i = 0; i < 7; i++) {
+      const iso = d.toISOString().split('T')[0];
+      week.push({ date: iso, pnl: pnlByDate[iso] ?? null, future: d > today });
+      d = new Date(d.getTime() + 86400000);
+    }
+    weeks.push(week);
+  }
+
+  // Month labels: find first week of each month
+  const monthLabels = {};
+  weeks.forEach((week, wi) => {
+    const m = parseInt(week[0].date.slice(5,7)) - 1;
+    if (!monthLabels[m]) monthLabels[m] = wi;
+  });
+
+  const cellSize = 13, gap = 2;
+  const cellColor = (pnl, future) => {
+    if (future || pnl === null) return 'var(--b2)';
+    if (pnl >= 2)    return '#16a34a';
+    if (pnl >= 0.5)  return '#2dd36f';
+    if (pnl >= 0)    return 'rgba(45,211,111,.35)';
+    if (pnl >= -0.5) return 'rgba(240,82,82,.35)';
+    if (pnl >= -2)   return '#f05252';
+    return '#b91c1c';
+  };
+
+  let html = '<div style="display:inline-block">';
+  // Month row
+  html += '<div style="display:flex;margin-left:24px;margin-bottom:3px">';
+  weeks.forEach((week, wi) => {
+    const m = parseInt(week[0].date.slice(5,7)) - 1;
+    if (monthLabels[m] === wi) {
+      html += `<div style="width:${cellSize+gap}px;font-size:9px;color:var(--t4);white-space:nowrap;overflow:visible">${MONTHS[m]}</div>`;
+    } else {
+      html += `<div style="width:${cellSize+gap}px"></div>`;
+    }
+  });
+  html += '</div>';
+
+  // Grid rows (Mon=0 … Sun=6)
+  html += '<div style="display:flex;gap:0">';
+  // Day labels
+  html += '<div style="display:flex;flex-direction:column;gap:'+gap+'px;margin-right:4px">';
+  DAYS.forEach((d,i) => {
+    html += `<div style="height:${cellSize}px;font-size:8px;color:var(--t4);line-height:${cellSize}px;text-align:right">${[0,2,4].includes(i)?d:''}</div>`;
+  });
+  html += '</div>';
+
+  // Weeks
+  weeks.forEach(week => {
+    html += `<div style="display:flex;flex-direction:column;gap:${gap}px;margin-right:${gap}px">`;
+    week.forEach(({ date, pnl, future }) => {
+      const bg = cellColor(pnl, future);
+      const tip = pnl !== null ? `${date}: ${pnl>=0?'+':''}${pnl.toFixed(2)}%` : date;
+      html += `<div title="${tip}" style="width:${cellSize}px;height:${cellSize}px;border-radius:2px;background:${bg};cursor:default"></div>`;
+    });
+    html += '</div>';
+  });
+
+  html += '</div></div>';
+
+  // Summary stats
+  const days = Object.values(pnlByDate);
+  const upDays   = days.filter(v => v > 0).length;
+  const downDays = days.filter(v => v <= 0).length;
+  const maxUp    = Math.max(...days);
+  const maxDown  = Math.min(...days);
+  const maxUpDate   = Object.keys(pnlByDate).find(k => pnlByDate[k] === maxUp);
+  const maxDownDate = Object.keys(pnlByDate).find(k => pnlByDate[k] === maxDown);
+
+  html += `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--t3)">
+    <span>🟢 <strong style="color:var(--grn)">${upDays}</strong> up days</span>
+    <span>🔴 <strong style="color:var(--red)">${downDays}</strong> down days</span>
+    <span>🏆 Best: <strong style="color:var(--grn)">${maxUpDate||'—'} (+${maxUp.toFixed(2)}%)</strong></span>
+    <span>💥 Worst: <strong style="color:var(--red)">${maxDownDate||'—'} (${maxDown.toFixed(2)}%)</strong></span>
+  </div>`;
+
+  el.innerHTML = html;
+}
+
 function renderTimeline() {
   const allSnaps = tlLoadSnaps();
   const rangeDays = parseInt(document.getElementById('tl-range')?.value || '365');
@@ -10600,6 +10993,7 @@ function renderTimeline() {
     ? new Date(Date.now() - rangeDays*86400000).toISOString().split('T')[0]
     : '0000-00-00';
   const snaps = allSnaps.filter(s=>s.date>=cutoff);
+  renderPnlHeatmap(allSnaps); // always show full history in heatmap
 
   const emptyEl = document.getElementById('tl-empty');
   const svgEl   = document.getElementById('tl-svg');
@@ -14002,6 +14396,134 @@ function buildHeatmap() {
     } else adv='⚠ <strong style="color:var(--yel)">Some concentration.</strong> Consider adding stocks from IT, Pharma, or FMCG to reduce portfolio correlation.';
     advEl.innerHTML = adv;
   }
+}
+
+// ── Live 90-Day Price Correlation Matrix ─────────────────────────────────────
+// Fetches 3-month daily close for all holdings in throttled batches,
+// computes pairwise Pearson correlation, then re-renders the heatmap grid.
+function _pearson(a, b) {
+  const n = Math.min(a.length, b.length);
+  if (n < 5) return null;
+  const ax = a.slice(-n), bx = b.slice(-n);
+  const meanA = ax.reduce((s,v)=>s+v,0)/n, meanB = bx.reduce((s,v)=>s+v,0)/n;
+  let num=0, da2=0, db2=0;
+  for (let i=0;i<n;i++) { const dA=ax[i]-meanA, dB=bx[i]-meanB; num+=dA*dB; da2+=dA*dA; db2+=dB*dB; }
+  const denom = Math.sqrt(da2*db2);
+  return denom < 1e-10 ? null : num/denom;
+}
+
+async function buildLiveCorrelation() {
+  const stocks = D.holdings.slice(0, 14);
+  if (!stocks.length) { toast('Add holdings first', 'error'); return; }
+
+  const btn      = document.getElementById('hm-live-btn');
+  const statusEl = document.getElementById('hm-live-status');
+  const srcEl    = document.getElementById('hm-matrix-src');
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Fetching…'; }
+  if (statusEl) { statusEl.style.display = ''; statusEl.textContent = `Fetching 90-day price series for ${stocks.length} holdings…`; }
+
+  // Fetch 3-month daily close in batches of 4 (avoids hammering the proxy)
+  const seriesMap = {};
+  for (let i = 0; i < stocks.length; i += 4) {
+    const batch = stocks.slice(i, i + 4);
+    await Promise.all(batch.map(async h => {
+      const yfSym = h.yfTicker || _symMapLookup(h.symbol) || (h.exchange==='BSE' ? h.symbol+'.BO' : h.symbol+'.NS');
+      try {
+        const s = await fetchYFSeries(yfSym, '3mo', '1d');
+        if (s && s.length >= 20) seriesMap[h.symbol] = s.map(p => p.c);
+      } catch(e) {}
+    }));
+    if (i + 4 < stocks.length) await new Promise(r => setTimeout(r, 300));
+  }
+
+  const fetched = stocks.filter(h => seriesMap[h.symbol]);
+  if (fetched.length < 2) {
+    if (statusEl) statusEl.textContent = '⚠ Could not fetch price data for enough holdings. Try again.';
+    if (btn) { btn.disabled = false; btn.textContent = '📡 Live 90D'; }
+    return;
+  }
+  if (statusEl) statusEl.textContent = `✅ 90-day data loaded for ${fetched.length}/${stocks.length} holdings. Correlation based on daily returns.`;
+  if (srcEl) srcEl.textContent = `Live 90-day price correlation · ${new Date().toLocaleDateString('en-IN')}`;
+
+  // Convert closes → daily returns for correlation
+  const returns = {};
+  for (const h of fetched) {
+    const c = seriesMap[h.symbol];
+    returns[h.symbol] = c.slice(1).map((v, i) => (v - c[i]) / (c[i] || 1));
+  }
+
+  // Compute correlation matrix using real data
+  const n = fetched.length;
+  const corrMatrix = {};
+  let allCorr = [], pairs = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const a = fetched[i].symbol, b = fetched[j].symbol;
+      if (i === j) { corrMatrix[a+':'+b] = 1; continue; }
+      if (corrMatrix[b+':'+a] !== undefined) { corrMatrix[a+':'+b] = corrMatrix[b+':'+a]; continue; }
+      const r = _pearson(returns[a], returns[b]) ?? 0;
+      corrMatrix[a+':'+b] = r;
+      if (j > i) { allCorr.push(r); pairs.push({ a, b, c: r, sa: fetched[i].sector, sb: fetched[j].sector }); }
+    }
+  }
+
+  const avgCorr  = allCorr.reduce((s,v)=>s+v,0)/(allCorr.length||1);
+  const highPairs = pairs.filter(p => p.c >= 0.65);
+  const divScore  = Math.round(Math.max(0, Math.min(100, (1 - avgCorr) * 100)));
+  const divLabel  = divScore>=75?'Excellent':divScore>=60?'Good':divScore>=45?'Moderate':'Concentrated';
+  const divColor  = divScore>=75?'var(--grn)':divScore>=60?'var(--ac)':divScore>=45?'var(--yel)':'var(--red)';
+
+  // Update stat cards
+  const setEl = (id, val, col) => { const el=document.getElementById(id); if(el){el.textContent=val;if(col)el.style.color=col;} };
+  setEl('hm-div-score',  divScore+'/100', divColor);
+  setEl('hm-div-label',  divLabel+' diversification');
+  setEl('hm-avg-corr',   avgCorr.toFixed(2), avgCorr<=0.35?'var(--grn)':avgCorr<=0.55?'var(--yel)':'var(--red)');
+  setEl('hm-high-pairs', highPairs.length,   highPairs.length?'var(--red)':'var(--grn)');
+
+  // Render matrix
+  let tbl = '<table class="hm-table"><tr><td class="hm-corner"></td>';
+  fetched.forEach(h => tbl += `<td class="hm-top-lbl" title="${h.sector||'—'}">${h.symbol.slice(0,6)}</td>`);
+  tbl += '</tr>';
+  fetched.forEach((a,i) => {
+    tbl += `<tr><td class="hm-label">${a.symbol.slice(0,6)}</td>`;
+    fetched.forEach((b,j) => {
+      const c = corrMatrix[a.symbol+':'+b.symbol] ?? 0;
+      const bg  = i===j ? 'rgba(79,142,247,.2)' : corrColor(c);
+      const txt = i===j ? '—' : c.toFixed(2);
+      const col = i===j ? 'var(--ac)' : c>=0.65?'#fff':'var(--t2)';
+      tbl += `<td class="hm-cell" style="background:${bg};color:${col}" title="${a.symbol} ↔ ${b.symbol}: ${c.toFixed(2)}">${txt}</td>`;
+    });
+    tbl += '</tr>';
+  });
+  tbl += '</table>';
+  document.getElementById('hm-grid').innerHTML = tbl;
+
+  // High-risk pairs
+  const riskEl = document.getElementById('hm-risk-pairs');
+  if (riskEl) riskEl.innerHTML = highPairs.length
+    ? highPairs.sort((a,b)=>b.c-a.c).map(p=>`<div class="alrt-row">
+        <span class="alrt-sym">${p.a}</span><span style="font-size:11px;color:var(--t3)">↔</span>
+        <span class="alrt-sym">${p.b}</span>
+        <span style="flex:1;font-size:11px;color:var(--t4)">${p.sa||'—'} / ${p.sb||'—'}</span>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${p.c>=0.8?'var(--red)':'var(--yel)'}">${p.c.toFixed(2)}</span>
+      </div>`).join('')
+    : '<div style="color:var(--grn);font-size:12px;padding:16px">✅ No high-correlation pairs — portfolio is well diversified.</div>';
+
+  // Advice
+  const advEl = document.getElementById('hm-advice');
+  if (advEl) {
+    let adv;
+    if (divScore >= 75) adv = '✅ <strong style="color:var(--grn)">Excellent diversification.</strong> Holdings move independently — true risk reduction.';
+    else if (divScore >= 60) adv = '👍 <strong style="color:var(--ac)">Good diversification.</strong> Minor co-movement but overall risk is managed.';
+    else if (highPairs.length) {
+      const tp = highPairs[0];
+      adv = `⚠ <strong style="color:var(--yel)">Concentration risk detected.</strong> ${tp.a} ↔ ${tp.b} have ${tp.c.toFixed(2)} 90-day correlation — they will likely fall together in a downturn. Consider trimming one or hedging with an uncorrelated sector.`;
+    } else adv = '⚠ <strong style="color:var(--yel)">Moderate concentration.</strong> Add stocks from uncorrelated sectors (Pharma, IT, FMCG) to reduce drawdown risk.';
+    advEl.innerHTML = adv;
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = '📡 Live 90D'; }
 }
 
 // ── AI Busy Badge ─────────────────────────────────────────────────────────
