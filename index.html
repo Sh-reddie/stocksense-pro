@@ -1311,8 +1311,18 @@ textarea.fi{resize:vertical;min-height:70px;}
           </div>
         </div>
       </div>
-      <!-- Right: Indices + Action alerts -->
+      <!-- Right: Indices + Market Breadth + Action alerts -->
       <div id="ds-right">
+        <!-- Market Breadth -->
+        <div class="pn" style="margin-bottom:14px" id="ds-breadth-pn">
+          <div class="pn-h">
+            <div class="pn-t">📊 Market Breadth</div>
+            <button class="btn btn-g btn-sm" onclick="fetchMarketBreadth()">↻</button>
+          </div>
+          <div id="ds-breadth-body" style="padding:12px 14px">
+            <div style="color:var(--t4);font-size:11px">Loading breadth data…</div>
+          </div>
+        </div>
         <!-- Indices -->
         <div class="pn" style="margin-bottom:14px">
           <div class="pn-h"><div class="pn-t">📉 Indices</div><button class="btn btn-g btn-sm" onclick="fetchIndices()">↻</button></div>
@@ -1603,7 +1613,7 @@ textarea.fi{resize:vertical;min-height:70px;}
   <!-- ═══ TAX ═══════════════════════════════════════ -->
   <div class="sec" id="sec-tax">
     <div class="sec-head"><div class="sec-title">Tax P&L Report</div><div style="display:flex;gap:8px;flex-wrap:wrap"><select class="fi" id="tax-fy" style="width:150px" onchange="renderTax()"><option value="2025-26">FY 2025-26</option><option value="2024-25">FY 2024-25</option></select><button class="btn btn-g" onclick="exportTaxCSV()">⬇ CSV</button><button class="btn btn-g" onclick="exportExcel()" title="Full portfolio Excel for CA">📊 Excel</button><button class="btn btn-p" onclick="exportPDF()" title="One-page PDF report with tax summary for CA — browser Print to save">🖨 PDF for CA</button><button class="btn btn-g btn-sm" onclick="genTaxAI()">🤖 Tax Advisory</button></div></div>
-    <div class="tabs"><div class="tab on" onclick="stab('tx','tax-main')">📊 P&amp;L Report</div><div class="tab" onclick="stab('tx','tax-harvest');renderTaxHarvesting()">🌾 Harvesting</div><div class="tab" onclick="stab('tx','tax-optimizer');renderTaxOptimizer()" style="font-weight:600;color:var(--ac)">🧮 AI Optimizer</div><div class="tab" onclick="stab('tx','tax-ltcg-cal');renderLtcgCalendar()" style="font-weight:700;color:var(--yel)">📅 LTCG Calendar</div></div>
+    <div class="tabs"><div class="tab on" onclick="stab('tx','tax-main')">📊 P&amp;L Report</div><div class="tab" onclick="stab('tx','tax-harvest');renderTaxHarvesting();renderSmartHarvesting()">🌾 Harvesting</div><div class="tab" onclick="stab('tx','tax-optimizer');renderTaxOptimizer()" style="font-weight:600;color:var(--ac)">🧮 AI Optimizer</div><div class="tab" onclick="stab('tx','tax-ltcg-cal');renderLtcgCalendar()" style="font-weight:700;color:var(--yel)">📅 LTCG Calendar</div></div>
     <div id="tax-main" class="tp on">
       <div class="sg sg-4 gap">
         <div class="sc c4"><div class="sc-lbl">STCG (&lt;12m)</div><div class="sc-val" id="tax-stcg" style="color:var(--orn)">₹0</div><div class="sc-sub" style="color:var(--orn)">Tax @ 20%</div></div>
@@ -1617,6 +1627,14 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="pn"><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Stock</th><th>Qty</th><th>Buy Date</th><th>Sell Date</th><th>Days</th><th>Buy Value</th><th>Sell Value</th><th>P&L</th><th>Type</th><th>Est. Tax</th></tr></thead><tbody id="tax-tbody"><tr><td colspan="10" style="text-align:center;padding:40px;color:var(--t4)">No trades for selected FY.</td></tr></tbody></table></div></div>
     </div>
     <div id="tax-harvest" class="tp">
+      <!-- Smart gain-offset suggestions — rendered at top before existing harvest table -->
+      <div class="pn" style="margin-bottom:16px">
+        <div class="pn-h">
+          <div class="pn-t">🎯 Smart Gain-Offset Suggestions</div>
+          <button class="btn btn-g btn-sm" onclick="renderSmartHarvesting()">↻ Recalculate</button>
+        </div>
+        <div class="pn-b" id="smart-harvest-wrap" style="padding:0"><div style="padding:20px;color:var(--t4);font-size:12px">Click Recalculate to see offset suggestions for this FY.</div></div>
+      </div>
       <div id="tax-harvest-content"><div style="padding:40px;text-align:center;color:var(--t4)">Loading...</div></div>
     </div>
     <div id="tax-optimizer" class="tp">
@@ -1704,7 +1722,15 @@ textarea.fi{resize:vertical;min-height:70px;}
             <option value="below">Price goes BELOW ₹</option>
           </select>
         </div>
-        <div class="fg" style="margin-bottom:16px"><label class="fl">Target Price (₹)</label><input class="fi" id="alrt-m-price" type="number" placeholder="e.g. 2500"></div>
+        <div class="fg" style="margin-bottom:10px"><label class="fl">Target Price (₹)</label><input class="fi" id="alrt-m-price" type="number" placeholder="e.g. 2500"></div>
+        <div class="fg" style="margin-bottom:16px">
+          <label class="fl">Alert Mode</label>
+          <select class="fi" id="alrt-m-mode">
+            <option value="once">Fire once — mark done after first trigger</option>
+            <option value="every">Recurring — fire every time price crosses</option>
+          </select>
+          <div style="font-size:10px;color:var(--t4);margin-top:4px">Recurring alerts re-arm when price moves away, then fire again on next cross.</div>
+        </div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button class="btn btn-g" onclick="document.getElementById('alrt-modal').style.display='none'">Cancel</button>
           <button class="btn btn-p" onclick="saveCustomAlert()">Save Alert</button>
@@ -1778,6 +1804,16 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="pn-b" style="font-size:12px;line-height:2;color:var(--t2)">
           <div style="display:flex;flex-direction:column;gap:6px" id="cal-market-events"></div>
         </div>
+      </div>
+    </div>
+    <!-- F&O Expiry Calendar -->
+    <div class="pn" style="margin-top:14px">
+      <div class="pn-h">
+        <div class="pn-t">⚡ F&O Expiry for Your Holdings</div>
+        <span style="font-size:10px;color:var(--t4)" id="fo-expiry-updated"></span>
+      </div>
+      <div class="pn-b" id="fo-expiry-body">
+        <div style="color:var(--t4);font-size:11px">Loading F&O expiry data…</div>
       </div>
     </div>
     <!-- Event add modal -->
@@ -1956,19 +1992,27 @@ textarea.fi{resize:vertical;min-height:70px;}
           </div>
         </div>
         <div class="pn">
-          <div class="pn-h"><div class="pn-t">📖 Kelly Criterion Guide</div></div>
-          <div class="pn-b" style="font-size:12px;line-height:1.9;color:var(--t2)">
-            <strong style="color:var(--t1)">How it works:</strong><br>
-            Position size = (Portfolio × Risk%) ÷ (Entry − Stop Loss)<br><br>
-            <strong style="color:var(--t1)">Rule of thumb for aggressive traders:</strong><br>
-            • Never risk &gt;2% per trade<br>
-            • Never put &gt;10% in one stock<br>
-            • Keep 20-30% in cash for averaging down<br><br>
-            <strong style="color:var(--t1)">For mid/small caps specifically:</strong><br>
-            • Reduce position size by 30-40% vs large caps<br>
-            • Stop-loss is non-negotiable — illiquid stocks gap down<br>
-            • Add in tranches: 50% entry, 25% on dip, 25% on confirmation<br><br>
-            <div style="background:rgba(79,142,247,.08);border:1px solid rgba(79,142,247,.2);border-radius:8px;padding:10px;font-size:11px;color:var(--t3)">⚠ This is a mathematical tool, not a guarantee. Always manage your total portfolio risk.</div>
+          <div class="pn-h"><div class="pn-t">🎲 Kelly Criterion Calculator</div><span style="font-size:10px;color:var(--t4)">Mathematically optimal position size</span></div>
+          <div class="pn-b">
+            <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
+              <div class="fg" style="margin-bottom:0"><label class="fl">Entry Price (₹)</label><input class="fi" id="kc-entry" type="number" placeholder="e.g. 2850" oninput="calcKelly()"></div>
+              <div class="fg" style="margin-bottom:0"><label class="fl">Stop Loss (₹)</label><input class="fi" id="kc-sl" type="number" placeholder="e.g. 2650" oninput="calcKelly()"></div>
+              <div class="fg" style="margin-bottom:0"><label class="fl">Target Price (₹)</label><input class="fi" id="kc-target" type="number" placeholder="e.g. 3200" oninput="calcKelly()"></div>
+              <div class="fg" style="margin-bottom:0">
+                <label class="fl">Win Probability % <span style="color:var(--t4);font-weight:400">(your estimate)</span></label>
+                <input class="fi" id="kc-winp" type="number" value="55" min="1" max="99" oninput="calcKelly()">
+                <div style="font-size:10px;color:var(--t4);margin-top:3px">Use AI confidence score if available. 55% is a realistic base for most setups.</div>
+              </div>
+              <div class="fg" style="margin-bottom:0">
+                <label class="fl">Portfolio Size (₹)</label>
+                <input class="fi" id="kc-port" type="number" placeholder="e.g. 500000" oninput="calcKelly()">
+              </div>
+            </div>
+            <div id="kc-result" style="display:none">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px" id="kc-cards"></div>
+              <div id="kc-advice" style="font-size:11px;line-height:1.7;color:var(--t3);background:var(--s3);border-radius:8px;padding:10px"></div>
+            </div>
+            <div id="kc-empty" style="font-size:11px;color:var(--t4);padding:8px 0">Enter entry, stop loss, target and win probability to calculate.</div>
           </div>
         </div>
       </div>
@@ -5143,8 +5187,8 @@ function go(id) {
   if(id==='order-history') renderOrderHistory();
   if(id==='pf-heatmap') renderPfHeatmap();
   if(id==='alerts') renderAlerts();
-  if(id==='notifications') renderNotifs();
-  if(id==='calendar') renderCalendar();
+  if(id==='notifications') { renderNotifs(); setTimeout(()=>{ markAllNotifsRead(); renderNotifs(); }, 1500); }
+  if(id==='calendar') { renderCalendar(); renderFoExpiry(); }
   if(id==='benchmark') loadBenchmark();
   if(id==='planner') { calcPositionSize(); calcSIP(); renderPsConc(); }
   if(id==='heatmap') buildHeatmap();
@@ -6332,6 +6376,86 @@ function _ixRestoreCache() {
     const panel = document.getElementById('idx-panel');
     if (panel && panel.innerHTML.includes('Loading')) panel.innerHTML = restoredHtml;
   }
+}
+
+// ── Market Breadth Widget ─────────────────────────────────────────────────────
+// Fetches a representative basket of NSE large+mid caps, counts advances/declines.
+// Uses the same /api/quote proxy — no extra API needed.
+const BREADTH_BASKET = 'RELIANCE.NS,TCS.NS,HDFCBANK.NS,INFY.NS,ICICIBANK.NS,HINDUNILVR.NS,ITC.NS,SBIN.NS,BHARTIARTL.NS,KOTAKBANK.NS,LT.NS,AXISBANK.NS,BAJFINANCE.NS,ASIANPAINT.NS,MARUTI.NS,TITAN.NS,SUNPHARMA.NS,ULTRACEMCO.NS,NESTLEIND.NS,WIPRO.NS,HCLTECH.NS,POWERGRID.NS,NTPC.NS,ONGC.NS,COALINDIA.NS,JSWSTEEL.NS,TATASTEEL.NS,DIVISLAB.NS,DRREDDY.NS,CIPLA.NS';
+
+let _breadthCache = null, _breadthCacheTs = 0;
+
+async function fetchMarketBreadth() {
+  const el = document.getElementById('ds-breadth-body');
+  if (!el) return;
+
+  // 5-min cache
+  if (_breadthCache && (Date.now() - _breadthCacheTs) < 5 * 60000) {
+    _renderBreadth(_breadthCache);
+    return;
+  }
+
+  el.innerHTML = '<div style="color:var(--t4);font-size:11px">↻ Fetching breadth…</div>';
+  try {
+    const r = await fetch(`/api/quote?symbols=${encodeURIComponent(BREADTH_BASKET)}`, { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) throw new Error('quote failed');
+    const d = await r.json();
+    const results = d?.quoteResponse?.result || [];
+    if (results.length >= 10) {
+      _breadthCache = results;
+      _breadthCacheTs = Date.now();
+      _renderBreadth(results);
+    } else {
+      el.innerHTML = '<div style="color:var(--t4);font-size:11px">Breadth unavailable — market may be closed</div>';
+    }
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--t4);font-size:11px">Could not fetch breadth data</div>';
+  }
+}
+
+function _renderBreadth(results) {
+  const el = document.getElementById('ds-breadth-body');
+  if (!el) return;
+  const advances = results.filter(q => (q.regularMarketChangePercent||0) > 0);
+  const declines  = results.filter(q => (q.regularMarketChangePercent||0) < 0);
+  const unchanged = results.filter(q => (q.regularMarketChangePercent||0) === 0);
+  const total = results.length;
+  const advPct = Math.round(advances.length / total * 100);
+  const sentiment = advances.length / total >= 0.65 ? { label:'Broad Rally', col:'var(--grn)' }
+                  : advances.length / total <= 0.35 ? { label:'Broad Sell-off', col:'var(--red)' }
+                  : advances.length >= declines.length ? { label:'Mild Positive', col:'var(--ac)' }
+                  : { label:'Mild Negative', col:'var(--yel)' };
+  const avgChg = (results.reduce((s,q)=>s+(q.regularMarketChangePercent||0),0)/total).toFixed(2);
+  const top3up   = [...advances].sort((a,b)=>(b.regularMarketChangePercent||0)-(a.regularMarketChangePercent||0)).slice(0,3);
+  const top3dn   = [...declines].sort((a,b)=>(a.regularMarketChangePercent||0)-(b.regularMarketChangePercent||0)).slice(0,3);
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <span style="font-size:12px;font-weight:700;color:${sentiment.col}">${sentiment.label}</span>
+      <span style="font-size:10px;color:var(--t4)">· Avg ${avgChg >= 0 ? '+' : ''}${avgChg}%</span>
+    </div>
+    <!-- A/D bar -->
+    <div style="display:flex;gap:2px;height:8px;border-radius:4px;overflow:hidden;margin-bottom:6px">
+      <div style="flex:${advances.length};background:var(--grn)"></div>
+      <div style="flex:${unchanged.length || 0.1};background:var(--t4)"></div>
+      <div style="flex:${declines.length};background:var(--red)"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:10px">
+      <span style="color:var(--grn);font-weight:700">▲ ${advances.length} (${advPct}%)</span>
+      <span style="color:var(--t4)">${unchanged.length} flat</span>
+      <span style="color:var(--red);font-weight:700">▼ ${declines.length} (${100-advPct}%)</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:10.5px">
+      <div>
+        <div style="font-size:9px;color:var(--t4);text-transform:uppercase;font-weight:600;margin-bottom:3px">Top Gainers</div>
+        ${top3up.map(q=>`<div style="display:flex;justify-content:space-between"><span>${(q.symbol||'').replace('.NS','')}</span><span style="color:var(--grn);font-family:var(--mono)">+${(q.regularMarketChangePercent||0).toFixed(1)}%</span></div>`).join('')}
+      </div>
+      <div>
+        <div style="font-size:9px;color:var(--t4);text-transform:uppercase;font-weight:600;margin-bottom:3px">Top Losers</div>
+        ${top3dn.map(q=>`<div style="display:flex;justify-content:space-between"><span>${(q.symbol||'').replace('.NS','')}</span><span style="color:var(--red);font-family:var(--mono)">${(q.regularMarketChangePercent||0).toFixed(1)}%</span></div>`).join('')}
+      </div>
+    </div>
+    <div style="font-size:9px;color:var(--t4);margin-top:8px">Sample: ${total} NSE large/mid cap stocks</div>`;
 }
 
 async function fetchIndices() {
@@ -8672,7 +8796,7 @@ function check52WAlerts() {
       _52wAlertFired.add(hiKey);
       const msg = `🚀 ${h.symbol} at new 52W HIGH ₹${f(ltp)} — breakout. Review targets.`;
       toast(msg, 'success');
-      addNotif(msg, 'target', h.symbol);
+      addNotif('target', msg, h.symbol);
       _sendPush(`🚀 ${h.symbol} — New 52W High`, msg, 'ss-52hi-'+h.symbol, '/');
       _playAlertTone('target');
       newHighCount++;
@@ -8685,7 +8809,7 @@ function check52WAlerts() {
       _52wAlertFired.add(loKey);
       const msg = `⚠ ${h.symbol} near 52W LOW ₹${f(h.l52)} — only ${pctFromLow.toFixed(1)}% above. Check stop-loss.`;
       toast(msg, 'error');
-      addNotif(msg, 'alert', h.symbol);
+      addNotif('alert', msg, h.symbol);
       _sendPush(`⚠ ${h.symbol} — Near 52W Low`, msg, 'ss-52lo-'+h.symbol, '/');
       nearLowCount++;
     }
@@ -8709,7 +8833,7 @@ function checkWatchlistTriggers() {
       _wlTriggerFired.add(enterKey);
       const msg = `🎯 ${w.symbol} is in your entry zone (ENTER NOW) — LTP ₹${f(ltp)}. ${w.wlWhyEnter||''}`;
       toast(msg, 'success');
-      addNotif(msg, 'target', w.symbol);
+      addNotif('target', msg, w.symbol);
       _sendPush(`🎯 ${w.symbol} — Entry Signal`, msg, 'ss-wl-entry-'+w.symbol, '/');
       _playAlertTone('target');
     }
@@ -8722,19 +8846,14 @@ function checkWatchlistTriggers() {
       _wlTriggerFired.add(pullbackKey);
       const msg = `📉 ${w.symbol} pulled back to entry zone ₹${w.wlEntryLow}–₹${w.wlEntryHigh} — LTP ₹${f(ltp)}. ${w.wlWhyEnter||'Consider entering.'}`;
       toast(msg, 'success');
-      addNotif(msg, 'target', w.symbol);
+      addNotif('target', msg, w.symbol);
       _sendPush(`📉 ${w.symbol} — Entry Zone Hit`, msg, 'ss-wl-pb-'+w.symbol, '/');
       _playAlertTone('target');
     }
   });
 }
 
-function addNotif(msg, type='info') {
-  const arr = JSON.parse(localStorage.getItem('ss_notifs')||'[]');
-  arr.unshift({ msg, type, ts: new Date().toISOString() });
-  localStorage.setItem('ss_notifs', JSON.stringify(arr.slice(0,100)));
-  if(typeof renderNotifs==='function') renderNotifs();
-}
+// addNotif duplicate removed — canonical version lives above (uses D.notifs + updateNotifBadge)
 
 // ═══════════════════════════════════════════════════
 // NIFTY 50 BENCHMARK XIRR
@@ -8919,6 +9038,79 @@ function renderFYSummary() {
 // ═══════════════════════════════════════════════════
 // SIP NEXT DATE HELPER
 // ═══════════════════════════════════════════════════
+// ── SIP Due-Date Reminder + Allocation Drift Alert ───────────────────────────
+// Runs once on app load. Fires toast + notification for:
+//   1. Any SIP due within 3 days
+//   2. Any holding whose actual weight drifted >5% from SIP target weight
+function checkSipReminders() {
+  const sips = typeof getSips === 'function' ? getSips() : [];
+  if (!sips.length) return;
+
+  const today = new Date();
+  const reminded = new Set(JSON.parse(localStorage.getItem('ss_sip_reminded_today')||'[]'));
+  const todayStr = today.toISOString().split('T')[0];
+
+  // Reset reminder set if it's from a previous day
+  const lastReminderDay = localStorage.getItem('ss_sip_reminder_day');
+  if (lastReminderDay !== todayStr) {
+    reminded.clear();
+    localStorage.setItem('ss_sip_reminder_day', todayStr);
+  }
+
+  sips.forEach(s => {
+    if (s.freq === 'One-time') return;
+    const start = new Date(s.startDate);
+    const daysSince = Math.max(0, (today - start) / 864e5);
+    let instDone = s.freq === 'Monthly' ? Math.floor(daysSince / 30) + 1 : Math.floor(daysSince / 7) + 1;
+    instDone = Math.min(instDone, s.instalments);
+    if (instDone >= s.instalments) return;
+
+    const nextD = new Date(start);
+    if (s.freq === 'Monthly') nextD.setMonth(nextD.getMonth() + instDone);
+    else nextD.setDate(nextD.getDate() + instDone * 7);
+    const daysAway = Math.round((nextD - today) / 864e5);
+
+    const remKey = `${s.id}-${todayStr}`;
+    if (daysAway >= 0 && daysAway <= 3 && !reminded.has(remKey)) {
+      reminded.add(remKey);
+      const when = daysAway === 0 ? 'TODAY' : `in ${daysAway} day${daysAway > 1 ? 's' : ''}`;
+      const msg = `🔄 SIP due ${when}: ${s.sym} — ₹${fI(s.amt)} (${s.freq}) on ${nextD.toLocaleDateString('en-IN',{day:'numeric',month:'short'})}`;
+      toast(msg, 'info');
+      addNotif('info', msg, s.sym);
+    }
+  });
+  localStorage.setItem('ss_sip_reminded_today', JSON.stringify([...reminded]));
+
+  // ── Allocation drift check ────────────────────────────────────────────────
+  // If total SIP allocation per stock differs >5% from actual portfolio weight
+  const totalSipAmt = sips.reduce((s, x) => s + (x.freq !== 'One-time' ? x.amt : 0), 0);
+  if (!totalSipAmt) return;
+
+  const totalPortVal = D.holdings.reduce((s, h) => s + h.qty * (h.ltp || h.avgPrice || 0), 0);
+  if (!totalPortVal) return;
+
+  const driftAlerted = new Set(JSON.parse(localStorage.getItem('ss_drift_alerted')||'[]'));
+
+  sips.forEach(s => {
+    if (s.freq === 'One-time') return;
+    const targetWt  = (s.amt / totalSipAmt) * 100;
+    const h = D.holdings.find(x => x.symbol === s.sym);
+    if (!h) return;
+    const actualWt  = (h.qty * (h.ltp || h.avgPrice || 0)) / totalPortVal * 100;
+    const drift     = Math.abs(actualWt - targetWt);
+    const driftKey  = `${s.sym}-${todayStr}`;
+
+    if (drift > 5 && !driftAlerted.has(driftKey)) {
+      driftAlerted.add(driftKey);
+      const dir = actualWt > targetWt ? 'overweight' : 'underweight';
+      const msg = `⚖ Allocation drift: ${s.sym} is ${drift.toFixed(1)}% ${dir} vs SIP target (actual ${actualWt.toFixed(1)}% vs target ${targetWt.toFixed(1)}%)`;
+      toast(msg, 'warn');
+      addNotif('warn', msg, s.sym);
+    }
+  });
+  localStorage.setItem('ss_drift_alerted', JSON.stringify([...driftAlerted]));
+}
+
 function sipNextDate(s) {
   const start = new Date(s.startDate);
   const today = new Date();
@@ -11836,6 +12028,8 @@ function init(){
     renderNews();
   }, 300);
   setTimeout(() => fetchIndices(), 1800);
+  setTimeout(() => fetchMarketBreadth(), 3000); // fetch breadth after indices
+  setTimeout(() => checkSipReminders(), 4000);  // SIP reminders after data is loaded
 
   setupRefresh();
 }
@@ -13598,7 +13792,35 @@ function checkAlerts() {
     const h = D.holdings.find(x => x.symbol === a.sym) || D.watchlist.find(x => x.symbol === a.sym);
     const ltp = h ? (h.ltp || h.avgPrice || 0) : 0;
     if(!ltp) return;
+    const isRecurring = a.mode === 'every';
     const triggered = a.type === 'above' ? ltp >= a.price : ltp <= a.price;
+
+    // For recurring alerts: fire every time price crosses, but not on consecutive checks
+    // We track whether price was "inside" the zone last check to avoid spam
+    if (isRecurring) {
+      const wasTriggered = a._lastState === 'triggered';
+      const nowTriggered = triggered;
+      if (nowTriggered && !wasTriggered) {
+        // Price just crossed — fire
+        a._lastState = 'triggered';
+        a.triggeredAt = new Date().toISOString();
+        a.triggerCount = (a.triggerCount || 0) + 1;
+        hitCount++;
+        const dir = a.type === 'above' ? '▲' : '▼';
+        const msg = `${dir} ${a.sym} — ${a.label} hit! ₹${ltp.toFixed(2)} ${a.type==='above'?'≥':'≤'} ₹${a.price} (×${a.triggerCount})`;
+        toast(msg, a.type === 'below' ? 'error' : 'success');
+        addNotif('alert', msg, a.sym);
+        if (a.label === 'Stop Loss') playSL = true;
+        else if (a.label?.startsWith('Target')) playTarget = true;
+        if('Notification' in window && Notification.permission === 'granted') new Notification('StockSense Alert', { body: msg, icon: '/icon-192.png' });
+        _sendPush(`🔔 ${a.sym} Alert`, msg, 'ss-price-alert-'+Date.now(), '/?tab=alerts');
+      } else if (!nowTriggered) {
+        a._lastState = 'clear'; // price moved away — next cross will fire again
+      }
+      return;
+    }
+
+    // Standard one-shot alert
     if(triggered && !a.triggered) {
       a.triggered = true; a.triggeredAt = new Date().toISOString(); hitCount++;
       const dir  = a.type === 'above' ? '▲' : '▼';
@@ -13607,13 +13829,10 @@ function checkAlerts() {
       addNotif('alert', msg, a.sym);
       if (a.label === 'Stop Loss') playSL = true;
       else if (a.label?.startsWith('Target')) playTarget = true;
-      // Browser notification (tab open)
       if('Notification' in window && Notification.permission === 'granted') new Notification('StockSense Alert', { body: msg, icon: '/icon-192.png' });
-      // Push notification (even when tab closed)
       _sendPush(`🔔 ${a.sym} Alert`, msg, 'ss-price-alert', '/?tab=alerts');
     }
   });
-  // Play tone after processing all alerts (one tone even if multiple fire)
   if (playSL) _playAlertTone('sl');
   else if (playTarget) _playAlertTone('target');
   saveAlerts(alerts);
@@ -13644,11 +13863,15 @@ function renderAlerts() {
     const dist = ltp ? ((a.price - ltp) / ltp * 100) : null;
     const distAbs = dist !== null ? Math.abs(dist).toFixed(1) : '—';
     const distClass = a.triggered ? 'hit' : (Math.abs(dist) <= 3 ? 'near' : 'far');
-    const typeClass = a.label==='Stop Loss' ? 'alrt-tp-sl' : a.label==='Target 1' ? 'alrt-tp-t1' : a.label==='Target 2' ? 'alrt-tp-t2' : 'alrt-tp-cu';
-    const status = a.triggered ? '<span style="color:var(--grn);font-size:10px">✓ Triggered</span>' : `<span class="alrt-dist ${distClass}">${dist!==null?(a.type==='above'?'+':'')+distAbs+'% away':'—'}</span>`;
+    const baseLabel = a.label.replace(' 🔁','');
+    const typeClass = baseLabel==='Stop Loss' ? 'alrt-tp-sl' : baseLabel==='Target 1' ? 'alrt-tp-t1' : baseLabel==='Target 2' ? 'alrt-tp-t2' : 'alrt-tp-cu';
+    const recurBadge = a.mode==='every' ? `<span title="Recurring — fires every time price crosses" style="font-size:9px;color:var(--cyn);margin-left:3px">🔁${a.triggerCount>0?' ×'+a.triggerCount:''}</span>` : '';
+    const status = (a.mode==='every')
+      ? `<span class="alrt-dist ${a._lastState==='triggered'?'near':'far'}">${a._lastState==='triggered'?'● Active':'○ Watching'}${a.triggerCount>0?' (×'+a.triggerCount+')':''}</span>`
+      : a.triggered ? '<span style="color:var(--grn);font-size:10px">✓ Triggered</span>' : `<span class="alrt-dist ${distClass}">${dist!==null?(a.type==='above'?'+':'')+distAbs+'% away':'—'}</span>`;
     return `<div class="alrt-row">
       <span class="alrt-sym">${a.sym}</span>
-      <span class="alrt-type ${typeClass}">${a.label}</span>
+      <span class="alrt-type ${typeClass}">${baseLabel}${recurBadge}</span>
       <span class="alrt-val">${a.type==='above'?'↑':'↓'} ₹${(+a.price).toLocaleString('en-IN')}</span>
       <span class="alrt-curr">${ltp?'LTP ₹'+ltp.toFixed(2):''}</span>
       ${status}
@@ -13674,16 +13897,23 @@ function openAddAlertModal() {
 }
 
 function saveCustomAlert() {
-  const sym = (document.getElementById('alrt-m-sym').value||'').toUpperCase().trim();
-  const type = document.getElementById('alrt-m-type').value;
+  const sym   = (document.getElementById('alrt-m-sym').value||'').toUpperCase().trim();
+  const type  = document.getElementById('alrt-m-type').value;
   const price = parseFloat(document.getElementById('alrt-m-price').value);
+  const mode  = document.getElementById('alrt-m-mode')?.value || 'once';
   if(!sym || !price) { toast('Fill in symbol and price','error'); return; }
   const alerts = loadAlerts();
-  alerts.push({ id: Date.now(), sym, type, price, label: type==='above'?'Above Target':'Below Target', src:'custom', created: new Date().toISOString(), triggered: false });
+  const modeLabel = mode === 'every' ? ' 🔁' : '';
+  alerts.push({
+    id: Date.now(), sym, type, price, mode,
+    label: (type==='above'?'Above Target':'Below Target') + modeLabel,
+    src: 'custom', created: new Date().toISOString(),
+    triggered: false, _lastState: 'clear', triggerCount: 0
+  });
   saveAlerts(alerts);
   document.getElementById('alrt-modal').style.display='none';
   renderAlerts();
-  toast('✅ Alert set for ' + sym);
+  toast(`✅ ${mode==='every'?'Recurring':'One-shot'} alert set for ${sym}`);
 }
 
 function requestNotifPermission() {
@@ -14174,6 +14404,95 @@ function renderCalendar() {
 
 function calNav(dir) { _calDate.setMonth(_calDate.getMonth()+dir); renderCalendar(); }
 
+// ── F&O Expiry Calendar ───────────────────────────────────────────────────────
+// Static list of NSE F&O stocks. Computes next weekly (every Thursday) and
+// monthly (last Thursday of month) expiry. Flags ban period if stock is in it.
+const FNO_STOCKS = new Set([
+  'RELIANCE','TCS','HDFCBANK','INFY','ICICIBANK','HINDUNILVR','ITC','SBIN',
+  'BHARTIARTL','KOTAKBANK','LT','AXISBANK','BAJFINANCE','ASIANPAINT','MARUTI',
+  'TITAN','SUNPHARMA','ULTRACEMCO','NESTLEIND','WIPRO','HCLTECH','POWERGRID',
+  'NTPC','ONGC','COALINDIA','JSWSTEEL','TATASTEEL','DIVISLAB','DRREDDY','CIPLA',
+  'ADANIENT','ADANIPORTS','TATAMOTORS','BAJAJFINSV','HDFCLIFE','SBILIFE',
+  'TECHM','INDUSINDBK','GRASIM','HINDALCO','M&M','BPCL','EICHERMOT',
+  'APOLLOHOSP','BRITANNIA','TATACONSUM','DABUR','GODREJCP','PIDILITIND',
+  'AMBUJACEM','ACC','SHREECEM','HAVELLS','VOLTAS','CONCOR','SAIL','NMDC',
+  'RECLTD','PFC','IRCTC','HAL','BEL','BHEL','RVNL','IRFC','ZOMATO',
+  'NYKAA','PAYTM','DELHIVERY','POLICYBZR','ANGELONE','CDSL','BSE',
+]);
+
+function _nextThursday(fromDate = new Date()) {
+  const d = new Date(fromDate);
+  const day = d.getDay(); // 0=Sun, 4=Thu
+  const daysUntilThu = (4 - day + 7) % 7 || 7;
+  d.setDate(d.getDate() + daysUntilThu);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function _lastThursdayOfMonth(year, month) {
+  const d = new Date(year, month + 1, 0); // last day of month
+  while (d.getDay() !== 4) d.setDate(d.getDate() - 1);
+  return d;
+}
+
+function renderFoExpiry() {
+  const el  = document.getElementById('fo-expiry-body');
+  const upd = document.getElementById('fo-expiry-updated');
+  if (!el) return;
+
+  const foHoldings = D.holdings.filter(h => FNO_STOCKS.has(h.symbol));
+  if (!foHoldings.length) {
+    el.innerHTML = '<div style="color:var(--t4);font-size:11px;padding:8px 0">None of your current holdings are in the F&O segment.</div>';
+    return;
+  }
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const nextWeekly  = _nextThursday(today);
+  const thisMonthLT = _lastThursdayOfMonth(today.getFullYear(), today.getMonth());
+  const nextMonthly = thisMonthLT >= today ? thisMonthLT : _lastThursdayOfMonth(today.getFullYear(), today.getMonth() + 1);
+
+  const weeklyDays  = Math.round((nextWeekly - today) / 86400000);
+  const monthlyDays = Math.round((nextMonthly - today) / 86400000);
+
+  const fmtDate = d => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const urgColor = days => days <= 1 ? 'var(--red)' : days <= 4 ? 'var(--yel)' : 'var(--grn)';
+
+  let html = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div style="background:var(--s2);border:1px solid var(--b2);border-radius:8px;padding:10px">
+        <div style="font-size:9px;color:var(--t4);text-transform:uppercase;font-weight:600">Next Weekly Expiry</div>
+        <div style="font-size:15px;font-weight:800;color:${urgColor(weeklyDays)};font-family:var(--mono);margin-top:3px">${weeklyDays}d — ${fmtDate(nextWeekly)}</div>
+        <div style="font-size:10px;color:var(--t4);margin-top:2px">Every Thursday</div>
+      </div>
+      <div style="background:var(--s2);border:1px solid var(--b2);border-radius:8px;padding:10px">
+        <div style="font-size:9px;color:var(--t4);text-transform:uppercase;font-weight:600">Next Monthly Expiry</div>
+        <div style="font-size:15px;font-weight:800;color:${urgColor(monthlyDays)};font-family:var(--mono);margin-top:3px">${monthlyDays}d — ${fmtDate(nextMonthly)}</div>
+        <div style="font-size:10px;color:var(--t4);margin-top:2px">Last Thursday of month</div>
+      </div>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl">
+      <thead><tr><th>Stock</th><th>LTP</th><th>Weekly Expiry</th><th>Monthly Expiry</th><th>Note</th></tr></thead>
+      <tbody>
+        ${foHoldings.map(h => {
+          const ltp = h.ltp || h.avgPrice;
+          const warnW = weeklyDays <= 1 ? '<span style="color:var(--red);font-size:10px;font-weight:700"> ⚠ TOMORROW</span>' : weeklyDays <= 4 ? '<span style="color:var(--yel);font-size:10px"> ⚠ soon</span>' : '';
+          const note = weeklyDays <= 1 ? '⚠ Expiry tomorrow — volatility likely' : weeklyDays <= 4 ? 'Weekly expiry approaching' : 'No imminent expiry';
+          return `<tr>
+            <td><div class="sym">${h.symbol}</div><div class="snm">${h.sector||'F&O'}</div></td>
+            <td class="mn">₹${f(ltp)}</td>
+            <td class="mn" style="color:${urgColor(weeklyDays)}">${weeklyDays}d${warnW}</td>
+            <td class="mn" style="color:${urgColor(monthlyDays)}">${monthlyDays}d</td>
+            <td style="font-size:10.5px;color:var(--t3)">${note}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div>
+    <div style="font-size:10px;color:var(--t4);margin-top:8px">⚠ Stocks near F&O expiry often see elevated intraday volatility. Avoid large position changes on expiry day unless intentional.</div>`;
+
+  el.innerHTML = html;
+  if (upd) upd.textContent = 'Updated ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+}
+
 function openCalEventModal() {
   document.getElementById('cal-modal').style.display='flex';
   document.getElementById('cal-m-title').value='';
@@ -14480,6 +14799,76 @@ function calcPositionSize() {
   if(portPct < 2) advice += '💡 Position is &lt;2% of portfolio — consider if it\'s worth the tracking overhead. ';
   if(!advice) advice = '✅ Position sizing looks healthy. Stick to your stop loss — no exceptions.';
   if(advEl) advEl.innerHTML = advice;
+}
+
+// ── Kelly Criterion Calculator ────────────────────────────────────────────────
+// f* = (b·p - q) / b   where b = reward/risk, p = win prob, q = 1-p
+// Practical Kelly: use half-Kelly (f*/2) to account for estimation error.
+function calcKelly() {
+  const entry  = parseFloat(document.getElementById('kc-entry')?.value)  || 0;
+  const sl     = parseFloat(document.getElementById('kc-sl')?.value)     || 0;
+  const target = parseFloat(document.getElementById('kc-target')?.value) || 0;
+  const winP   = parseFloat(document.getElementById('kc-winp')?.value)   || 55;
+  const port   = parseFloat(document.getElementById('kc-port')?.value)   || 0;
+
+  const resEl   = document.getElementById('kc-result');
+  const emptyEl = document.getElementById('kc-empty');
+  const cardsEl = document.getElementById('kc-cards');
+  const advEl   = document.getElementById('kc-advice');
+
+  if (!entry || !sl || !target || sl >= entry || target <= entry) {
+    if (resEl)   resEl.style.display   = 'none';
+    if (emptyEl) emptyEl.style.display = '';
+    return;
+  }
+  if (resEl)   resEl.style.display   = '';
+  if (emptyEl) emptyEl.style.display = 'none';
+
+  const p     = winP / 100;
+  const q     = 1 - p;
+  const risk  = entry - sl;           // ₹ risked per share
+  const reward = target - entry;      // ₹ gained per share
+  const b     = reward / risk;        // reward:risk ratio
+
+  // Full Kelly fraction
+  const kellyFull  = Math.max(0, (b * p - q) / b);
+  const kellyHalf  = kellyFull / 2;
+  const kellyQtr   = kellyFull / 4;
+
+  const pctFmt = v => (v * 100).toFixed(1) + '%';
+  const moneyFmt = v => port ? '₹' + Math.round(v * port).toLocaleString('en-IN') : '—';
+  const qtyFmt   = v => (port && entry) ? Math.floor(v * port / entry) + ' shares' : '—';
+
+  cardsEl.innerHTML = [
+    { label: 'Full Kelly',   val: kellyFull,  desc: 'Mathematically optimal, volatile', color: 'var(--red)' },
+    { label: '½ Kelly ⭐',   val: kellyHalf,  desc: 'Recommended — accounts for estimation error', color: 'var(--grn)' },
+    { label: '¼ Kelly',      val: kellyQtr,   desc: 'Conservative — good for uncertain setups', color: 'var(--ac)' },
+    { label: 'Reward:Risk',  val: null,       fixed: '1:' + b.toFixed(2), desc: 'Must be >1.5 for positive expectancy', color: b >= 2 ? 'var(--grn)' : b >= 1.5 ? 'var(--yel)' : 'var(--red)' },
+  ].map(c => `
+    <div style="background:var(--s2);border:1px solid var(--b2);border-radius:8px;padding:10px">
+      <div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.5px;font-weight:600">${c.label}</div>
+      <div style="font-size:16px;font-weight:800;color:${c.color};font-family:var(--mono);margin:4px 0">
+        ${c.fixed || pctFmt(c.val)}
+      </div>
+      ${c.val != null && port ? `<div style="font-size:10px;color:var(--t3)">${moneyFmt(c.val)} · ${qtyFmt(c.val)}</div>` : ''}
+      <div style="font-size:9.5px;color:var(--t4);margin-top:2px">${c.desc}</div>
+    </div>`).join('');
+
+  // Expected value per rupee risked
+  const ev = p * reward - q * risk;
+  const evPct = (ev / entry * 100).toFixed(2);
+
+  let advice = `<strong>Expected Value:</strong> ${ev >= 0 ? '+' : ''}₹${ev.toFixed(2)} per share (${evPct}% per rupee at risk) · `;
+
+  if (b < 1.5) advice += '⚠ Reward:Risk below 1.5 — consider widening target or tightening stop before entering. ';
+  else if (p < 0.45) advice += '⚠ Win probability below 45% — even with good R:R this setup has negative expectancy. ';
+  else advice += '✅ Setup has positive expected value. ';
+
+  if (kellyFull > 0.20) advice += `Full Kelly (${pctFmt(kellyFull)}) is dangerously large — use ½ Kelly maximum. `;
+  if (kellyHalf < 0.02) advice += '💡 Half-Kelly size is very small (<2%) — may not be worth the transaction cost.';
+
+  advice += `<br><br><strong>Rule:</strong> Never exceed 10% portfolio in one stock regardless of Kelly output. Use ½ Kelly as your ceiling.`;
+  advEl.innerHTML = advice;
 }
 
 function renderPsConc() {
@@ -16867,26 +17256,52 @@ Reply JSON: {"opps":["","",""],"risks":["","",""],"actions":["","",""],"narrativ
 
 // Fetch Google News RSS headlines for a stock — tries multiple CORS proxies.
 // Returns [] if all fail; scoreSentiment handles the no-headlines case gracefully.
-async function fetchStockHeadlines(sym) {
-  const q = encodeURIComponent(`${sym} NSE stock India`);
-  const rssUrl = `https://news.google.com/rss/search?q=${q}&hl=en-IN&gl=IN&ceid=IN:en`;
-  const attempts = [
-    () => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`,{signal:AbortSignal.timeout(5000)})
-            .then(r=>r.json()).then(j=>j.contents||''),
-    () => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`,{signal:AbortSignal.timeout(5000)})
-            .then(r=>r.text()),
-  ];
-  for (const attempt of attempts) {
+async function fetchStockHeadlines(sym, exchange) {
+  const exch = exchange || (D.holdings.find(h=>h.symbol===sym)||D.watchlist.find(w=>w.symbol===sym)||{}).exchange || 'NSE';
+
+  // 1. Our own CF Pages /api/news proxy (server-side, reliable, 15-min edge cache)
+  if (_kv.isHosted) {
     try {
-      const xml = await attempt();
-      if (!xml.includes('<item>')) continue;
-      let titles = [...xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/gs)].slice(1,9).map(m=>m[1].trim());
-      if (!titles.length) titles = [...xml.matchAll(/<title>(.*?)<\/title>/gs)].slice(1,9).map(m=>m[1].replace(/<[^>]+>/g,'').trim());
-      const filtered = titles.filter(t=>t.length>5);
-      if (filtered.length) return filtered;
+      const r = await fetch(`/api/news?sym=${encodeURIComponent(sym)}&exchange=${exch}`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        if (d.headlines?.length) return d.headlines;
+      }
     } catch(e) {}
   }
-  return []; // Fallback: scoreSentiment will use AI knowledge mode
+
+  // 2. Direct Google News RSS (works in some browsers without CORS block)
+  const q = encodeURIComponent(`${sym} ${exch} stock India`);
+  const rssUrl = `https://news.google.com/rss/search?q=${q}&hl=en-IN&gl=IN&ceid=IN:en`;
+  try {
+    const r = await fetch(rssUrl, { signal: AbortSignal.timeout(5000) });
+    if (r.ok) {
+      const xml = await r.text();
+      if (xml.includes('<item>')) {
+        let titles = [...xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/gs)].slice(1,9).map(m=>m[1].trim());
+        if (!titles.length) titles = [...xml.matchAll(/<title>(.*?)<\/title>/gs)].slice(1,9).map(m=>m[1].replace(/<[^>]+>/g,'').trim());
+        const filtered = titles.filter(t=>t.length>8);
+        if (filtered.length) return filtered;
+      }
+    }
+  } catch(e) {}
+
+  // 3. allorigins.win fallback (last resort)
+  try {
+    const j = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`, { signal: AbortSignal.timeout(5000) })
+      .then(r=>r.json());
+    const xml = j.contents || '';
+    if (xml.includes('<item>')) {
+      let titles = [...xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/gs)].slice(1,9).map(m=>m[1].trim());
+      if (!titles.length) titles = [...xml.matchAll(/<title>(.*?)<\/title>/gs)].slice(1,9).map(m=>m[1].replace(/<[^>]+>/g,'').trim());
+      const filtered = titles.filter(t=>t.length>8);
+      if (filtered.length) return filtered;
+    }
+  } catch(e) {}
+
+  return []; // All failed — scoreSentiment will use AI knowledge mode
 }
 
 // Score with claudeJSON — works with or without live headlines.
@@ -19908,6 +20323,116 @@ function renderTaxHarvesting() {
 
   html += '<div class="pn gap" style="margin-top:16px"><div class="pn-h"><div class="pn-t">🤖 AI Harvesting Strategy</div></div><div class="pn-b"><div class="ai-box"><div class="ai-txt" id="harvest-ai-txt" style="color:var(--t4)">Click "Get Harvesting Strategy" for personalised advice.</div></div></div></div>';
   el.innerHTML = html;
+}
+
+// ── Smart Tax-Loss Harvesting Suggestions ────────────────────────────────────
+// Computes exact FY gains already realised, then suggests which loss holdings
+// to sell (and how much) to bring net taxable gain as close to ₹1.25L LTCG
+// exemption as possible — or offset STCG entirely.
+function renderSmartHarvesting() {
+  const harvestEl = document.getElementById('smart-harvest-wrap');
+  if (!harvestEl) return;
+
+  const today = new Date();
+  const fyYear  = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
+  const fyStart = `${fyYear}-04-01`;
+  const fyEnd   = `${fyYear + 1}-03-31`;
+
+  // FY realised gains so far
+  const fyTrades  = D.realised.filter(r => r.sellDate >= fyStart && r.sellDate <= fyEnd);
+  const stcgGain  = fyTrades.filter(r => (r.taxType==='STCG'||hDays(r.buyDate)<365) && r.pl > 0).reduce((s,r)=>s+r.pl,0);
+  const ltcgGain  = fyTrades.filter(r => (r.taxType==='LTCG'||hDays(r.buyDate)>=365) && r.pl > 0).reduce((s,r)=>s+r.pl,0);
+  const LTCG_EXEMPT = 125000;
+  const netLTCG   = Math.max(0, ltcgGain - LTCG_EXEMPT);
+  const stcgTax   = stcgGain * 0.20;
+  const ltcgTax   = netLTCG * 0.125;
+  const totalTax  = stcgTax + ltcgTax;
+
+  if (!totalTax && !stcgGain && !ltcgGain) {
+    harvestEl.innerHTML = '<div style="padding:20px;color:var(--t4);font-size:12px">No realised gains in current FY to offset. Add realised trades first.</div>';
+    return;
+  }
+
+  // Loss holdings that could offset gains
+  const lossHoldings = D.holdings
+    .filter(h => h.ltp && h.ltp < h.avgPrice)
+    .map(h => {
+      const days = hDays(h.buyDate)||0;
+      const lossAmt = (h.avgPrice - h.ltp) * h.qty;
+      const taxType = days >= 365 ? 'LTCG' : 'STCG';
+      return { h, lossAmt, taxType, days };
+    })
+    .sort((a,b) => b.lossAmt - a.lossAmt);
+
+  if (!lossHoldings.length) {
+    harvestEl.innerHTML = '<div style="padding:20px;color:var(--t4);font-size:12px">No loss holdings to harvest against your gains.</div>';
+    return;
+  }
+
+  // Greedy: suggest harvests that reduce tax liability most
+  let remainSTCG = stcgGain, remainLTCG = Math.max(0, ltcgGain - LTCG_EXEMPT);
+  const suggestions = [];
+  for (const item of lossHoldings) {
+    if (remainSTCG <= 0 && remainLTCG <= 0) break;
+    const { h, lossAmt, taxType } = item;
+    let offsetAmt = 0, savingAmt = 0;
+    if (taxType === 'STCG' && remainSTCG > 0) {
+      offsetAmt = Math.min(lossAmt, remainSTCG);
+      savingAmt = offsetAmt * 0.20;
+      remainSTCG -= offsetAmt;
+    } else if (taxType === 'LTCG' && remainLTCG > 0) {
+      offsetAmt = Math.min(lossAmt, remainLTCG);
+      savingAmt = offsetAmt * 0.125;
+      remainLTCG -= offsetAmt;
+    } else if (remainSTCG > 0) {
+      // Cross-type: LTCG loss can partially offset STCG (per IT Act Sec 70)
+      offsetAmt = Math.min(lossAmt, remainSTCG);
+      savingAmt = offsetAmt * 0.20;
+      remainSTCG -= offsetAmt;
+    }
+    if (offsetAmt > 500) suggestions.push({ ...item, offsetAmt, savingAmt });
+  }
+
+  const totalSaving = suggestions.reduce((s,x)=>s+x.savingAmt,0);
+  const fy = `FY ${fyYear}-${String(fyYear+1).slice(2)}`;
+
+  let html = `
+    <div style="background:rgba(79,142,247,.06);border:1px solid rgba(79,142,247,.2);border-radius:10px;padding:14px 16px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--t1);margin-bottom:10px">📊 ${fy} Tax Position</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;font-size:11px">
+        <div><span style="color:var(--t4)">STCG Gain</span><br><strong style="color:var(--orn)">₹${fI(stcgGain)}</strong> → tax ₹${fI(stcgTax)}</div>
+        <div><span style="color:var(--t4)">LTCG Gain</span><br><strong style="color:var(--yel)">₹${fI(ltcgGain)}</strong> → tax ₹${fI(ltcgTax)} (after ₹1.25L exemption)</div>
+        <div><span style="color:var(--t4)">Total Tax Liability</span><br><strong style="color:var(--red);font-size:14px">₹${fI(totalTax)}</strong></div>
+        <div><span style="color:var(--t4)">Potential Saving</span><br><strong style="color:var(--grn);font-size:14px">₹${fI(totalSaving)}</strong></div>
+      </div>
+    </div>`;
+
+  if (suggestions.length) {
+    html += `
+    <div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:8px">
+      🎯 Suggested harvests to save ₹${fI(totalSaving)} in tax:
+    </div>
+    <div style="overflow-x:auto"><table class="tbl">
+      <thead><tr><th>Sell This</th><th>Loss ₹</th><th>Offsets</th><th>Tax Saving</th><th>Days Held</th><th>Action</th></tr></thead>
+      <tbody>
+        ${suggestions.map(s=>`<tr>
+          <td><div class="sym">${s.h.symbol}</div><div class="snm">${s.h.name}</div></td>
+          <td class="mn dn">₹${fI(s.lossAmt)}</td>
+          <td class="mn" style="color:var(--t3)">₹${fI(s.offsetAmt)} of ${s.taxType} gain</td>
+          <td class="mn up" style="font-weight:700">₹${fI(s.savingAmt)}</td>
+          <td class="mn">${s.days}d <span class="tag ${s.taxType==='LTCG'?'t-ltcg':'t-stcg'}" style="margin-left:4px">${s.taxType}</span></td>
+          <td><button class="btn btn-yel btn-xs" onclick="openSellModal(${s.h.id})">🌾 Harvest</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+    <div style="font-size:10px;color:var(--t4);margin-top:8px">
+      ⚠ After harvesting, wait 30 days before re-buying the same stock (wash-sale rule equivalent under Indian IT).
+    </div>`;
+  } else {
+    html += '<div style="color:var(--grn);font-size:12px;padding:12px;background:rgba(45,211,111,.05);border-radius:8px;border:1px solid rgba(45,211,111,.2)">✅ Your loss positions can fully offset current FY gains. Consider harvesting before Mar 31.</div>';
+  }
+
+  harvestEl.innerHTML = html;
 }
 
 async function aiHarvestStrategy() {
