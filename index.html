@@ -4823,6 +4823,8 @@ const _kv = {
     this._setIndicator('syncing');
     try {
       const token = this._token();
+      // Always include pushSubscription so daily saves don't wipe it from KV
+      const _pushSub = (() => { try { return JSON.parse(localStorage.getItem('ss_push_sub') || 'null'); } catch(e) { return null; } })();
       const payload = {
         _token:    token,
         holdings:  D.holdings,
@@ -4832,6 +4834,7 @@ const _kv = {
         cfg:       D.cfg,
         orders:    D.orders,
         symMap:    _symMapGet(),
+        ...(_pushSub ? { pushSubscription: _pushSub } : {}),
         _savedAt:  new Date().toISOString(),
       };
       const r = await fetch('/api/data', {
