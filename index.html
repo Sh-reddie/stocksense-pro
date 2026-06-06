@@ -3538,16 +3538,16 @@ textarea.fi{resize:vertical;min-height:70px;}
               <div style="font-size:10px;color:var(--t4);margin-top:4px">Get free key at <strong style="color:var(--ac)">openrouter.ai</strong> → Sign up → Keys → Create. $0 cost for free models.</div>
             </div>
             <div class="fg">
-              <label class="fl">Model <span style="color:var(--t4);font-weight:400;font-size:10px">— if unsure, use Llama 3.3 70B ⭐</span></label>
+              <label class="fl">Model <span style="color:var(--t4);font-weight:400;font-size:10px">— Nemotron Super 120B ⭐ recommended</span></label>
               <select class="fi" id="cfg-or-model" onchange="toggleCustomModel(this.value)">
                 <optgroup label="⚡ Recommended (fast + quality)">
-                  <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B ⭐ Best to start</option>
+                  <option value="nvidia/nemotron-3-super-120b-a12b:free">Nemotron Super 120B ⭐ Default — fast, high quality</option>
+                  <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B — reliable fallback</option>
                   <option value="z-ai/glm-4.5-air:free">GLM 4.5 Air — Z.AI, reasoning-capable</option>
-                  <option value="nousresearch/hermes-3-llama-3.1-405b:free">Hermes 3 405B — Large model, thorough</option>
+                  <option value="nousresearch/hermes-3-llama-3.1-405b:free">Hermes 3 405B — large model, thorough</option>
                 </optgroup>
                 <optgroup label="🧠 Deep Reasoning (slow — 60–120s per reply)">
-                  <option value="nvidia/nemotron-3-nano-30b-a3b:free">Nemotron Nano 30B — Reasoning, slow</option>
-                  <option value="deepseek/deepseek-r1-0528:free">DeepSeek R1 — Best reasoning, very slow</option>
+                  <option value="deepseek/deepseek-r1-0528:free">DeepSeek R1 — best reasoning, very slow</option>
                 </optgroup>
                 <optgroup label="⚙ Other">
                   <option value="custom">Custom — enter model ID manually</option>
@@ -5473,8 +5473,8 @@ If unsure, reply: UNKNOWN`;
   try {
     let ticker = null;
     if (provider === 'openrouter') {
-      let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct:free';
-      if (model === 'custom') model = localStorage.getItem('orCustomModel') || 'meta-llama/llama-3.3-70b-instruct:free';
+      let model = localStorage.getItem('orModel') || 'nvidia/nemotron-3-super-120b-a12b:free';
+      if (model === 'custom') model = localStorage.getItem('orCustomModel') || 'nvidia/nemotron-3-super-120b-a12b:free';
       const _ref = (location.protocol === 'http:' || location.protocol === 'https:') ? location.href : 'https://stocksense.local';
       const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method:'POST', signal: AbortSignal.timeout(15000),
@@ -10196,7 +10196,7 @@ function populateAiSel() {
     const k = p==='openrouter' ? (localStorage.getItem('orKey')||'').trim() : (localStorage.getItem('apiKey')||'').trim();
     let label;
     if(p === 'openrouter') {
-      let m = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct:free';
+      let m = localStorage.getItem('orModel') || 'nvidia/nemotron-3-super-120b-a12b:free';
       if(m === 'custom') m = (localStorage.getItem('orCustomModel')||'custom');
       label = 'OpenRouter · '+(m.split('/').pop().replace(':free',' (free)'));
     } else {
@@ -10906,7 +10906,7 @@ function init(){
   // Migrate deprecated/dead models to current default
   const _deadModels = ['meta-llama/llama-3.1-8b-instruct:free','mistralai/mistral-7b-instruct:free','google/gemma-3-27b-it:free','qwen/qwen3-8b:free','qwen/qwen3-14b:free','microsoft/phi-4-reasoning:free','deepseek/deepseek-r1-0528-qwen3-8b:free','nvidia/nemotron-3-nano-30b-a3b:free','nousresearch/hermes-3-llama-3.1-405b:free'];
   if (savedOrModel && _deadModels.includes(savedOrModel)) {
-    savedOrModel = 'meta-llama/llama-3.3-70b-instruct:free';
+    savedOrModel = 'nvidia/nemotron-3-super-120b-a12b:free';
     localStorage.setItem('orModel', savedOrModel);
   }
   if(savedOrModel && document.getElementById('cfg-or-model')) document.getElementById('cfg-or-model').value = savedOrModel;
@@ -10980,10 +10980,10 @@ async function claude(prompt, sys) {
   if (provider === 'openrouter') {
     const key   = localStorage.getItem('orKey') || '';
     // Resolve model — never send 'custom' literally to API
-    let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct:free';
+    let model = localStorage.getItem('orModel') || 'nvidia/nemotron-3-super-120b-a12b:free';
     if(model === 'custom') {
       const customVal = localStorage.getItem('orCustomModel') || document.getElementById('cfg-or-custom')?.value.trim();
-      model = customVal && customVal !== 'custom' ? customVal : 'meta-llama/llama-3.3-70b-instruct:free';
+      model = customVal && customVal !== 'custom' ? customVal : 'nvidia/nemotron-3-super-120b-a12b:free';
     }
     if (!key) return '⚠ No OpenRouter API key. Go to Settings → AI Provider → add your free key from openrouter.ai';
     // Use a stable HTTPS referer — file:// URLs cause OpenRouter to reject the request
@@ -11014,7 +11014,7 @@ async function claude(prompt, sys) {
         // Model not found — suggest fallback
         if(errMsg.includes('No endpoints') || errMsg.includes('not found') || errMsg.includes('Provider returned error') || r.status===404 || r.status===503) {
           // Auto-retry with fallback free models
-          const fallbacks = ['meta-llama/llama-3.3-70b-instruct:free','google/gemma-3-27b-it:free','mistralai/mistral-7b-instruct:free'];
+          const fallbacks = ['nvidia/nemotron-3-super-120b-a12b:free','meta-llama/llama-3.3-70b-instruct:free','google/gemma-3-27b-it:free','mistralai/mistral-7b-instruct:free'];
           for(const fb of fallbacks) {
             if(fb === model) continue;
             ilog && ilog('⚠ Model "'+model+'" unavailable, retrying with '+fb+'...','warn');
@@ -11041,11 +11041,11 @@ async function claude(prompt, sys) {
       // Reasoning model burned all tokens in <think> block — content is empty, finish_reason is "length"
       // Auto-retry with a fast non-reasoning model
       if((!content || content.length === 0) && (finishReason === 'length' || finishReason === 'stop')) {
-        ilog && ilog('⚠ Model returned empty content (finish_reason='+finishReason+'), retrying with Llama 3.1 8B...','warn');
+        ilog && ilog('⚠ Model returned empty content (finish_reason='+finishReason+'), retrying with Nemotron Super 120B...','warn');
         const r3 = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method:'POST',
           headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro'},
-          body:JSON.stringify({model:'meta-llama/llama-3.3-70b-instruct:free',max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
+          body:JSON.stringify({model:'nvidia/nemotron-3-super-120b-a12b:free',max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
           signal: AbortSignal.timeout(30000)
         });
         const d3 = await r3.json();
@@ -11091,12 +11091,12 @@ async function claudeJSON(prompt, sys) {
     return claude(prompt, sys);
   }
   // Ordered list of non-reasoning free models to try (auto-skips unavailable ones)
-  // Last verified: 2026-06-01
+  // Last verified: 2026-06-06. Nemotron Super 120B leads — large, fast, no reasoning overhead.
   const FAST_MODELS = [
+    'nvidia/nemotron-3-super-120b-a12b:free',
     'meta-llama/llama-3.3-70b-instruct:free',
     'google/gemma-3-27b-it:free',
     'mistralai/mistral-7b-instruct:free',
-    'nousresearch/hermes-3-llama-3.1-405b:free',
     'z-ai/glm-4.5-air:free'
   ];
   for (const model of FAST_MODELS) {
@@ -19472,7 +19472,7 @@ function _chatToggle() {
     const prov = localStorage.getItem('aiProvider') || 'openrouter';
     const lbl = document.getElementById('chat-model-label');
     if (lbl) {
-      let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct:free';
+      let model = localStorage.getItem('orModel') || 'nvidia/nemotron-3-super-120b-a12b:free';
       if (model === 'custom') model = localStorage.getItem('orCustomModel') || 'Custom';
       const displayModel = model.split('/').pop().replace(':free','').replace(/-/g,' ');
       lbl.textContent = prov === 'anthropic' ? 'Claude Sonnet 4' : displayModel;
@@ -19685,10 +19685,11 @@ async function _chatCallAI(sysPrompt, messages) {
   const key = (localStorage.getItem('orKey') || '').trim();
   if (!key) throw new Error('No OpenRouter key. Go to Settings → AI Provider.');
 
-  // Default model — llama-3.3-70b (3.1-8b was deprecated on OpenRouter)
-  const CHAT_DEFAULT = 'meta-llama/llama-3.3-70b-instruct:free';
+  // Default model — Nemotron Super 120B (large, fast, no reasoning overhead)
+  const CHAT_DEFAULT = 'nvidia/nemotron-3-super-120b-a12b:free';
   // Fallback cascade tried automatically if primary is unavailable
   const CHAT_FALLBACKS = [
+    'nvidia/nemotron-3-super-120b-a12b:free',
     'meta-llama/llama-3.3-70b-instruct:free',
     'z-ai/glm-4.5-air:free',
     'google/gemma-3-27b-it:free',
