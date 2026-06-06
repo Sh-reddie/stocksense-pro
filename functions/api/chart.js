@@ -38,7 +38,13 @@ export async function onRequestGet({ request }) {
         const data = await r.json();
         if (data?.chart?.result?.[0]) {
           return new Response(JSON.stringify(data), {
-            headers: { ...CORS, 'Content-Type': 'application/json' },
+            headers: {
+              ...CORS,
+              'Content-Type': 'application/json',
+              // Cache at the edge for 60s — chart data doesn't change second-to-second
+              // and this cuts redundant YF round-trips when multiple tabs are open.
+              'Cache-Control': 'public, max-age=60, s-maxage=60',
+            },
           });
         }
       }

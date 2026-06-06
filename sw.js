@@ -1,5 +1,7 @@
-// StockSense Pro Service Worker — v2 (push notifications)
-const CACHE_NAME = 'stocksense-v2';
+// StockSense Pro Service Worker — v3
+// Changes: bump cache version, add pushsubscriptionchange handler so Chrome's
+// silent subscription rotation never silently breaks price alerts.
+const CACHE_NAME = 'stocksense-v3';
 const OFFLINE_URL = '/';
 
 const PRECACHE = ['/', '/manifest.json'];
@@ -75,5 +77,47 @@ self.addEventListener('notificationclick', event => {
       if (existing) { existing.focus(); existing.postMessage({ type: 'SS_ALERT_CLICK', data: event.notification.data }); }
       else clients.openWindow(url);
     })
+  );
+});
+
+// ── Push subscription renewal ────────────────────────────────────────────────
+// Chrome silently rotates push subscriptions every ~60 days. Without this
+// handler the old endpoint becomes invalid and all price alerts stop working.
+// We re-subscribe with the same VAPID key and post the new sub to the app page
+// so it can persist it to KV. The app listens for SS_PUSH_RENEWED messages.
+self.addEventListener('pushsubscriptionchange', event => {
+  const VAPID_PUBLIC_KEY = 'BAGwFvjEBVSieZpJCRmGeRA0xH9DLGntLVHDnG3bh88d8FjTe3b6coW5RC7xRjyUCdzFh0hDQB7axQop0mD613c';
+
+  function b64uToUint8(b64u) {
+    const pad = b64u.replace(/-/g, '+').replace(/_/g, '/');
+    return Uint8Array.from(atob(pad), c => c.charCodeAt(0));
+  }
+
+  event.waitUntil(
+    self.registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: b64uToUint8(VAPID_PUBLIC_KEY),
+    })
+    .then(newSub => {
+      // Notify all open pages so they can persist the new sub to KV
+      return clients.matchAll({ type: 'window', includeUncontrolled: true }).then(wins => {
+        wins.forEach(w => w.postMessage({ type: 'SS_PUSH_RENEWED', subscription: newSub.toJSON() }));
+        // Also persist directly via /api/data if no clients are open
+        if (!wins.length) {
+          return fetch('/api/data', {
+            method: 'GET',
+            signal: AbortSignal.timeout(6000),
+          }).then(r => r.json()).then(({ data }) => {
+            if (!data) return;
+            return fetch('/api/data', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...data, pushSubscription: newSub.toJSON() }),
+            });
+          }).catch(() => {});
+        }
+      });
+    })
+    .catch(() => {})
   );
 });

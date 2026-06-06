@@ -71,7 +71,7 @@ async function sendPush(subscription, payload, env) {
       'Content-Encoding': 'aesgcm',
       'Content-Type':     'application/octet-stream',
       'Encryption':       `salt=${b64uEncode(salt)}`,
-      'Crypto-Key':       `dh=${b64uEncode(serverPub)}`,
+      'Crypto-Key':       `dh=${b64uEncode(serverPub)};p256ecdsa=${VAPID_PUBLIC}`,
       'TTL':              '86400',
     },
     body: ciphertext,

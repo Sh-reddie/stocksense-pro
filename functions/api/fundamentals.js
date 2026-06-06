@@ -22,6 +22,7 @@ const YF_HEADERS = {
 
 const MODULES = 'summaryDetail,defaultKeyStatistics,financialData,quoteType';
 
+/** Extract fundamental fields from a v11 quoteSummary result object */
 function extractFromV11(res, sym) {
   const sd = res.summaryDetail || {};
   const ks = res.defaultKeyStatistics || {};
@@ -46,33 +47,42 @@ function extractFromV11(res, sym) {
   };
 }
 
+/** Fetch Yahoo Finance session crumb for authenticated requests */
 async function getYFCrumb() {
   try {
+    // Step 1: Hit Yahoo Finance consent page to get a session cookie
     const initResp = await fetch('https://fc.yahoo.com/', {
       headers: { 'User-Agent': YF_UA, 'Accept': 'text/html,application/xhtml+xml,*/*', 'Accept-Language': 'en-US,en;q=0.9' },
       redirect: 'follow',
       signal: AbortSignal.timeout(6000),
     });
     const rawCookie = initResp.headers.get('set-cookie') || '';
+    // Extract cookie key=value pairs (strip Path, Expires, Domain, SameSite attributes)
     const cookies = rawCookie.split(/,(?=[^;]+=[^;])/).map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
+
     if (!cookies) return null;
+
+    // Step 2: Get the crumb using the session cookie
     const crumbResp = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
       headers: { 'User-Agent': YF_UA, 'Cookie': cookies, 'Referer': 'https://finance.yahoo.com/' },
       signal: AbortSignal.timeout(5000),
     });
     if (crumbResp.ok) {
       const crumb = await crumbResp.text();
+      // Crumb is a short alphanumeric string (not HTML or JSON)
       if (crumb && crumb.length < 60 && !crumb.startsWith('<') && !crumb.startsWith('{')) {
         return { crumb: crumb.trim(), cookies };
       }
     }
-  } catch (e) {}
+  } catch (e) { /* ignore */ }
   return null;
 }
 
+/** Try v11/quoteSummary with optional crumb auth */
 async function tryV11(sym, session) {
   const crumbParam = session?.crumb ? `&crumb=${encodeURIComponent(session.crumb)}` : '';
   const extraHeaders = session?.cookies ? { 'Cookie': session.cookies } : {};
+
   for (const host of ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com']) {
     try {
       const r = await fetch(
@@ -87,15 +97,17 @@ async function tryV11(sym, session) {
           if (result.pe || result.mcap || result.roe || result.pb || result.eps) return result;
         }
       }
-    } catch (e) {}
+    } catch (e) { /* try next */ }
   }
   return null;
 }
 
+/** Try v7/quote batch with optional crumb auth */
 async function tryV7(sym, session) {
   const fields = 'trailingPE,forwardPE,trailingEps,marketCap,dividendYield,beta,priceToBook,returnOnEquity,debtToEquity,revenueGrowth,earningsGrowth,currentRatio,recommendationKey,longName,shortName';
   const crumbParam = session?.crumb ? `&crumb=${encodeURIComponent(session.crumb)}` : '';
   const extraHeaders = session?.cookies ? { 'Cookie': session.cookies } : {};
+
   for (const host of ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com']) {
     try {
       const r = await fetch(
@@ -119,7 +131,7 @@ async function tryV7(sym, session) {
           };
         }
       }
-    } catch (e) {}
+    } catch (e) { /* try next */ }
   }
   return null;
 }
@@ -127,18 +139,33 @@ async function tryV7(sym, session) {
 export async function onRequestGet({ request }) {
   const url = new URL(request.url);
   const sym = url.searchParams.get('sym') || '';
-  if (!sym) return Response.json({ error: 'sym param required' }, { status: 400, headers: CORS });
 
-  // Strategy 1: With crumb authentication
-  const session = await getYFCrumb();
-  if (session) {
-    const result = await tryV11(sym, session) || await tryV7(sym, session);
-    if (result) return Response.json(result, { headers: CORS });
+  if (!sym) {
+    return Response.json({ error: 'sym param required' }, { status: 400, headers: CORS });
   }
 
-  // Strategy 2: Without crumb
-  const result = await tryV11(sym, null) || await tryV7(sym, null);
-  if (result) return Response.json(result, { headers: CORS });
+  // Fundamentals rarely change intra-day — cache at the edge for 4 hours.
+  // This dramatically reduces YF round-trips when multiple users or page
+  // reloads request the same symbol.
+  const FUND_HEADERS = { ...CORS, 'Cache-Control': 'public, max-age=14400, s-maxage=14400' };
+
+  // Strategy 1: run crumb-fetch and unauthenticated v11 in parallel —
+  // whichever wins is used. Crumb adds ~1s overhead; racing cuts worst-case latency.
+  const [session, unauthResult] = await Promise.all([
+    getYFCrumb(),
+    tryV11(sym, null).catch(() => null),
+  ]);
+
+  // Prefer authenticated result if crumb worked; fall back to unauthenticated
+  if (session) {
+    const authResult = await tryV11(sym, session) || await tryV7(sym, session);
+    if (authResult) return Response.json(authResult, { headers: FUND_HEADERS });
+  }
+  if (unauthResult) return Response.json(unauthResult, { headers: FUND_HEADERS });
+
+  // Last resort: v7 without crumb
+  const result = await tryV7(sym, null);
+  if (result) return Response.json(result, { headers: FUND_HEADERS });
 
   return Response.json({ ok: false, error: 'No fundamental data available' }, { headers: CORS });
 }

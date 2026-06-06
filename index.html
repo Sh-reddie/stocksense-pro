@@ -12603,13 +12603,12 @@ async function enablePushNotifications() {
       applicationServerKey: _b64uToUint8(VAPID_PUBLIC_KEY),
     });
     _pushSubscription = sub;
-    // Store subscription in localStorage for the CF Function to use
+    // Store subscription in localStorage (_kv._flush reads pushSub from here)
     localStorage.setItem('ss_push_sub', JSON.stringify(sub.toJSON()));
-    // Also push to KV so CF can find it server-side
-    if (_kv.isHosted) {
-      const payload = { pushSubscription: sub.toJSON() };
-      fetch('/api/data', { method:'POST', headers:{'Content-Type':'application/json','X-SS-Token': _kv._token()}, body: JSON.stringify(payload) }).catch(()=>{});
-    }
+    // Trigger a full portfolio flush — this safely writes pushSubscription alongside
+    // all holdings/watchlist data. Never send only {pushSubscription} as a standalone
+    // POST — that would overwrite the entire KV portfolio with just the push key.
+    if (_kv.isHosted) _kv.schedule();
     toast('✅ Push notifications enabled!', 'ok');
     _initPushUI();
   } catch(e) {
@@ -12621,6 +12620,12 @@ async function enablePushNotifications() {
 async function disablePushNotifications() {
   if (_pushSubscription) { await _pushSubscription.unsubscribe(); _pushSubscription = null; }
   localStorage.removeItem('ss_push_sub');
+  // Flush to KV immediately so morning-brief stops finding a subscription.
+  // Without this the KV still holds the old sub and CF would keep sending pushes.
+  if (_kv.isHosted) {
+    _kv._dirty = true;
+    _kv._flush();
+  }
   toast('🔕 Push notifications disabled');
   _initPushUI();
 }
@@ -21025,6 +21030,27 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')
       .then(reg => console.log('[SW] Registered:', reg.scope))
       .catch(err => console.warn('[SW] Registration failed:', err));
+  });
+
+  // Handle push subscription renewal from SW (Chrome rotates subs every ~60 days)
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (event.data?.type === 'SS_PUSH_RENEWED') {
+      const newSub = event.data.subscription;
+      if (!newSub) return;
+      localStorage.setItem('ss_push_sub', JSON.stringify(newSub));
+      // _pushSubscription may be stale — update in-memory reference
+      if (typeof _pushSubscription !== 'undefined') {
+        navigator.serviceWorker.ready.then(reg =>
+          reg.pushManager.getSubscription().then(s => { if (s) _pushSubscription = s; })
+        );
+      }
+      // Flush full portfolio with new subscription to KV
+      if (typeof _kv !== 'undefined' && _kv.isHosted) _kv.schedule();
+      console.log('[Push] Subscription renewed and saved to KV');
+    }
+    if (event.data?.type === 'SS_ALERT_CLICK') {
+      // Already handled inline elsewhere — forward to app if needed
+    }
   });
 }
 </script>
