@@ -1373,6 +1373,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         </select>
         <button class="btn btn-g" onclick="refreshAll()">↻ Refresh</button>
         <button class="btn btn-g btn-sm" id="sent-run-all-btn" onclick="runSentimentAll()" title="AI-score news sentiment for all holdings">🗞 Sentiment</button>
+        <button class="btn btn-g btn-sm" onclick="optimizeAllAtrStops()" title="Set all stop-losses to volatility-adjusted ATR levels (1.5× 14-day ATR)">⚡ ATR Stops</button>
         <button class="btn btn-yel btn-sm" id="reanalyse-stale-btn" onclick="reanalyseStale()" title="Re-analyse holdings whose AI signal is >7 days old">🔄 Refresh Stale</button>
         <button class="btn btn-g" onclick="go('import')">⬆ Import CSV</button>
         <button class="btn btn-red btn-sm" onclick="clearSection('holdings')">🗑 Clear</button>
@@ -1673,10 +1674,16 @@ textarea.fi{resize:vertical;min-height:70px;}
 
   <!-- ═══ NEWS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-news">
-    <div class="sec-head"><div class="sec-title">News & Events</div><button class="btn btn-g" onclick="renderNews()">↻</button></div>
-    <div class="tabs"><div class="tab on" onclick="stab('nt','n-all')">All News</div><div class="tab" onclick="stab('nt','n-port')">My Portfolio</div><div class="tab" onclick="stab('nt','n-res')">Results Cal.</div><div class="tab" onclick="stab('nt','n-corp')">Corp Actions</div></div>
+    <div class="sec-head">
+      <div class="sec-title">News & Events</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g" onclick="renderNews()">↻ Market</button>
+        <button class="btn btn-p btn-sm" onclick="renderPortfolioNewsFeed(true)" title="Fetch latest headlines for all your holdings">📰 My Holdings Feed</button>
+      </div>
+    </div>
+    <div class="tabs"><div class="tab on" onclick="stab('nt','n-all')">All News</div><div class="tab" onclick="stab('nt','n-port');renderPortfolioNewsFeed()">My Portfolio</div><div class="tab" onclick="stab('nt','n-res')">Results Cal.</div><div class="tab" onclick="stab('nt','n-corp')">Corp Actions</div></div>
     <div id="n-all" class="tp on"><div id="n-all-c"></div></div>
-    <div id="n-port" class="tp"><div id="n-port-c"></div></div>
+    <div id="n-port" class="tp"><div id="n-port-c"><div style="padding:40px;text-align:center;color:var(--t4);font-size:12px">Click the tab to load news for all your holdings.</div></div></div>
     <div id="n-res" class="tp"><div class="pn"><div class="pn-b" id="n-res-c"></div></div></div>
     <div id="n-corp" class="tp"><div class="pn"><div class="pn-b" id="n-corp-c"></div></div></div>
   </div>
@@ -3788,24 +3795,48 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div class="sec" id="sec-rebalancer">
     <div class="sec-head">
       <div class="sec-title">⚖ Portfolio Rebalancer</div>
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <label class="fl" style="margin-bottom:0;white-space:nowrap">Target Corpus:</label>
-        <input type="number" class="fi" id="reb-corpus" placeholder="Total ₹" style="width:140px" oninput="renderRebalancer()">
-        <button class="btn btn-g" onclick="renderRebalancer()">↻ Recalculate</button>
-        <button class="btn btn-p" onclick="aiRebalancePlan()">🤖 Generate Plan</button>
+        <input type="number" class="fi" id="reb-corpus" placeholder="Total ₹" style="width:140px" oninput="renderRebalancer();calcExactRebalance()">
+        <button class="btn btn-g" onclick="renderRebalancer();calcExactRebalance()">↻ Recalculate</button>
+        <button class="btn btn-p" onclick="aiRebalancePlan()">🤖 AI Plan</button>
       </div>
     </div>
-    <div class="pn gap">
-      <div class="pn-h"><div class="pn-t">Target Allocation by Sector <span style="font-size:10px;color:var(--t4)">— edit % below, must total 100%</span></div></div>
-      <div id="reb-alloc-table"></div>
+    <div class="tabs">
+      <div class="tab on" onclick="stab('reb','reb-sector')">🏭 By Sector</div>
+      <div class="tab" onclick="stab('reb','reb-stock');calcExactRebalance()">📋 By Stock (Exact Qty)</div>
     </div>
-    <div class="pn gap">
-      <div class="pn-h"><div class="pn-t">Rebalancing Actions</div></div>
-      <div id="reb-actions-table"><div style="color:var(--t4);font-size:12px;padding:20px">Set target corpus and allocations above, then click Recalculate.</div></div>
+
+    <!-- Sector tab (existing) -->
+    <div id="reb-sector" class="tp on">
+      <div class="pn gap">
+        <div class="pn-h"><div class="pn-t">Target Allocation by Sector <span style="font-size:10px;color:var(--t4)">— edit % below, must total 100%</span></div></div>
+        <div id="reb-alloc-table"></div>
+      </div>
+      <div class="pn gap">
+        <div class="pn-h"><div class="pn-t">Rebalancing Actions</div></div>
+        <div id="reb-actions-table"><div style="color:var(--t4);font-size:12px;padding:20px">Set target corpus and allocations above, then click Recalculate.</div></div>
+      </div>
     </div>
+
+    <!-- Stock-level exact-quantity tab (new) -->
+    <div id="reb-stock" class="tp">
+      <div class="pn gap">
+        <div class="pn-h">
+          <div class="pn-t">📋 Exact Trade Quantities</div>
+          <span style="font-size:10px;color:var(--t4)">Edit target % per stock → see exact shares to buy/sell</span>
+        </div>
+        <div id="reb-stock-table"><div style="color:var(--t4);font-size:12px;padding:20px">Click the tab to compute trade quantities.</div></div>
+      </div>
+      <div class="pn gap" id="reb-trades-summary" style="display:none">
+        <div class="pn-h"><div class="pn-t">💰 Trade Summary</div></div>
+        <div class="pn-b" id="reb-trades-summary-body"></div>
+      </div>
+    </div>
+
     <div class="pn gap" style="margin-top:4px">
       <div class="pn-h"><div class="pn-t">🤖 AI Rebalancing Plan</div></div>
-      <div class="pn-b"><div class="ai-box"><div class="ai-txt" id="reb-ai-txt" style="color:var(--t4)">Click "Generate Plan" for AI-powered rebalancing recommendations.</div></div></div>
+      <div class="pn-b"><div class="ai-box"><div class="ai-txt" id="reb-ai-txt" style="color:var(--t4)">Click "AI Plan" for AI-powered rebalancing recommendations.</div></div></div>
     </div>
   </div>
 
@@ -9880,6 +9911,151 @@ async function renderNews() {
   }
   _renderNewsItems(unique);
 }
+// ── ATR-Based Stop-Loss Optimizer ─────────────────────────────────────────────
+// Average True Range (14-day) gives a volatility-adjusted stop:
+//   Stop = LTP − (ATR × multiplier)
+// A 12% fixed stop on ZOMATO fires randomly; ATR adapts to actual price swings.
+
+function calcATR(series, period = 14) {
+  if (!series || series.length < period + 1) return null;
+  const trs = [];
+  for (let i = 1; i < series.length; i++) {
+    const h = series[i].h ?? series[i].c;
+    const l = series[i].l ?? series[i].c;
+    const pc = series[i-1].c;
+    trs.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+  }
+  // Wilder smoothing
+  let atr = trs.slice(0, period).reduce((s,v) => s+v, 0) / period;
+  for (let i = period; i < trs.length; i++) {
+    atr = (atr * (period - 1) + trs[i]) / period;
+  }
+  return +atr.toFixed(2);
+}
+
+async function computeAtrStop(hid, mult = 1.5) {
+  const h = D.holdings.find(x => x.id == hid);
+  if (!h) return null;
+  const yfSym = h.yfTicker || _symMapLookup(h.symbol) || (h.exchange === 'BSE' ? h.symbol + '.BO' : h.symbol + '.NS');
+  // Fetch 3-month daily series for ATR
+  const series = await fetchYFSeries(yfSym, '3mo', '1d').catch(() => null);
+  if (!series || series.length < 16) return null;
+  const atr = calcATR(series, 14);
+  if (!atr) return null;
+  const ltp = h.ltp || h.avgPrice;
+  const atrStop = +(ltp - atr * mult).toFixed(2);
+  return { atr, atrStop, mult, ltp, pctFromLtp: +((atrStop - ltp) / ltp * 100).toFixed(1) };
+}
+
+// Show ATR stop suggestion inline in the holdings detail tab
+async function showAtrStop(hid) {
+  const el = document.getElementById(`atr-result-${hid}`);
+  if (!el) return;
+  el.innerHTML = '<span style="color:var(--t4);font-size:11px">⏳ Fetching ATR…</span>';
+  const mult = parseFloat(document.getElementById(`atr-mult-${hid}`)?.value || '1.5');
+  const res = await computeAtrStop(hid, mult);
+  const h = D.holdings.find(x => x.id == hid);
+  if (!res || !h) {
+    el.innerHTML = '<span style="color:var(--t4);font-size:11px">Could not compute ATR — chart data unavailable</span>';
+    return;
+  }
+  const tighter = res.atrStop > (h.stopLoss || 0);
+  el.innerHTML = `
+    <div style="background:var(--s2);border:1px solid var(--b2);border-radius:8px;padding:10px 12px;margin-top:8px;font-size:11px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div><span style="color:var(--t4)">ATR(14):</span> <strong style="font-family:var(--mono)">₹${res.atr}</strong></div>
+        <div><span style="color:var(--t4)">ATR Stop (${mult}×):</span> <strong style="color:${tighter?'var(--grn)':'var(--yel)'};font-family:var(--mono)">₹${res.atrStop}</strong> (${res.pctFromLtp}% from LTP)</div>
+        ${h.stopLoss ? `<div><span style="color:var(--t4)">Current SL:</span> <span style="font-family:var(--mono)">₹${f(h.stopLoss)}</span></div>` : ''}
+        <span style="font-size:10px;font-weight:700;color:${tighter?'var(--grn)':'var(--yel)'}">${tighter?'↑ Tighter (locks profit)':'↓ Wider (more room)'}</span>
+      </div>
+      <button class="btn btn-p btn-xs" style="margin-top:8px" onclick="applyAtrStop(${hid}, ${res.atrStop})">✓ Apply ₹${res.atrStop} as Stop Loss</button>
+    </div>`;
+}
+
+function applyAtrStop(hid, newSl) {
+  const h = D.holdings.find(x => x.id == hid);
+  if (!h) return;
+  h.stopLoss = newSl;
+  save('holdings');
+  _sdHoldContent(h);
+  renderHoldings();
+  toast(`✅ ${h.symbol} stop loss updated to ₹${newSl} (ATR-based)`, 'ok');
+}
+
+// Batch ATR optimizer — updates all holdings with ATR stops in background
+async function optimizeAllAtrStops() {
+  if (!D.holdings.length) { toast('No holdings', 'error'); return; }
+  const mult = 1.5;
+  toast(`⏳ Computing ATR stops for ${D.holdings.length} holdings… (may take ~${Math.ceil(D.holdings.length / 5) * 3}s)`, 'info');
+  let updated = 0;
+  for (let i = 0; i < D.holdings.length; i += 5) {
+    await Promise.all(D.holdings.slice(i, i + 5).map(async h => {
+      const res = await computeAtrStop(h.id, mult).catch(() => null);
+      if (!res) return;
+      h._atr = res.atr;
+      h._atrStop = res.atrStop;
+      h._atrMult = mult;
+      updated++;
+    }));
+    if (i + 5 < D.holdings.length) await new Promise(r => setTimeout(r, 500));
+  }
+  save('holdings');
+  renderHoldings();
+  // Show summary modal
+  const improved = D.holdings.filter(h => h._atrStop && h.stopLoss && h._atrStop > h.stopLoss);
+  const loosened  = D.holdings.filter(h => h._atrStop && h.stopLoss && h._atrStop < h.stopLoss);
+  const noSl      = D.holdings.filter(h => h._atrStop && !h.stopLoss);
+  toast(`✅ ATR computed for ${updated} stocks. ${improved.length} stops can be tightened, ${loosened.length} are already tighter than ATR.`, 'ok');
+  _showAtrSummary(improved, loosened, noSl);
+}
+
+function _showAtrSummary(improved, loosened, noSl) {
+  const existing = document.getElementById('atr-summary-modal');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'atr-summary-modal';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:3000;display:flex;align-items:center;justify-content:center;padding:16px';
+  const all = [...improved, ...loosened, ...noSl];
+  div.innerHTML = `
+    <div style="background:var(--s1);border:1px solid var(--b2);border-radius:16px;padding:24px;width:600px;max-width:95vw;max-height:80vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div style="font-size:16px;font-weight:800">⚡ ATR Stop-Loss Results (1.5× ATR)</div>
+        <button onclick="document.getElementById('atr-summary-modal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--t3)">✕</button>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>Stock</th><th>LTP</th><th>ATR(14)</th><th>ATR Stop</th><th>Current SL</th><th>Verdict</th><th></th></tr></thead>
+        <tbody>
+          ${all.filter(h=>h._atrStop).map(h => {
+            const tighter = h._atrStop > (h.stopLoss||0);
+            const noSl    = !h.stopLoss;
+            const verdict = noSl ? '⚠ No SL set' : tighter ? '↑ Can tighten' : '✓ Already tight';
+            const col     = noSl ? 'var(--yel)' : tighter ? 'var(--grn)' : 'var(--t3)';
+            return `<tr>
+              <td><div class="sym">${h.symbol}</div></td>
+              <td class="mn">₹${f(h.ltp||h.avgPrice)}</td>
+              <td class="mn" style="font-family:var(--mono)">₹${h._atr||'—'}</td>
+              <td class="mn" style="color:var(--grn);font-weight:700">₹${h._atrStop}</td>
+              <td class="mn" style="color:${h.stopLoss?'var(--t2)':'var(--t4)'}">₹${h.stopLoss?f(h.stopLoss):'—'}</td>
+              <td style="font-size:11px;color:${col};font-weight:600">${verdict}</td>
+              <td><button class="btn btn-p btn-xs" onclick="applyAtrStop(${h.id},${h._atrStop});this.textContent='✓';this.disabled=true">Apply</button></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button class="btn btn-g" onclick="document.getElementById('atr-summary-modal').remove()">Close</button>
+        <button class="btn btn-p" onclick="
+          D.holdings.filter(h=>h._atrStop&&h._atrStop>(h.stopLoss||0)).forEach(h=>{h.stopLoss=h._atrStop;});
+          save('holdings');renderHoldings();
+          document.getElementById('atr-summary-modal').remove();
+          toast('✅ Applied ATR stops to all improveable positions','ok');">
+          ✓ Apply All Improvements
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
 function _renderNewsItems(items) {
   const allC = document.getElementById('n-all-c');
   const portC = document.getElementById('n-port-c');
@@ -9895,6 +10071,100 @@ function _renderNewsItems(items) {
   allC.innerHTML = items.slice(0,30).map(mk).join('') || '<div style="color:var(--t4);font-size:12px;padding:20px">No news fetched.</div>';
   const portNews = items.filter(n => n.stocks.some(s=>portSyms.includes(s)) || portSyms.some(sym => n.t.toLowerCase().includes(sym.toLowerCase())));
   if (portC) portC.innerHTML = portNews.slice(0,20).map(mk).join('') || '<div style="color:var(--t4);font-size:12px;padding:20px">No relevant news for your holdings yet — try refreshing.</div>';
+}
+
+// ── Portfolio News Aggregator Feed ───────────────────────────────────────────
+// Fetches headlines for ALL held stocks via /api/news in parallel batches.
+// Renders a single chronological feed with per-stock badges + sentiment chips.
+// Cached per-stock in sessionStorage (30 min) to avoid re-fetching on tab switch.
+
+const NEWS_FEED_TTL = 30 * 60 * 1000;
+
+async function renderPortfolioNewsFeed(forceRefresh = false) {
+  const el = document.getElementById('n-port-c');
+  if (!el) return;
+  if (!D.holdings.length) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t4)">Add holdings to see your personalised news feed.</div>';
+    return;
+  }
+
+  el.innerHTML = `<div style="padding:16px;color:var(--t4);font-size:12px;display:flex;align-items:center;gap:10px">
+    <div class="spin"></div> Fetching news for ${D.holdings.length} holdings…
+  </div>`;
+
+  const allArticles = [];
+  const stocks = D.holdings.slice(0, 20); // cap at 20 to avoid too many requests
+
+  // Fetch in batches of 4 using the /api/news endpoint
+  for (let i = 0; i < stocks.length; i += 4) {
+    const batch = stocks.slice(i, i + 4);
+    await Promise.allSettled(batch.map(async h => {
+      const cacheKey = `ss_news_feed_${h.symbol}`;
+      if (!forceRefresh) {
+        try {
+          const cached = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
+          if (cached && Date.now() - cached.ts < NEWS_FEED_TTL) {
+            cached.headlines.forEach(title => allArticles.push({ sym: h.symbol, sector: h.sector, title, ts: cached.ts - Math.random() * 3600000 }));
+            return;
+          }
+        } catch(e) {}
+      }
+      try {
+        const r = await fetch(`/api/news?sym=${encodeURIComponent(h.symbol)}&exchange=${h.exchange||'NSE'}`, { signal: AbortSignal.timeout(8000) });
+        if (r.ok) {
+          const d = await r.json();
+          const headlines = d.headlines || [];
+          try { sessionStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), headlines })); } catch(e) {}
+          headlines.forEach(title => allArticles.push({ sym: h.symbol, sector: h.sector, title, ts: Date.now() - Math.random() * 7200000 }));
+        }
+      } catch(e) {}
+    }));
+    if (i + 4 < stocks.length) await new Promise(r => setTimeout(r, 200));
+  }
+
+  if (!allArticles.length) {
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--t4);font-size:12px">
+      No headlines found — market may be closed or news unavailable.<br>
+      <button class="btn btn-g btn-sm" style="margin-top:12px" onclick="renderPortfolioNewsFeed(true)">↻ Try Again</button>
+    </div>`;
+    return;
+  }
+
+  // Dedupe and sort newest first (approximate, since we don't have real timestamps)
+  const seen = new Set();
+  const unique = allArticles.filter(a => {
+    const k = a.title.slice(0, 50).toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  }).sort((a, b) => b.ts - a.ts);
+
+  const sentColor = s => !s ? 'var(--t4)' : s.sentiment === 'Bullish' ? 'var(--grn)' : s.sentiment === 'Bearish' ? 'var(--red)' : 'var(--yel)';
+  const sentIcon  = s => !s ? '' : s.sentiment === 'Bullish' ? '▲' : s.sentiment === 'Bearish' ? '▼' : '↔';
+
+  const rows = unique.slice(0, 60).map(a => {
+    const h = D.holdings.find(x => x.symbol === a.sym);
+    const sent = h?._sentiment;
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--b1);display:flex;gap:10px;align-items:flex-start">
+      <div style="flex-shrink:0;padding-top:2px">
+        <span style="font-size:9.5px;font-weight:800;background:rgba(79,142,247,.12);color:var(--ac);border:1px solid rgba(79,142,247,.25);border-radius:6px;padding:2px 6px;white-space:nowrap">${a.sym}</span>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12.5px;line-height:1.45;color:var(--t1);margin-bottom:4px">${a.title}</div>
+        <div style="display:flex;gap:8px;align-items:center;font-size:10px;color:var(--t4);flex-wrap:wrap">
+          <span>${a.sector||'—'}</span>
+          ${sent ? `<span style="color:${sentColor(sent)};font-weight:700">${sentIcon(sent)} ${sent.sentiment||''}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const refreshTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0 14px;border-bottom:1px solid var(--b2);margin-bottom:4px">
+      <span style="font-size:11px;color:var(--t4)">${unique.length} headlines across ${new Set(unique.map(a=>a.sym)).size} stocks · Updated ${refreshTime}</span>
+      <button class="btn btn-g btn-xs" onclick="renderPortfolioNewsFeed(true)">↻ Refresh</button>
+    </div>
+    ${rows}`;
 }
 
 // ═══════════════════════════════════════════════════
@@ -10421,7 +10691,23 @@ function _sdHoldContent(h) {
       ${h.thesis?`<div style="margin-top:10px;padding:10px 12px;background:rgba(79,142,247,.07);border-left:3px solid var(--ac);border-radius:0 8px 8px 0"><div style="font-size:9.5px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">💡 Original Investment Thesis</div><div style="font-size:12px;color:var(--t2);line-height:1.6">${h.thesis}</div></div>`:''}
       ${h.notes?`<div style="margin-top:10px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:6px"><div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">📝 Conviction Note</div><div style="font-size:12px;color:var(--t2);line-height:1.6;white-space:pre-wrap">${h.notes}</div></div>`:''}
     </div>
-    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+    <!-- ATR Stop Optimizer inline -->
+    <div style="margin-top:12px;padding:12px;background:var(--s2);border:1px solid var(--b2);border-radius:8px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:700;color:var(--t2)">⚡ ATR Stop Optimizer</span>
+        <span style="font-size:10px;color:var(--t4)">Multiplier:</span>
+        <select id="atr-mult-${h.id}" class="fi" style="width:80px;padding:3px 6px;font-size:11px" onchange="showAtrStop(${h.id})">
+          <option value="1">1× ATR</option>
+          <option value="1.5" selected>1.5× ATR</option>
+          <option value="2">2× ATR</option>
+          <option value="2.5">2.5× ATR</option>
+        </select>
+        <button class="btn btn-g btn-xs" onclick="showAtrStop(${h.id})">Calculate</button>
+        <span style="font-size:10px;color:var(--t4)">Uses 3-month daily price volatility</span>
+      </div>
+      <div id="atr-result-${h.id}"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       <button class="btn btn-p btn-sm" onclick="sdTab('ai',document.getElementById('sdt-ai'))">🤖 Full AI Analysis</button>
       <button class="btn btn-g btn-sm" onclick="closeM('stockdetail');go('analysis');setTimeout(()=>{document.getElementById('ai-sel').value='${h.id}';loadStockAnalysis()},120)">📊 Deep Analysis</button>
       <button class="btn btn-g btn-sm" onclick="sdTab('edit',document.getElementById('sdt-edit'));_sdEditContent(D.holdings.find(x=>x.id==${h.id}))">✏ Edit</button>
@@ -20146,6 +20432,130 @@ Target allocations: ${Object.entries(_rebTargets).filter(([,v])=>v>0).map(([k,v]
 Provide a specific, actionable rebalancing plan with buy/sell recommendations for each sector. Consider tax implications (STCG vs LTCG).`;
   const result = await claude(prompt);
   el.innerHTML = md2h(result);
+}
+
+// ── Exact-Quantity Stock-Level Rebalancer ─────────────────────────────────────
+// For each holding, user edits target %. We compute:
+//   targetValue = corpus × targetPct / 100
+//   diff = targetValue − currentValue
+//   shares = round(|diff| / ltp)
+//   direction = BUY if diff > 0, SELL if diff < 0
+// Shows net cash freed/needed, tax impact of sells.
+
+const _stockRebTargets = {};  // { symbol: targetPct }
+
+function calcExactRebalance() {
+  const el = document.getElementById('reb-stock-table');
+  const summEl = document.getElementById('reb-trades-summary');
+  const summBody = document.getElementById('reb-trades-summary-body');
+  if (!el) return;
+  if (!D.holdings.length) { el.innerHTML = '<div style="color:var(--t4);font-size:12px;padding:20px">Add holdings first.</div>'; return; }
+
+  const totalCv  = D.holdings.reduce((s,h) => s + h.qty*(h.ltp||h.avgPrice), 0);
+  const corpus   = parseFloat(document.getElementById('reb-corpus')?.value) || totalCv;
+
+  // Seed targets from current weights on first open
+  D.holdings.forEach(h => {
+    const sym = h.symbol;
+    if (_stockRebTargets[sym] == null) {
+      _stockRebTargets[sym] = +(h.qty*(h.ltp||h.avgPrice)/totalCv*100).toFixed(1);
+    }
+  });
+
+  const totalTargetPct = Object.values(_stockRebTargets).reduce((s,v)=>s+(+v||0),0);
+
+  // Table HTML
+  let html = `
+    <div style="font-size:11px;color:${Math.abs(totalTargetPct-100)<0.5?'var(--grn)':'var(--red)'};margin-bottom:10px;font-weight:600">
+      Total target: ${totalTargetPct.toFixed(1)}% ${Math.abs(totalTargetPct-100)<0.5?'✅':'⚠ must equal 100%'}
+    </div>
+    <div style="overflow-x:auto"><table class="tbl">
+      <thead><tr>
+        <th>Stock</th><th>LTP</th><th>Qty</th><th>Current ₹</th><th>Current %</th>
+        <th>Target % <span style="font-weight:400;color:var(--t4)">(edit)</span></th>
+        <th>Target ₹</th><th>Diff ₹</th><th>Shares</th><th>Action</th>
+      </tr></thead>
+      <tbody>`;
+
+  const trades = [];
+  D.holdings.forEach(h => {
+    const ltp   = h.ltp || h.avgPrice;
+    const curVal = h.qty * ltp;
+    const curPct = totalCv > 0 ? curVal/totalCv*100 : 0;
+    const tgtPct = +(_stockRebTargets[h.symbol] || 0);
+    const tgtVal = corpus * tgtPct / 100;
+    const diff   = tgtVal - curVal;
+    const shares = Math.abs(diff) >= ltp ? Math.round(Math.abs(diff) / ltp) : 0;
+    const isBuy  = diff > 0;
+    const days   = hDays(h.buyDate) || 0;
+    const taxTag = days >= 365 ? 'LTCG' : 'STCG';
+
+    if (Math.abs(diff) > ltp * 0.5) {
+      trades.push({ h, ltp, curVal, tgtVal, diff, shares, isBuy, taxTag, days });
+    }
+
+    const diffColor = Math.abs(diff) < ltp ? 'var(--t4)' : isBuy ? 'var(--grn)' : 'var(--red)';
+    html += `<tr>
+      <td><div class="sym">${h.symbol}</div><div class="snm">${h.sector||'—'}</div></td>
+      <td class="mn">₹${f(ltp)}</td>
+      <td class="mn">${h.qty}</td>
+      <td class="mn">₹${fI(curVal)}</td>
+      <td class="mn">${f(curPct,1)}%</td>
+      <td>
+        <input type="number" class="fi" style="width:70px;padding:3px 6px;font-size:11px" min="0" max="100" step="0.5"
+          value="${tgtPct}" onchange="_stockRebTargets['${h.symbol}']=+this.value;calcExactRebalance()">
+      </td>
+      <td class="mn">₹${fI(tgtVal)}</td>
+      <td class="mn" style="color:${diffColor};font-weight:600">${diff>=0?'+':''}₹${fI(Math.abs(diff))}</td>
+      <td class="mn" style="color:${diffColor};font-weight:700">${shares > 0 ? shares : '—'}</td>
+      <td style="font-size:11px">
+        ${shares > 0
+          ? `<span style="font-weight:700;color:${diffColor}">${isBuy?'BUY':'SELL'} ${shares}</span>${!isBuy?` <span class="tag ${taxTag==='LTCG'?'t-ltcg':'t-stcg'}" style="margin-left:4px;font-size:9px">${taxTag}</span>`:''}`
+          : '<span style="color:var(--t4)">✓ balanced</span>'}
+      </td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+
+  // Summary
+  if (trades.length && summEl && summBody) {
+    summEl.style.display = '';
+    const buys  = trades.filter(t=>t.isBuy);
+    const sells = trades.filter(t=>!t.isBuy);
+    const cashFreed  = sells.reduce((s,t)=>s+Math.abs(t.diff),0);
+    const cashNeeded = buys.reduce((s,t)=>s+t.diff,0);
+    const netCash    = cashFreed - cashNeeded;
+
+    summBody.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">
+        <div class="sc c1"><div class="sc-lbl">Cash Freed (Sells)</div><div class="sc-val up">₹${fI(cashFreed)}</div><div class="sc-sub">${sells.length} positions</div></div>
+        <div class="sc c2"><div class="sc-lbl">Cash Needed (Buys)</div><div class="sc-val dn">₹${fI(cashNeeded)}</div><div class="sc-sub">${buys.length} positions</div></div>
+        <div class="sc ${netCash>=0?'c2':'c5'}"><div class="sc-lbl">Net Cash ${netCash>=0?'Freed':'Needed'}</div><div class="sc-val ${netCash>=0?'up':'dn'}">₹${fI(Math.abs(netCash))}</div></div>
+        <div class="sc c4"><div class="sc-lbl">Trades Required</div><div class="sc-val">${trades.length}</div></div>
+      </div>
+      <div style="overflow-x:auto"><table class="tbl">
+        <thead><tr><th>Action</th><th>Stock</th><th>Shares</th><th>@LTP</th><th>Amount</th><th>Tax Type</th><th>LTCG?</th></tr></thead>
+        <tbody>
+          ${[...sells,...buys].map(t=>`<tr>
+            <td><span style="font-weight:700;color:${t.isBuy?'var(--grn)':'var(--red)'}">${t.isBuy?'BUY':'SELL'}</span></td>
+            <td><div class="sym">${t.h.symbol}</div></td>
+            <td class="mn" style="font-weight:700">${t.shares}</td>
+            <td class="mn">₹${f(t.ltp)}</td>
+            <td class="mn" style="font-weight:700;color:${t.isBuy?'var(--grn)':'var(--red)'}">₹${fI(t.shares*t.ltp)}</td>
+            <td><span class="tag ${t.taxTag==='LTCG'?'t-ltcg':'t-stcg'}">${t.taxTag}</span></td>
+            <td style="font-size:11px;color:var(--t3)">${t.days}d ${t.days>=365?'✅ LTCG ready':Math.max(0,365-t.days)+'d to LTCG'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>
+      <div style="font-size:10px;color:var(--t4);margin-top:8px">
+        ⚠ Selling STCG positions attracts 20% short-term capital gains tax. Consider waiting for LTCG where possible.
+        All quantities are approximate — confirm prices before placing orders.
+      </div>`;
+  } else if (summEl) {
+    summEl.style.display = 'none';
+  }
 }
 
 // ═══════════════════════════════════════════════════
