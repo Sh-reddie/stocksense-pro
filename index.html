@@ -1542,6 +1542,7 @@ textarea.fi{resize:vertical;min-height:70px;}
           <option value="added">🕐 Recently Added</option>
         </select>
         <button class="btn btn-g btn-sm" onclick="rankAllWatchlist()" title="AI-score all watchlist stocks and sort by opportunity (1-10)">🏆 AI Rank All</button>
+        <button class="btn btn-yel btn-sm" onclick="setAllWlEntryAlerts()" title="Auto-create recurring price alerts at AI entry zones for all WAIT stocks">📍 Set Entry Alerts</button>
         <button class="btn btn-red btn-sm" onclick="clearSection('watchlist')">🗑 Clear</button>
         <button class="btn btn-p" onclick="openSpotlight('watchlist')">+ Watch Stock</button>
       </div>
@@ -1717,6 +1718,14 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="pn-b" style="padding:0">
         <div id="alrt-custom-list"><div style="color:var(--t4);font-size:12px;padding:20px">No custom alerts. Click <strong>+ Add Alert</strong> to create one.</div></div>
       </div>
+    </div>
+    <!-- Alert History Audit Log -->
+    <div class="pn" style="margin-top:14px">
+      <div class="pn-h">
+        <div class="pn-t">📋 Alert History</div>
+        <button class="btn btn-g btn-sm" onclick="clearAlertHistory()">🗑 Clear History</button>
+      </div>
+      <div class="pn-b" style="padding:0"><div id="alrt-history-list"></div></div>
     </div>
     <!-- Add alert modal (inline) -->
     <div id="alrt-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:2000;align-items:center;justify-content:center">
@@ -3846,21 +3855,23 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="sec-title">🗓 Dividend Calendar</div>
       <button class="btn btn-g" onclick="renderDivCalendar()">↻ Refresh</button>
     </div>
-    <div class="pn gap" style="background:linear-gradient(135deg,rgba(45,211,111,.06),rgba(45,211,111,.02));border-color:rgba(45,211,111,.2)">
-      <div style="display:flex;align-items:center;justify-content:space-between">
-        <div>
-          <div style="font-size:12px;color:var(--t4);margin-bottom:4px">Est. Annual Dividend Income</div>
-          <div style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--grn)" id="divcal-total">₹0</div>
-          <div style="font-size:11px;color:var(--t4);margin-top:4px" id="divcal-monthly">Est. ₹0/month</div>
-        </div>
-        <div style="font-size:32px">💰</div>
-      </div>
+    <!-- Summary cards -->
+    <div class="sg sg-4 gap" style="margin-bottom:14px">
+      <div class="sc c2"><div class="sc-lbl">Est. Annual Income</div><div class="sc-val up" id="divcal-total">₹0</div></div>
+      <div class="sc c1"><div class="sc-lbl">Est. Monthly Average</div><div class="sc-val" id="divcal-monthly">₹0</div></div>
+      <div class="sc c3"><div class="sc-lbl">Avg Portfolio Yield</div><div class="sc-val" id="divcal-avg-yield">—</div></div>
+      <div class="sc c4"><div class="sc-lbl">Next Ex-Date</div><div class="sc-val" style="font-size:13px" id="divcal-next-ex">—</div></div>
+    </div>
+    <!-- 12-month projection bar chart -->
+    <div class="pn gap" style="margin-bottom:14px">
+      <div class="pn-h"><div class="pn-t">📅 12-Month Dividend Income Projection</div><span style="font-size:10px;color:var(--t4)">Based on yield + historical payout frequency</span></div>
+      <div class="pn-b" id="divcal-12m-chart" style="padding:16px"></div>
     </div>
     <div class="pn">
       <div style="overflow-x:auto">
         <table class="tbl">
-          <thead><tr><th>Stock</th><th>Div Yield%</th><th>LTP</th><th>Est. Div/Share</th><th>Qty</th><th>Est. Annual Income</th><th>Yield Rating</th></tr></thead>
-          <tbody id="divcal-tbody"><tr><td colspan="7" style="text-align:center;padding:40px;color:var(--t4)">Add holdings to see dividend estimates.</td></tr></tbody>
+          <thead><tr><th>Stock</th><th>Div Yield%</th><th>LTP</th><th>Est. Div/Share</th><th>Qty</th><th>Est. Annual Income</th><th>Payout Pattern</th><th>Yield Rating</th></tr></thead>
+          <tbody id="divcal-tbody"><tr><td colspan="8" style="text-align:center;padding:40px;color:var(--t4)">Add holdings to see dividend estimates.</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -6808,6 +6819,81 @@ function startWlBuy(id){document.querySelectorAll('.wl-card').forEach(c=>c.class
 function cancelWlBuy(id){document.getElementById('wlc-'+id)?.classList.remove('buying');}
 function rmWatch(id){D.watchlist=D.watchlist.filter(w=>w.id!=id);save('watchlist');renderWatchlist();toast('Removed from watchlist');}
 
+// ── Watchlist → Auto Price Alert from AI Entry Zone ───────────────────────────
+// Creates a recurring price alert at the bottom of the AI entry zone.
+// When price drops into the zone, the alert fires (handled by checkAlerts).
+// Also creates a "breakout above entry high" alert if stock is currently below zone.
+function setWlEntryAlert(id) {
+  const w = D.watchlist.find(x => x.id == id);
+  if (!w || !w.wlEntryLow || !w.wlEntryHigh) {
+    toast('Run AI analysis first to get entry zone', 'error');
+    return;
+  }
+  const alerts = loadAlerts();
+  const ltp = w.ltp || 0;
+  const now = new Date().toISOString();
+  let created = 0;
+
+  // Check if alerts already exist for this watchlist stock + entry zone
+  const existing = alerts.filter(a => a.sym === w.symbol && a.src === 'watchlist');
+  if (existing.length) {
+    // Remove old watchlist alerts and replace with fresh ones
+    const filtered = alerts.filter(a => !(a.sym === w.symbol && a.src === 'watchlist'));
+    saveAlerts(filtered);
+    toast(`↻ Replaced existing entry alerts for ${w.symbol}`, 'info');
+  }
+
+  const freshAlerts = loadAlerts();
+
+  // Alert 1: price drops to entry zone (pullback entry)
+  // Use recurring mode so it fires each time price dips into zone
+  freshAlerts.push({
+    id: Date.now() + Math.random(),
+    sym: w.symbol,
+    type: 'below',
+    price: w.wlEntryHigh,   // fires when LTP drops below entry zone ceiling
+    label: `Entry Zone ₹${f(w.wlEntryLow)}–₹${f(w.wlEntryHigh)} 🔁`,
+    src: 'watchlist',
+    created: now,
+    triggered: false,
+    mode: 'every',
+    _lastState: 'clear',
+    triggerCount: 0,
+    note: w.wlWhyEnter || '',
+  });
+  created++;
+
+  // Alert 2: breakout above 52W high (momentum entry) — only if LTP below it
+  if (w._h52 && ltp < w._h52 * 0.98) {
+    freshAlerts.push({
+      id: Date.now() + Math.random() + 1,
+      sym: w.symbol,
+      type: 'above',
+      price: +(w._h52 * 1.005).toFixed(2),  // just above 52W high = breakout
+      label: `52W High Breakout ₹${f(+(w._h52 * 1.005).toFixed(2))} 🔁`,
+      src: 'watchlist',
+      created: now,
+      triggered: false,
+      mode: 'every',
+      _lastState: 'clear',
+      triggerCount: 0,
+    });
+    created++;
+  }
+
+  saveAlerts(freshAlerts);
+  renderAlerts();
+  toast(`✅ ${created} entry alert${created > 1 ? 's' : ''} set for ${w.symbol} — zone ₹${f(w.wlEntryLow)}–₹${f(w.wlEntryHigh)}`, 'ok');
+}
+
+// Convenience: set entry alerts for all WAIT watchlist stocks that have AI analysis
+function setAllWlEntryAlerts() {
+  const waitStocks = D.watchlist.filter(w => w.wlDecision === 'WAIT' && w.wlEntryLow);
+  if (!waitStocks.length) { toast('No WAIT stocks with AI entry zones', 'info'); return; }
+  waitStocks.forEach(w => setWlEntryAlert(w.id));
+  toast(`✅ Entry alerts set for ${waitStocks.length} WAIT stocks`, 'ok');
+}
+
 function toggleWlAlertForm(id) {
   const el = document.getElementById('wlaf-'+id);
   if (!el) return;
@@ -8403,7 +8489,8 @@ function renderWatchlist() {
           <button class="btn btn-grn btn-xs" onclick="quickAddToHoldings(${w.id})">+ Holdings</button>
           <button id="wl-ai-btn-${w.id}" class="btn btn-p btn-xs" onclick="_wlAnalyseSingle(${w.id})">${hasAI ? '🔄 Re-analyse' : '🤖 AI'}</button>
           <button class="btn btn-g btn-xs" onclick="toggleWlExpand(${w.id})">${document.getElementById('wle-'+w.id)?.style.display!=='none'?'▲ Less':'▼ Detail'}</button>
-          <button class="btn btn-g btn-xs" onclick="toggleWlAlertForm(${w.id})" title="Set price alert">🔔</button>
+          <button class="btn btn-g btn-xs" onclick="toggleWlAlertForm(${w.id})" title="Set custom price alert">🔔</button>
+          ${hasAI && w.wlEntryLow ? `<button class="btn btn-yel btn-xs" onclick="setWlEntryAlert(${w.id})" title="Auto-create price alert at AI entry zone ₹${f(w.wlEntryLow)}–₹${f(w.wlEntryHigh)}">📍 Entry Alert</button>` : ''}
           <button class="btn btn-red btn-xs" onclick="rmWatch(${w.id})">✕</button>
         </div>
       </div>
@@ -14094,6 +14181,7 @@ function checkAlerts() {
         hitCount++;
         const dir = a.type === 'above' ? '▲' : '▼';
         const msg = `${dir} ${a.sym} — ${a.label} hit! ₹${ltp.toFixed(2)} ${a.type==='above'?'≥':'≤'} ₹${a.price} (×${a.triggerCount})`;
+        _logAlertHistory({ sym: a.sym, label: a.label.replace(' 🔁',''), price: a.price, ltp, type: a.type, ts: a.triggeredAt, mode: 'every' });
         toast(msg, a.type === 'below' ? 'error' : 'success');
         addNotif('alert', msg, a.sym);
         if (a.label === 'Stop Loss') playSL = true;
@@ -14111,6 +14199,7 @@ function checkAlerts() {
       a.triggered = true; a.triggeredAt = new Date().toISOString(); hitCount++;
       const dir  = a.type === 'above' ? '▲' : '▼';
       const msg  = `${dir} ${a.sym} — ${a.label} hit! ₹${ltp.toFixed(2)} ${a.type==='above'?'≥':'≤'} ₹${a.price}`;
+      _logAlertHistory({ sym: a.sym, label: a.label, price: a.price, ltp, type: a.type, ts: a.triggeredAt, mode: 'once' });
       toast(msg, a.type === 'below' ? 'error' : 'success');
       addNotif('alert', msg, a.sym);
       if (a.label === 'Stop Loss') playSL = true;
@@ -14169,6 +14258,7 @@ function renderAlerts() {
   const cuEl = document.getElementById('alrt-custom-list');
   aiEl.innerHTML = aiAlerts.length ? aiAlerts.map(mkRow).join('') : '<div style="color:var(--t4);font-size:12px;padding:20px">Run <strong>AI Analyze All</strong> then click <strong>Sync from Portfolio</strong>.</div>';
   cuEl.innerHTML = customAlerts.length ? customAlerts.map(mkRow).join('') : '<div style="color:var(--t4);font-size:12px;padding:20px">No custom alerts. Click <strong>+ Add Alert</strong> to create one.</div>';
+  renderAlertHistory();
 }
 
 function deleteAlert(id) {
@@ -14200,6 +14290,69 @@ function saveCustomAlert() {
   document.getElementById('alrt-modal').style.display='none';
   renderAlerts();
   toast(`✅ ${mode==='every'?'Recurring':'One-shot'} alert set for ${sym}`);
+}
+
+// ── Alert History Audit Log ───────────────────────────────────────────────────
+// Keeps a persistent log of every alert trigger with timestamp + price-at-fire.
+// Stored in localStorage as 'ss_alert_history' (max 200 entries).
+
+function _logAlertHistory(entry) {
+  try {
+    const hist = JSON.parse(localStorage.getItem('ss_alert_history') || '[]');
+    hist.unshift({ ...entry, id: Date.now() });
+    localStorage.setItem('ss_alert_history', JSON.stringify(hist.slice(0, 200)));
+  } catch(e) {}
+  renderAlertHistory();
+}
+
+function _getAlertHistory() {
+  try { return JSON.parse(localStorage.getItem('ss_alert_history') || '[]'); } catch(e) { return []; }
+}
+
+function clearAlertHistory() {
+  localStorage.removeItem('ss_alert_history');
+  renderAlertHistory();
+  toast('Alert history cleared');
+}
+
+function renderAlertHistory() {
+  const el = document.getElementById('alrt-history-list');
+  if (!el) return;
+  const hist = _getAlertHistory();
+  if (!hist.length) {
+    el.innerHTML = '<div style="color:var(--t4);font-size:12px;padding:16px">No alert history yet — triggers will be logged here automatically.</div>';
+    return;
+  }
+
+  // Group by symbol for summary
+  const bySymbol = {};
+  hist.forEach(h => { bySymbol[h.sym] = (bySymbol[h.sym] || 0) + 1; });
+  const topSyms = Object.entries(bySymbol).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  el.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px 0;border-bottom:1px solid var(--b2);margin-bottom:0">
+      ${topSyms.map(([sym,cnt]) => `<span style="font-size:10px;background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:2px 8px;color:var(--t2)">${sym} ×${cnt}</span>`).join('')}
+    </div>
+    <div style="overflow-x:auto"><table class="tbl">
+      <thead><tr><th>Stock</th><th>Alert</th><th>Target ₹</th><th>Price at Fire</th><th>Type</th><th>Fired At</th></tr></thead>
+      <tbody>
+        ${hist.slice(0, 50).map(h => {
+          const ago = Math.round((Date.now() - new Date(h.ts).getTime()) / 60000);
+          const agoStr = ago < 60 ? ago+'m ago' : ago < 1440 ? Math.round(ago/60)+'h ago' : new Date(h.ts).toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+          const isDown = h.type === 'below';
+          const slipped = isDown ? h.ltp <= h.price : h.ltp >= h.price;
+          return `<tr>
+            <td><div class="sym">${h.sym}</div></td>
+            <td style="font-size:11px;color:var(--t2)">${h.label||'—'}</td>
+            <td class="mn">₹${f(+h.price)}</td>
+            <td class="mn" style="font-weight:700;color:${isDown?'var(--red)':'var(--grn)'}">₹${f(+h.ltp)} ${isDown?'▼':'▲'}</td>
+            <td><span style="font-size:9px;background:var(--s2);border:1px solid var(--b2);border-radius:6px;padding:1px 6px;color:var(--t3)">${h.mode==='every'?'🔁 Recurring':'Once'}</span></td>
+            <td style="font-size:11px;color:var(--t4)">${agoStr}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div>
+    <div style="font-size:10px;color:var(--t4);padding:8px 14px">Showing last ${Math.min(50, hist.length)} of ${hist.length} triggers. Use patterns here to calibrate stop-loss levels.</div>`;
 }
 
 function requestNotifPermission() {
@@ -20566,46 +20719,135 @@ function renderDivCalendar() {
   const loggedEl = document.getElementById('divcal-logged');
   if (!tbody) return;
 
-  // Holdings with dividend info
+  const today = new Date();
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // ── Infer payout months from logged dividends per stock ─────────────────
+  // If we have D.dividends history, extract which months each stock pays.
+  // Otherwise, use sector-typical payout patterns.
+  const SECTOR_PAYOUT_MONTHS = {
+    'Banking & Finance': [3,9],      // Mar, Sep (typical for PSU banks)
+    'IT & Technology':   [1,7],      // Jan, Jul
+    'FMCG & Consumer':   [3,8],
+    'Energy & Power':    [3,9],
+    'Pharma':            [3,9],
+    'Auto':              [3,9],
+    'Metals':            [3,9],
+    'default':           [3,9],      // Mar, Sep most common in India
+  };
+
+  function inferPayoutMonths(h) {
+    const logged = D.dividends.filter(d => d.symbol === h.symbol && d.exDate);
+    if (logged.length >= 2) {
+      return [...new Set(logged.map(d => new Date(d.exDate).getMonth()))].sort((a,b)=>a-b);
+    }
+    const sectorKey = Object.keys(SECTOR_PAYOUT_MONTHS).find(k => (h.sector||'').toLowerCase().includes(k.toLowerCase())) || 'default';
+    return SECTOR_PAYOUT_MONTHS[sectorKey] || [3, 9];
+  }
+
+  // ── Build monthly projection ─────────────────────────────────────────────
+  // monthlyIncome[0..11] = projected ₹ for Jan..Dec of the next 12 months
+  const monthlyIncome = new Array(12).fill(0);
+
   const rows = D.holdings.map(h => {
     const ltp = h.ltp || h.avgPrice;
-    const dy = h.dy || 0; // dividend yield as fraction (0.03 = 3%)
+    const dy  = h.dy || 0;                           // fraction (0.03 = 3%)
     const annualDivPerShare = ltp * dy;
     const annualIncome = annualDivPerShare * h.qty;
-    return { h, ltp, dy: dy * 100, annualDivPerShare, annualIncome };
-  }).sort((a,b) => b.dy - a.dy);
+    const payoutMonths = inferPayoutMonths(h);
+    const incomePerPayout = payoutMonths.length > 0 ? annualIncome / payoutMonths.length : 0;
 
-  const totalAnnual = rows.reduce((s,r) => s + r.annualIncome, 0);
+    // Distribute income into the next 12 month buckets
+    for (let offset = 0; offset < 12; offset++) {
+      const futureMonth = (today.getMonth() + offset) % 12;
+      if (payoutMonths.includes(futureMonth)) {
+        monthlyIncome[offset] += incomePerPayout;
+      }
+    }
 
-  const el = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
-  el('divcal-total', '₹'+fI(totalAnnual));
-  el('divcal-monthly', 'Est. ₹'+fI(totalAnnual/12)+'/month');
+    return { h, ltp, dy: dy * 100, annualDivPerShare, annualIncome, payoutMonths };
+  }).sort((a,b) => b.annualIncome - a.annualIncome);
 
+  const totalAnnual    = rows.reduce((s,r) => s + r.annualIncome, 0);
+  const totalInvested  = rows.reduce((s,r) => s + r.h.qty*r.h.avgPrice, 0);
+  const avgYOC         = totalInvested > 0 ? (totalAnnual / totalInvested * 100) : 0;
+
+  // Next upcoming ex-date from logged dividends
+  const upcomingEx = D.dividends
+    .filter(d => d.exDate && d.exDate > today.toISOString().slice(0,10))
+    .sort((a,b) => a.exDate.localeCompare(b.exDate))[0];
+
+  const setEl = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
+  setEl('divcal-total', '₹'+fI(totalAnnual));
+  setEl('divcal-monthly', '₹'+fI(totalAnnual/12));
+  setEl('divcal-avg-yield', avgYOC.toFixed(2)+'%');
+  setEl('divcal-next-ex', upcomingEx ? upcomingEx.symbol+' · '+upcomingEx.exDate : totalAnnual > 0 ? 'Est. '+MONTHS[(today.getMonth()+2)%12] : '—');
+
+  // ── 12-month bar chart ───────────────────────────────────────────────────
+  const chartEl = document.getElementById('divcal-12m-chart');
+  if (chartEl) {
+    const maxM = Math.max(...monthlyIncome, 1);
+    const barHtml = monthlyIncome.map((amt, offset) => {
+      const monthIdx = (today.getMonth() + offset) % 12;
+      const isCurrentMonth = offset === 0;
+      const barH = Math.round(amt / maxM * 80);
+      const hasIncome = amt > 0;
+      return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:0">
+        <div style="font-size:10px;color:var(--t3);font-family:var(--mono);height:20px;display:flex;align-items:flex-end">
+          ${hasIncome ? '₹'+fI(amt) : ''}
+        </div>
+        <div style="width:100%;max-width:40px;background:var(--s3);border-radius:4px;height:80px;display:flex;align-items:flex-end;overflow:hidden">
+          <div style="width:100%;height:${barH || (hasIncome ? 3 : 0)}px;background:${isCurrentMonth ? 'var(--ac)' : hasIncome ? 'var(--grn)' : 'var(--b2)'};border-radius:4px;transition:height .4s"></div>
+        </div>
+        <div style="font-size:9.5px;color:${isCurrentMonth?'var(--ac)':'var(--t4)'};font-weight:${isCurrentMonth?'700':'400'}">${MONTHS[monthIdx]}</div>
+      </div>`;
+    }).join('');
+
+    const totalProjected = monthlyIncome.reduce((s,v)=>s+v,0);
+    chartEl.innerHTML = `
+      <div style="display:flex;align-items:flex-end;gap:4px;height:110px;padding-bottom:24px">${barHtml}</div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t4);margin-top:8px;padding-top:8px;border-top:1px solid var(--b2)">
+        <span>Next 12-month projected income: <strong style="color:var(--grn)">₹${fI(totalProjected)}</strong></span>
+        <span>Yield-on-cost: <strong>${avgYOC.toFixed(2)}%</strong></span>
+      </div>
+      <div style="font-size:10px;color:var(--t4);margin-top:4px">Payout months estimated from logged dividends or sector patterns. Indian stocks typically pay in Mar/Sep.</div>`;
+  }
+
+  // ── Per-stock table ──────────────────────────────────────────────────────
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--t4)">Add holdings to see dividend estimates.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--t4)">Add holdings to see dividend estimates.</td></tr>';
   } else {
     tbody.innerHTML = rows.map(r => {
-      const rowClass = r.dy >= 3 ? 'divcal-row-high' : r.dy >= 1 ? 'divcal-row-mid' : '';
       const yieldTag = r.dy >= 3 ? `<span class="tag t-buy">High &gt;3%</span>` : r.dy >= 1 ? `<span class="tag t-hold">Mid 1-3%</span>` : `<span class="tag t-neu" style="color:var(--t4)">Low &lt;1%</span>`;
-      return `<tr class="${rowClass}">
+      const payStr   = r.payoutMonths.map(m=>MONTHS[m]).join(', ') || 'Unknown';
+      return `<tr>
         <td><div class="sym">${r.h.symbol}</div><div class="snm">${r.h.name}</div></td>
         <td class="mn" style="color:${r.dy>=3?'var(--grn)':r.dy>=1?'var(--yel)':'var(--t4)'}">${f(r.dy,2)}%</td>
         <td class="mn">₹${f(r.ltp,2)}</td>
         <td class="mn">${r.annualDivPerShare > 0 ? '₹'+f(r.annualDivPerShare,2) : '—'}</td>
         <td class="mn">${r.h.qty}</td>
-        <td class="mn" style="font-weight:700">${r.annualIncome > 0 ? '₹'+fI(r.annualIncome) : '—'}</td>
+        <td class="mn" style="font-weight:700;color:${r.annualIncome>0?'var(--grn)':'var(--t4)'}">${r.annualIncome > 0 ? '₹'+fI(r.annualIncome) : '—'}</td>
+        <td style="font-size:10.5px;color:var(--t3)">${payStr}</td>
         <td>${yieldTag}</td>
       </tr>`;
     }).join('');
   }
 
-  // Logged dividends
+  // ── Logged dividends ─────────────────────────────────────────────────────
   if (loggedEl) {
     if (!D.dividends.length) {
       loggedEl.innerHTML = '<div style="color:var(--t4);font-size:12px;padding:12px">No manually logged dividends. Use Dividends section to log payments.</div>';
     } else {
-      loggedEl.innerHTML = '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Stock</th><th>Date</th><th>Amount</th><th>Notes</th></tr></thead><tbody>' +
-        D.dividends.map(d=>`<tr><td>${d.symbol||'—'}</td><td>${d.date||'—'}</td><td class="mn up">₹${fI(d.amount||0)}</td><td style="font-size:11px;color:var(--t3)">${d.note||'—'}</td></tr>`).join('') +
+      const sorted = [...D.dividends].sort((a,b)=>(b.exDate||'').localeCompare(a.exDate||''));
+      loggedEl.innerHTML = '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Stock</th><th>Ex-Date</th><th>Pay-Date</th><th>Div/Share</th><th>Qty</th><th>Total Received</th></tr></thead><tbody>' +
+        sorted.map(d=>`<tr>
+          <td><div class="sym">${d.symbol||'—'}</div></td>
+          <td class="mn">${d.exDate||'—'}</td>
+          <td class="mn">${d.payDate||'—'}</td>
+          <td class="mn">₹${f(d.amtPerShare||0,2)}</td>
+          <td class="mn">${d.qty||'—'}</td>
+          <td class="mn up" style="font-weight:700">₹${fI(d.total||0)}</td>
+        </tr>`).join('') +
         '</tbody></table></div>';
     }
   }
