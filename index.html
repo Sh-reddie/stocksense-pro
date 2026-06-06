@@ -1076,7 +1076,8 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="tn-drop-wrap">
       <div class="tn-tab" id="tnt-manage" onclick="go('alerts')">⚙ Manage ▾</div>
       <div class="tn-drop">
-        <div class="tn-drop-div">Risk</div>
+        <div class="tn-drop-div">Risk &amp; Performance</div>
+        <div class="tn-drop-item" onclick="go('attribution')" style="font-weight:600;color:var(--ac)">📊 Performance Attribution</div>
         <div class="tn-drop-item" onclick="go('risk')">🛡 Risk Console</div>
         <div class="tn-drop-item" onclick="go('riskpro')">⚠ Risk Analytics</div>
         <div class="tn-drop-sep"></div>
@@ -1477,6 +1478,42 @@ textarea.fi{resize:vertical;min-height:70px;}
   </div>
 
   <!-- ═══ RISK CONSOLE ═══════════════════════════════════════ -->
+  <!-- ═══ PERFORMANCE ATTRIBUTION ═════════════════════════════════ -->
+  <div class="sec" id="sec-attribution">
+    <div class="sec-head">
+      <div class="sec-title">📊 Performance Attribution</div>
+      <button class="btn btn-g" onclick="renderAttribution()">↻ Refresh</button>
+    </div>
+    <!-- Summary row -->
+    <div class="sg sg-4 gap" style="margin-bottom:14px" id="attr-summary"></div>
+    <div class="g21 gap">
+      <!-- Left: Per-stock contribution -->
+      <div>
+        <div class="pn" style="margin-bottom:14px">
+          <div class="pn-h"><div class="pn-t">🏆 P&L Contribution by Stock</div><span style="font-size:10px;color:var(--t4)" id="attr-stock-sub"></span></div>
+          <div class="pn-b" id="attr-stock-bars" style="padding:14px"></div>
+        </div>
+        <div class="pn">
+          <div class="pn-h"><div class="pn-t">📋 Full Attribution Table</div></div>
+          <div style="overflow-x:auto"><table class="tbl"><thead><tr>
+            <th>Stock</th><th>Sector</th><th>Invested</th><th>Current</th><th>P&L ₹</th><th>Return%</th><th>Contribution</th><th>Port Weight</th>
+          </tr></thead><tbody id="attr-tbody"></tbody></table></div>
+        </div>
+      </div>
+      <!-- Right: Sector attribution -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="pn">
+          <div class="pn-h"><div class="pn-t">🏭 Sector Attribution</div></div>
+          <div class="pn-b" id="attr-sector-bars" style="padding:14px"></div>
+        </div>
+        <div class="pn">
+          <div class="pn-h"><div class="pn-t">📈 Return Distribution</div></div>
+          <div class="pn-b" id="attr-dist" style="padding:14px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="sec" id="sec-risk">
     <div class="sec-head">
       <div class="sec-title">⚠ Risk Console</div>
@@ -2576,14 +2613,24 @@ textarea.fi{resize:vertical;min-height:70px;}
         <!-- ── Quick Presets ─────────────────────────────────── -->
         <div style="display:flex;gap:6px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--b1)">
           <span style="font-size:10px;color:var(--t4);align-self:center;white-space:nowrap">Quick:</span>
-          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('garp')"     title="PE<25, ROE>15%, 52W<75%">💎 GARP</button>
-          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('momentum')" title="Near 52W high, strong signal">🚀 Momentum</button>
-          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('deepvalue')" title="PE<15, near 52W low — contrarian">🛒 Deep Value</button>
-          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('quality')"  title="ROE>20%, low debt">🏆 Quality</button>
-          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('contrarian')" title="Down >25% from 52W high, but profitable">↩ Contrarian</button>
-          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('buy-near-low')" title="BUY signal + near 52W low — best entry setup" style="color:var(--grn);border-color:rgba(45,211,111,.4)">🎯 Buy Near Low</button>
-          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('highroe-lowpe')" title="ROE>18%, PE<20 — quality at value price" style="color:var(--cyn);border-color:rgba(34,211,238,.4)">💎 Quality Value</button>
-          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('reset')"    style="color:var(--t4)">✕ Reset</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('garp')"         title="PE<25, ROE>15%, 52W<75%">💎 GARP</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('momentum')"     title="Near 52W high, strong signal">🚀 Momentum</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('deepvalue')"    title="PE<15, near 52W low — contrarian">🛒 Deep Value</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('quality')"      title="ROE>20%, low debt">🏆 Quality</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('contrarian')"   title="Down >25% from 52W high, but profitable">↩ Contrarian</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('buy-near-low')" title="BUY signal + near 52W low" style="color:var(--grn);border-color:rgba(45,211,111,.4)">🎯 Buy Near Low</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('highroe-lowpe')" title="ROE>18%, PE<20" style="color:var(--cyn);border-color:rgba(34,211,238,.4)">💎 Quality Value</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('reset')"        style="color:var(--t4)">✕ Reset</button>
+        </div>
+        <!-- ── Saved Filters ─────────────────────────────────── -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--b1)">
+          <span style="font-size:10px;color:var(--t4);white-space:nowrap">Saved:</span>
+          <select id="scr-saved-sel" class="fi" style="width:160px;font-size:11px" onchange="loadSavedScreener(this.value)">
+            <option value="">— Load saved filter —</option>
+          </select>
+          <button class="btn btn-g btn-xs" onclick="saveScreenerFilter()" title="Save current filters with a name">💾 Save</button>
+          <button class="btn btn-red btn-xs" onclick="deleteSavedScreener()" title="Delete selected saved filter">🗑</button>
+          <div id="scr-save-status" style="font-size:10px;color:var(--t4)"></div>
         </div>
         <div class="fg"><label class="fl">Sector</label>
           <select class="fi" id="scr-sector">
@@ -5182,7 +5229,7 @@ let activeColGroups = new Set(['basic']);
 // ═══════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════
-const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP / DCA Tracker',action:'⚡ Action Center',momentum:'🚀 Momentum Board',risk:'🛡 Risk Console',benchmark:'📊 Benchmark vs Nifty',heatmap:'🔥 Correlation Heatmap',sectormap:'🌡 Sector Rotation Map',rebalancer:'⚖ Portfolio Rebalancer',analysis:'🔍 Stock Deep Dive',plan:'Exit Planner',planner:'📐 Investment Planner',realised:'💰 Realised P&L',dividends:'🏦 Dividends',tax:'🧾 Tax P&L Report',divcal:'🗓 Dividend Calendar',alerts:'🔔 Price Alerts',notifications:'📬 Notifications',calendar:'📅 Earnings Calendar',news:'📰 News & Events',deals:'💼 Bulk & Block Deals',import:'⬆ Import CSV / Excel',settings:'⚙ Settings',strategies:'🧠 AI Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Nifty 500 Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily Market Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 Portfolio Doctor','opportunity':'🏆 Opportunity Ranker','action-plan':'📋 Weekly Action Plan','position-builder':'📐 Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ Stock Comparator','intel-report':'📑 Intelligence Report','watchlist-builder':'🔭 Watchlist Builder','exit-planner':'🚪 Exit Strategy Planner','ai-rebalancer':'⚖️ AI Portfolio Rebalancer','earnings-preview':'📣 Earnings Preview','dividend-opt':'💸 Dividend Optimizer','goal-planner':'🎯 Goal Planner','timeline':'📈 Value Timeline','52week':'📊 52-Week Screener','custom-alerts':'🛎 Custom Alerts','fii-dii':'🏦 FII / DII Flow Tracker','order-history':'📋 Order History','pf-heatmap':'🗺 Portfolio Heatmap'};
+const TITLES = {dashboard:'Dashboard',holdings:'Holdings',watchlist:'Watchlist',sip:'SIP / DCA Tracker',action:'⚡ Action Center',momentum:'🚀 Momentum Board',risk:'🛡 Risk Console',benchmark:'📊 Benchmark vs Nifty',heatmap:'🔥 Correlation Heatmap',sectormap:'🌡 Sector Rotation Map',rebalancer:'⚖ Portfolio Rebalancer',analysis:'🔍 Stock Deep Dive',plan:'Exit Planner',planner:'📐 Investment Planner',realised:'💰 Realised P&L',dividends:'🏦 Dividends',tax:'🧾 Tax P&L Report',divcal:'🗓 Dividend Calendar',alerts:'🔔 Price Alerts',notifications:'📬 Notifications',calendar:'📅 Earnings Calendar',news:'📰 News & Events',deals:'💼 Bulk & Block Deals',import:'⬆ Import CSV / Excel',settings:'⚙ Settings',strategies:'🧠 AI Advanced Strategies',riskpro:'⚠ Risk Analytics',screener:'🔍 Nifty 500 Screener',journal:'📒 Trade Journal',macro:'🌐 Macro & Institutional','daily-brief':'🌅 Daily Market Brief','fair-value':'💎 Fair Value Engine','entry-triggers':'🎯 Entry Trigger Engine','portfolio-doctor':'🩺 Portfolio Doctor','opportunity':'🏆 Opportunity Ranker','action-plan':'📋 Weekly Action Plan','position-builder':'📐 Position Builder','stress-test':'🧨 Portfolio Stress Test','comparator':'⚔ Stock Comparator','intel-report':'📑 Intelligence Report','watchlist-builder':'🔭 Watchlist Builder','exit-planner':'🚪 Exit Strategy Planner','ai-rebalancer':'⚖️ AI Portfolio Rebalancer','earnings-preview':'📣 Earnings Preview','dividend-opt':'💸 Dividend Optimizer','goal-planner':'🎯 Goal Planner','timeline':'📈 Value Timeline','52week':'📊 52-Week Screener','custom-alerts':'🛎 Custom Alerts','fii-dii':'🏦 FII / DII Flow Tracker','order-history':'📋 Order History','pf-heatmap':'🗺 Portfolio Heatmap','attribution':'📊 Performance Attribution'};
 
 const TAB_GROUPS = {
   dashboard:'dashboard',
@@ -5241,6 +5288,7 @@ function go(id) {
   if(id==='deals') renderDeals();
   if(id==='strategies') renderStrategiesSection();
   if(id==='riskpro') renderRiskPro();
+  if(id==='attribution') renderAttribution();
   if(id==='screener') renderScreener();
   if(id==='journal') renderJournal();
   if(id==='macro') renderMacro();
@@ -11632,38 +11680,101 @@ function calcHealthScore() {
   return Math.min(100, Math.round(score));
 }
 
+// Builds enriched context for the morning brief including F&O expiry, dividends, SIP
+function _buildMorningBriefContext() {
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // F&O expiry alert
+  const foHeld = D.holdings.filter(h => typeof FNO_STOCKS !== 'undefined' && FNO_STOCKS.has(h.symbol));
+  let foAlert = '';
+  if (foHeld.length && typeof _nextThursday === 'function') {
+    const nextExp = _nextThursday(today);
+    const daysToExp = Math.round((nextExp - today) / 86400000);
+    if (daysToExp <= 2) {
+      foAlert = `⚡ F&O EXPIRY ${daysToExp===0?'TODAY':daysToExp===1?'TOMORROW':'in 2 days'} (${nextExp.toLocaleDateString('en-IN',{day:'numeric',month:'short'})}): ${foHeld.slice(0,3).map(h=>h.symbol).join(', ')}${foHeld.length>3?` +${foHeld.length-3} more`:''}. Expect elevated volatility.`;
+    }
+  }
+
+  // Dividend ex-dates in next 7 days
+  const upcomingDiv = D.dividends
+    .filter(d => d.exDate && d.exDate > todayStr)
+    .filter(d => Math.ceil((new Date(d.exDate)-today)/86400000) <= 7)
+    .sort((a,b)=>a.exDate.localeCompare(b.exDate))
+    .slice(0, 3);
+  const divAlert = upcomingDiv.length
+    ? `💰 Upcoming ex-dates: ${upcomingDiv.map(d=>`${d.symbol} on ${d.exDate}`).join(', ')}.`
+    : '';
+
+  // SIP due today or tomorrow
+  const sips = typeof getSips === 'function' ? getSips() : [];
+  const sipsDue = sips.filter(s => {
+    if (s.freq === 'One-time') return false;
+    const next = typeof sipNextDate === 'function' ? sipNextDate(s) : '';
+    return next.includes('TODAY') || next.includes('1d') || next.includes('tomorrow');
+  });
+  const sipAlert = sipsDue.length
+    ? `🔄 SIP due: ${sipsDue.map(s=>`${s.sym} ₹${fI(s.amt)}`).join(', ')}.`
+    : '';
+
+  // ATR stop breaches (LTP below ATR stop computed yesterday)
+  const atrBreaches = D.holdings.filter(h => h._atrStop && h.ltp && h.ltp < h._atrStop);
+  const atrAlert = atrBreaches.length
+    ? `⚠ ATR stop breached: ${atrBreaches.map(h=>`${h.symbol} (LTP ₹${f(h.ltp)} < ATR SL ₹${f(h._atrStop)})`).slice(0,3).join(', ')}.`
+    : '';
+
+  return { foAlert, divAlert, sipAlert, atrAlert };
+}
+
 async function genMorningBrief() {
   const briefBody = document.getElementById('ds-brief-body');
   const briefTime = document.getElementById('ds-brief-time');
   if(briefBody) briefBody.innerHTML = '<div class="ai-ld"><div class="spin"></div> Getting morning brief…</div>';
+
+  // Build enriched context
+  const ctx = _buildMorningBriefContext();
+  const alerts = [ctx.foAlert, ctx.divAlert, ctx.sipAlert, ctx.atrAlert].filter(Boolean);
+
+  // Render context chips immediately so user sees them while AI loads
+  if (alerts.length && briefBody) {
+    briefBody.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--b2)">
+        ${alerts.map(a=>`<div style="font-size:11.5px;padding:7px 10px;background:var(--s2);border-radius:6px;border-left:3px solid var(--ac);color:var(--t2)">${a}</div>`).join('')}
+      </div>
+      <div class="ai-ld"><div class="spin"></div> Generating AI brief…</div>`;
+  }
+
   const inv = D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0);
   const cv  = D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
   const topMovers = [...D.holdings].sort((a,b)=>Math.abs(b.chgP||0)-Math.abs(a.chgP||0)).slice(0,5).map(h=>`${h.symbol}(${fP(h.chgP||0)})`).join(', ');
-  const breaches = D.holdings.filter(h=>h.ltp&&h.stopLoss&&h.ltp<=h.stopLoss).map(h=>h.symbol).join(', ');
-  const actToday = D.holdings.filter(h=>h.urgency==='ACT TODAY').map(h=>h.symbol).join(', ');
-  const today = new Date().toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'short',year:'numeric'});
-  const prompt = `You are a senior Indian equity research analyst writing a morning brief. Today: ${today}.
+  const breaches   = D.holdings.filter(h=>h.ltp&&h.stopLoss&&h.ltp<=h.stopLoss).map(h=>h.symbol).join(', ');
+  const actToday   = D.holdings.filter(h=>h.urgency==='ACT TODAY').map(h=>h.symbol).join(', ');
+  const todayStr   = new Date().toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'short',year:'numeric'});
+
+  const contextBlock = alerts.length ? `\nToday's specific alerts:\n${alerts.map(a=>'• '+a).join('\n')}` : '';
+
+  const prompt = `You are a senior Indian equity research analyst writing a morning brief. Today: ${todayStr}.
 Portfolio: ₹${fI(cv)} current value (invested ₹${fI(inv)}), ${D.holdings.length} stocks across ${new Set(D.holdings.map(h=>h.sector)).size} sectors.
 Today's movers: ${topMovers||'No data yet'}
 Stop-loss breaches: ${breaches||'None — all clear'}
-Stocks needing action: ${actToday||'None flagged'}
+Stocks needing action: ${actToday||'None flagged'}${contextBlock}
 
-Write a crisp, specific morning brief in exactly 4 bullet points. Each bullet must be one tight sentence. NO generic advice.
-• Market pulse: what Indian market is doing today and what it means for this portfolio
-• Portfolio alert: most important holding to watch/act on today (name the stock)
+Write a crisp morning brief in exactly 4 bullet points, each one tight sentence. NO generic advice.
+• Market pulse: what Indian market is doing and what it means for this portfolio specifically
+• Portfolio alert: most important holding to watch/act on TODAY (name the stock and why)
 • Risk flag: biggest portfolio risk right now (be specific — name stocks/sectors)
 • Action: one concrete thing to do or monitor today
 
-Format exactly as 4 bullets starting with •
-1. Market pulse today
-2. Portfolio status (1 line)
-3. Top priority action for me today
-4. What to watch this week
-Keep it under 100 words total. Be direct and specific. No generic advice.`;
+Keep under 100 words. Direct and specific. Reference the specific alert context if relevant.`;
+
   const r = await claude(prompt);
-  if(briefBody) briefBody.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
+  const alertsHtml = alerts.length
+    ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--b2)">
+        ${alerts.map(a=>`<div style="font-size:11.5px;padding:7px 10px;background:var(--s2);border-radius:6px;border-left:3px solid var(--ac);color:var(--t2)">${a}</div>`).join('')}
+       </div>` : '';
+  if(briefBody) briefBody.innerHTML = alertsHtml + `<div class="ai-txt">${md2h(r)}</div>`;
   if(briefTime) briefTime.textContent = 'Updated ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
-  // Update sentiment badge from D._marketCtx if available
   const badge = document.getElementById('ds-sentiment-badge');
   if(badge && D._marketCtx?.sentimentLabel) {
     badge.textContent = D._marketCtx.sentimentLabel;
@@ -12198,6 +12309,8 @@ function renderAll() {
   renderDashInsights();
   renderInvestmentOS();
   _updateNavPnl();
+  // Re-render attribution if that section is currently open
+  if (document.getElementById('sec-attribution')?.classList.contains('on')) renderAttribution();
 }
 
 
@@ -16486,6 +16599,135 @@ function switchRpTab(id) {
   if (btn)   btn.classList.add('on');
 }
 
+// ── Performance Attribution ───────────────────────────────────────────────────
+function renderAttribution() {
+  if (!D.holdings.length) {
+    ['attr-summary','attr-stock-bars','attr-tbody','attr-sector-bars','attr-dist']
+      .forEach(id => { const e=document.getElementById(id); if(e) e.innerHTML='<div style="color:var(--t4);font-size:12px;padding:16px">Add holdings to see attribution.</div>'; });
+    return;
+  }
+
+  const totalInv = D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0);
+  const totalCv  = D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
+  const totalPL  = totalCv - totalInv;
+  const totalRet = totalInv > 0 ? totalPL/totalInv*100 : 0;
+
+  // Per-stock metrics
+  const stocks = D.holdings.map(h => {
+    const ltp = h.ltp || h.avgPrice;
+    const inv = h.qty * h.avgPrice;
+    const cv  = h.qty * ltp;
+    const pl  = cv - inv;
+    const ret = inv > 0 ? pl/inv*100 : 0;
+    const contrib = totalPL !== 0 ? pl/totalPL*100 : 0; // % of total P&L
+    const portWeight = totalCv > 0 ? cv/totalCv*100 : 0;
+    return { h, ltp, inv, cv, pl, ret, contrib, portWeight };
+  }).sort((a,b) => b.pl - a.pl);
+
+  const winners = stocks.filter(s=>s.pl>0);
+  const losers  = stocks.filter(s=>s.pl<0);
+  const biggestWin  = winners[0];
+  const biggestLoss = losers[losers.length-1];
+
+  // Summary cards
+  const summEl = document.getElementById('attr-summary');
+  if (summEl) summEl.innerHTML = `
+    <div class="sc c2"><div class="sc-lbl">Total P&L</div><div class="sc-val ${totalPL>=0?'up':'dn'}">${totalPL>=0?'+':''}₹${fI(Math.abs(totalPL))}</div><div class="sc-sub">${f(totalRet,1)}% overall</div></div>
+    <div class="sc c1"><div class="sc-lbl">Winners / Losers</div><div class="sc-val"><span style="color:var(--grn)">${winners.length}</span> / <span style="color:var(--red)">${losers.length}</span></div><div class="sc-sub">Win rate ${Math.round(winners.length/stocks.length*100)}%</div></div>
+    <div class="sc c3"><div class="sc-lbl">Best Contributor</div><div class="sc-val up" style="font-size:14px">${biggestWin?biggestWin.h.symbol:'—'}</div><div class="sc-sub">${biggestWin?'+₹'+fI(biggestWin.pl)+' · +'+f(biggestWin.ret,1)+'%':'—'}</div></div>
+    <div class="sc c5"><div class="sc-lbl">Biggest Drag</div><div class="sc-val dn" style="font-size:14px">${biggestLoss?biggestLoss.h.symbol:'—'}</div><div class="sc-sub">${biggestLoss?'₹'+fI(biggestLoss.pl)+' · '+f(biggestLoss.ret,1)+'%':'—'}</div></div>`;
+
+  // Sub-header
+  const subEl = document.getElementById('attr-stock-sub');
+  if (subEl) subEl.textContent = `${stocks.length} stocks · sorted by P&L contribution`;
+
+  // Per-stock horizontal bar chart
+  const maxAbsPL = Math.max(...stocks.map(s=>Math.abs(s.pl)), 1);
+  const barEl = document.getElementById('attr-stock-bars');
+  if (barEl) barEl.innerHTML = stocks.map(s => {
+    const barW = Math.round(Math.abs(s.pl)/maxAbsPL*100);
+    const col  = s.pl>=0 ? 'var(--grn)' : 'var(--red)';
+    return `<div class="attr-row" style="margin-bottom:7px">
+      <span class="attr-sym" style="color:${col};font-weight:700" title="${s.h.name}">${s.h.symbol}</span>
+      <div class="attr-bar-bg" style="flex:1;height:8px;background:var(--s3);border-radius:4px;overflow:hidden">
+        <div class="attr-bar-fill" style="width:${barW}%;height:100%;background:${col};border-radius:4px"></div>
+      </div>
+      <span class="attr-val" style="color:${col};font-weight:600">${s.pl>=0?'+':''}₹${fI(Math.abs(s.pl))}</span>
+      <span style="font-size:10px;color:var(--t4);width:45px;text-align:right;font-family:var(--mono)">${s.ret>=0?'+':''}${f(s.ret,1)}%</span>
+    </div>`;
+  }).join('');
+
+  // Full table
+  const tbody = document.getElementById('attr-tbody');
+  if (tbody) tbody.innerHTML = stocks.map(s => `<tr>
+    <td onclick="openDetail(${s.h.id})" style="cursor:pointer"><div class="sym">${s.h.symbol}</div><div class="snm">${s.h.name}</div></td>
+    <td style="font-size:11px;color:var(--t3)">${s.h.sector||'—'}</td>
+    <td class="mn">₹${fI(s.inv)}</td>
+    <td class="mn">₹${fI(s.cv)}</td>
+    <td class="mn ${s.pl>=0?'up':'dn'}" style="font-weight:700">${s.pl>=0?'+':''}₹${fI(Math.abs(s.pl))}</td>
+    <td class="mn ${s.pl>=0?'up':'dn'}">${s.ret>=0?'+':''}${f(s.ret,1)}%</td>
+    <td class="mn" style="color:${Math.abs(s.contrib)>20?s.pl>=0?'var(--grn)':'var(--red)':'var(--t3)'}">
+      ${s.contrib>=0?'+':''}${f(s.contrib,1)}% of P&L
+    </td>
+    <td class="mn">${f(s.portWeight,1)}%</td>
+  </tr>`).join('');
+
+  // Sector attribution
+  const sectorMap = {};
+  stocks.forEach(s => {
+    const sec = s.h.sector || 'Other';
+    if (!sectorMap[sec]) sectorMap[sec] = { pl:0, inv:0, cv:0, count:0 };
+    sectorMap[sec].pl   += s.pl;
+    sectorMap[sec].inv  += s.inv;
+    sectorMap[sec].cv   += s.cv;
+    sectorMap[sec].count++;
+  });
+  const sectors = Object.entries(sectorMap).sort((a,b)=>b[1].pl-a[1].pl);
+  const maxSecPL = Math.max(...sectors.map(([,v])=>Math.abs(v.pl)),1);
+  const secEl = document.getElementById('attr-sector-bars');
+  if (secEl) secEl.innerHTML = sectors.map(([sec, v]) => {
+    const ret = v.inv > 0 ? (v.pl/v.inv*100) : 0;
+    const w   = Math.round(Math.abs(v.pl)/maxSecPL*100);
+    const col = v.pl>=0 ? 'var(--grn)' : 'var(--red)';
+    return `<div class="attr-row" style="margin-bottom:8px">
+      <span style="font-size:11px;font-weight:600;width:90px;flex-shrink:0;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${sec}">${sec}</span>
+      <div style="flex:1;height:8px;background:var(--s3);border-radius:4px;overflow:hidden">
+        <div style="width:${w}%;height:100%;background:${col};border-radius:4px"></div>
+      </div>
+      <span style="font-size:10px;font-family:var(--mono);color:${col};font-weight:700;width:70px;text-align:right">${v.pl>=0?'+':''}₹${fI(Math.abs(v.pl))}</span>
+      <span style="font-size:10px;color:var(--t4);width:48px;text-align:right;font-family:var(--mono)">${ret>=0?'+':''}${f(ret,1)}%</span>
+    </div>`;
+  }).join('');
+
+  // Return distribution buckets: <-20%, -20~-10%, -10~0%, 0~10%, 10~20%, >20%
+  const buckets = [
+    { label:'< −20%',  min:-999, max:-20,  color:'var(--red)',  count:0 },
+    { label:'−20~−10%',min:-20,  max:-10,  color:'#f97316',     count:0 },
+    { label:'−10~0%',  min:-10,  max:0,    color:'#fbbf24',     count:0 },
+    { label:'0~+10%',  min:0,    max:10,   color:'rgba(45,211,111,.5)', count:0 },
+    { label:'+10~+20%',min:10,   max:20,   color:'var(--grn)',  count:0 },
+    { label:'> +20%',  min:20,   max:999,  color:'#22d3ee',     count:0 },
+  ];
+  stocks.forEach(s => {
+    const b = buckets.find(b => s.ret >= b.min && s.ret < b.max);
+    if (b) b.count++;
+  });
+  const maxB = Math.max(...buckets.map(b=>b.count), 1);
+  const distEl = document.getElementById('attr-dist');
+  if (distEl) distEl.innerHTML = `
+    <div style="display:flex;align-items:flex-end;gap:8px;height:80px;margin-bottom:8px">
+      ${buckets.map(b=>`
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+          <div style="font-size:10px;color:var(--t3);font-weight:700">${b.count||''}</div>
+          <div style="width:100%;background:${b.color};border-radius:4px 4px 0 0;height:${Math.max(b.count/maxB*60,b.count>0?4:0)}px"></div>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px">
+      ${buckets.map(b=>`<div style="flex:1;font-size:8.5px;color:var(--t4);text-align:center;line-height:1.3">${b.label}</div>`).join('')}
+    </div>
+    <div style="font-size:10px;color:var(--t4);margin-top:8px;text-align:center">Return distribution across ${stocks.length} holdings</div>`;
+}
+
 function renderRiskPro() { computeRiskPro(); }
 
 function computeRiskPro() {
@@ -16790,6 +17032,81 @@ async function runScreenerWithRefresh() {
   }
   runScreener();
 }
+
+// ── Saved Screener Filters ────────────────────────────────────────────────────
+const SCR_SAVE_KEY = 'ss_screener_saved';
+
+function _getSavedScreeners() {
+  try { return JSON.parse(localStorage.getItem(SCR_SAVE_KEY) || '{}'); } catch(e) { return {}; }
+}
+
+function _populateSavedSel() {
+  const sel = document.getElementById('scr-saved-sel');
+  if (!sel) return;
+  const saved = _getSavedScreeners();
+  const names = Object.keys(saved).sort();
+  sel.innerHTML = '<option value="">— Load saved filter —</option>' +
+    names.map(n => `<option value="${n}">${n}</option>`).join('');
+}
+
+function saveScreenerFilter() {
+  const name = prompt('Name this filter (e.g. "Morning Scan"):');
+  if (!name?.trim()) return;
+  const filters = {
+    sector:   document.getElementById('scr-sector')?.value || '',
+    pe:       document.getElementById('scr-pe')?.value || '',
+    roe:      document.getElementById('scr-roe')?.value || '',
+    w52:      document.getElementById('scr-52w')?.value || '',
+    mcap:     document.getElementById('scr-mcap')?.value || '',
+    signal:   document.getElementById('scr-signal')?.value || '',
+  };
+  const saved = _getSavedScreeners();
+  saved[name.trim()] = filters;
+  localStorage.setItem(SCR_SAVE_KEY, JSON.stringify(saved));
+  _populateSavedSel();
+  // Select the just-saved one
+  const sel = document.getElementById('scr-saved-sel');
+  if (sel) sel.value = name.trim();
+  const st = document.getElementById('scr-save-status');
+  if (st) { st.textContent = '✅ Saved'; setTimeout(()=>st.textContent='', 2000); }
+  toast(`✅ Filter "${name.trim()}" saved`, 'ok');
+}
+
+function loadSavedScreener(name) {
+  if (!name) return;
+  const saved = _getSavedScreeners();
+  const f = saved[name];
+  if (!f) return;
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+  set('scr-sector', f.sector || '');
+  set('scr-pe',     f.pe     || '40');
+  set('scr-roe',    f.roe    || '12');
+  set('scr-52w',    f.w52    || '75');
+  set('scr-mcap',   f.mcap   || '');
+  set('scr-signal', f.signal || '');
+  const st = document.getElementById('scr-save-status');
+  if (st) { st.textContent = `✅ Loaded "${name}"`; setTimeout(()=>st.textContent='', 2000); }
+  runScreener();
+}
+
+function deleteSavedScreener() {
+  const sel = document.getElementById('scr-saved-sel');
+  const name = sel?.value;
+  if (!name) { toast('Select a saved filter to delete', 'info'); return; }
+  if (!confirm(`Delete filter "${name}"?`)) return;
+  const saved = _getSavedScreeners();
+  delete saved[name];
+  localStorage.setItem(SCR_SAVE_KEY, JSON.stringify(saved));
+  _populateSavedSel();
+  toast(`🗑 Filter "${name}" deleted`);
+}
+
+// Initialise saved filter dropdown when screener renders
+const _origRenderScreener = window.renderScreener;
+window.renderScreener = function() {
+  if (typeof _origRenderScreener === 'function') _origRenderScreener();
+  _populateSavedSel();
+};
 
 // Apply a named filter preset and immediately run the screener
 function applyScreenerPreset(preset) {
