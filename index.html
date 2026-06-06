@@ -1177,6 +1177,8 @@ textarea.fi{resize:vertical;min-height:70px;}
 
     <!-- ── Smart LTCG Alert ───────────────────────────────── -->
     <div id="ds-ltcg-alert" style="display:none;margin-bottom:14px"></div>
+    <!-- ── Portfolio Tag Exposure ─────────────────────────────── -->
+    <div id="ds-tag-exposure" style="display:none;margin-bottom:12px"></div>
 
     <!-- ── Concentration Alert ──────────────────────────────────── -->
     <div id="ds-conc-alert" style="display:none;margin-bottom:10px;padding:10px 14px;background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:10px"></div>
@@ -1357,6 +1359,14 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="sec-title">Holdings</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <select class="fi" id="h-filter-sector" style="width:140px" onchange="renderHoldings()"><option value="">All Sectors</option></select>
+        <select class="fi" id="h-filter-tag" style="width:120px" onchange="renderHoldings()">
+          <option value="">All Tags</option>
+          <option value="core">🔵 Core</option>
+          <option value="satellite">🟡 Satellite</option>
+          <option value="speculative">🔴 Speculative</option>
+          <option value="dividend">🟢 Dividend</option>
+          <option value="untagged">⚪ Untagged</option>
+        </select>
         <select class="fi" id="h-filter-sig" style="width:120px" onchange="renderHoldings()"><option value="">All Signals</option><option>BUY</option><option>STRONG BUY</option><option>HOLD</option><option>SELL</option></select>
         <select class="fi" id="h-sort" style="width:170px" onchange="renderHoldings()" title="Sort holdings">
           <option value="default">📋 Default (Buy Order)</option>
@@ -2685,6 +2695,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         </select>
         <button class="btn btn-p btn-sm" onclick="openJournalForm()">+ Log Trade</button>
         <button class="btn btn-g btn-sm" onclick="runJournalAI()">🤖 AI Attribution</button>
+        <button class="btn btn-p btn-sm" onclick="findMyEdge()" title="AI analysis of patterns across all your winning vs losing trades">🔬 Find My Edge</button>
       </div>
     </div>
     <!-- Summary -->
@@ -2707,6 +2718,16 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
     <!-- AI Attribution -->
     <div class="pn" style="margin-top:14px"><div class="pn-h"><div class="pn-t">🤖 AI Performance Attribution</div></div><div class="pn-b"><div id="jnl-ai-txt" style="color:var(--t4);font-size:12px">Click "AI Attribution" for AI analysis of your trading patterns.</div></div></div>
+    <!-- Find My Edge -->
+    <div class="pn" style="margin-top:14px;border-color:rgba(124,106,247,.3);background:rgba(124,106,247,.04)">
+      <div class="pn-h" style="border-color:rgba(124,106,247,.2)">
+        <div class="pn-t" style="color:var(--ac2)">🔬 Find My Edge — Pattern Analysis</div>
+        <span style="font-size:10px;color:var(--t4)">Statistical patterns across all wins vs losses</span>
+      </div>
+      <div class="pn-b" id="jnl-edge-content" style="color:var(--t4);font-size:12px">
+        Click "🔬 Find My Edge" to discover what separates your winning trades from losing ones.
+      </div>
+    </div>
     <!-- Add Trade Modal -->
     <div id="jnl-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;display:none;align-items:center;justify-content:center">
       <div style="background:var(--s1);border:1px solid var(--b2);border-radius:14px;padding:24px;width:min(480px,95vw);max-height:90vh;overflow-y:auto">
@@ -3309,6 +3330,26 @@ textarea.fi{resize:vertical;min-height:70px;}
 
     <!-- Score tally -->
     <div id="cmp-tally" style="display:none;margin-top:10px;padding:12px 16px;background:var(--b2);border-radius:0 0 10px 10px;display:flex;gap:20px;align-items:center;flex-wrap:wrap"></div>
+
+    <!-- Price chart overlay -->
+    <div class="pn" id="cmp-chart-panel" style="margin-top:14px;display:none">
+      <div class="pn-h">
+        <div class="pn-t">📈 Normalised Price Chart (3 months)</div>
+        <div style="display:flex;gap:8px;font-size:10px;align-items:center">
+          <span id="cmp-chart-legend-a" style="font-weight:700;color:var(--ac)">— Stock A</span>
+          <span id="cmp-chart-legend-b" style="font-weight:700;color:var(--ac2)">— Stock B</span>
+        </div>
+      </div>
+      <div class="pn-b" style="padding:0">
+        <div style="height:200px;position:relative;padding:12px">
+          <canvas id="cmp-chart-canvas" style="width:100%;height:176px"></canvas>
+          <div id="cmp-chart-msg" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--t4);font-size:12px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Correlation + return stats -->
+    <div id="cmp-stats-panel" style="display:none;margin-top:14px"></div>
 
     <!-- AI verdict panel -->
     <div class="pn" id="cmp-ai-panel" style="margin-top:14px;display:none">
@@ -4137,6 +4178,25 @@ textarea.fi{resize:vertical;min-height:70px;}
               <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t2);cursor:pointer"><input type="radio" name="edit-postype" value="longterm" id="edit-pt-long"> Long Term</label>
               <label style="display:flex;align-items:center;gap=6px;font-size:12px;color:var(--t2);cursor:pointer"><input type="radio" name="edit-postype" value="momentum" id="edit-pt-mom"> Momentum</label>
             </div>
+          </div>
+
+          <!-- Portfolio Tag -->
+          <div style="margin-bottom:14px">
+            <label style="font-size:11px;color:var(--t3);display:block;margin-bottom:6px">Portfolio Tag</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap" id="edit-tag-btns">
+              <button type="button" class="tag-btn" data-tag="" onclick="_setTagBtn(this,'',this.closest('#sd-tab-edit'))"
+                style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--b2);background:var(--s3);color:var(--t3);transition:all .15s">⚪ None</button>
+              <button type="button" class="tag-btn" data-tag="core" onclick="_setTagBtn(this,'core',this.closest('#sd-tab-edit'))"
+                style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid rgba(79,142,247,.4);background:rgba(79,142,247,.1);color:var(--ac);transition:all .15s">🔵 Core</button>
+              <button type="button" class="tag-btn" data-tag="satellite" onclick="_setTagBtn(this,'satellite',this.closest('#sd-tab-edit'))"
+                style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid rgba(251,191,36,.4);background:rgba(251,191,36,.1);color:var(--yel);transition:all .15s">🟡 Satellite</button>
+              <button type="button" class="tag-btn" data-tag="speculative" onclick="_setTagBtn(this,'speculative',this.closest('#sd-tab-edit'))"
+                style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid rgba(240,82,82,.4);background:rgba(240,82,82,.1);color:var(--red);transition:all .15s">🔴 Speculative</button>
+              <button type="button" class="tag-btn" data-tag="dividend" onclick="_setTagBtn(this,'dividend',this.closest('#sd-tab-edit'))"
+                style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid rgba(45,211,111,.4);background:rgba(45,211,111,.1);color:var(--grn);transition:all .15s">🟢 Dividend</button>
+            </div>
+            <input type="hidden" id="edit-tag" value="">
+            <div style="font-size:10px;color:var(--t4);margin-top:4px">Tags let you filter holdings by theme — core positions, high-risk bets, income stocks.</div>
           </div>
 
           <!-- Notes / Investment Thesis -->
@@ -7048,12 +7108,19 @@ function renderHoldings() {
   const cols=renderHoldHeaders();
   const fs=document.getElementById('h-filter-sector')?.value||'';
   const fsig=document.getElementById('h-filter-sig')?.value||'';
+  const ftag=document.getElementById('h-filter-tag')?.value||'';
   // Populate sector filter
   const secs=[...new Set(D.holdings.map(h=>h.sector))].filter(Boolean);
   const se=document.getElementById('h-filter-sector');
   if(se&&se.children.length<=1){secs.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;se.appendChild(o);});}
   updateHoldingsStrip();
-  let rows=D.holdings.filter(h=>(!fs||h.sector===fs)&&(!fsig||h.signal===fsig));
+  let rows=D.holdings.filter(h=>{
+    if(fs && h.sector!==fs) return false;
+    if(fsig && h.signal!==fsig) return false;
+    if(ftag==='untagged' && h.tag) return false;
+    if(ftag && ftag!=='untagged' && h.tag!==ftag) return false;
+    return true;
+  });
   const tbody=document.getElementById('holdTbody');
   if(!rows.length){tbody.innerHTML=`<tr><td colspan="${cols.length}" style="text-align:center;padding:40px;color:var(--t4)">No holdings match the filter.</td></tr>`;return;}
   const COLORS=['#4f8ef7','#22d3ee','#2dd36f','#fbbf24','#8b5cf6','#f97316','#ec4899','#38d9a9'];
@@ -7065,7 +7132,12 @@ function renderHoldings() {
     const rsic=rsi>70?'dn':rsi<30?'up':'';
     function cell(k){
       switch(k){
-        case 'stock':return`<td onclick="openDetail(${h.id})" style="cursor:pointer"><div class="sym">${h.symbol}</div><div class="snm">${h.name}</div></td>`;
+        case 'stock':{
+          const TAG_STYLE={core:'color:var(--ac);background:rgba(79,142,247,.12)',satellite:'color:var(--yel);background:rgba(251,191,36,.12)',speculative:'color:var(--red);background:rgba(240,82,82,.12)',dividend:'color:var(--grn);background:rgba(45,211,111,.12)'};
+          const TAG_ICON={core:'🔵',satellite:'🟡',speculative:'🔴',dividend:'🟢'};
+          const tagBadge=h.tag?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:4px;${TAG_STYLE[h.tag]||''}">${TAG_ICON[h.tag]||''} ${h.tag}</span>`:'';
+          return`<td onclick="openDetail(${h.id})" style="cursor:pointer"><div class="sym">${h.symbol}${tagBadge}</div><div class="snm">${h.name}</div></td>`;
+        }
         case 'qty':return`<td class="mn">${h.qty}</td>`;
         case 'avg':return`<td class="mn">₹${f(h.avgPrice)}</td>`;
         case 'ltp':{
@@ -7175,6 +7247,35 @@ function renderHoldings() {
 // Shows holdings within 45 days of crossing the 1-year
 // LTCG threshold, with estimated tax savings.
 // ═══════════════════════════════════════════════════
+function _renderTagExposure() {
+  const el = document.getElementById('ds-tag-exposure');
+  if (!el) return;
+  const tagged = D.holdings.filter(h => h.tag);
+  if (!tagged.length) { el.style.display = 'none'; return; }
+  const totalCv = D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
+  const tags = ['core','satellite','speculative','dividend'];
+  const TAG_ICON = {core:'🔵',satellite:'🟡',speculative:'🔴',dividend:'🟢'};
+  const TAG_COLOR = {core:'var(--ac)',satellite:'var(--yel)',speculative:'var(--red)',dividend:'var(--grn)'};
+  const stats = {};
+  tags.forEach(t => {
+    const hs = D.holdings.filter(h=>h.tag===t);
+    const cv = hs.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
+    if (cv>0) stats[t] = { cv, pct: cv/totalCv*100, count: hs.length, pl: hs.reduce((s,h)=>s+(h.ltp||h.avgPrice-h.avgPrice)*h.qty,0) };
+  });
+  if (!Object.keys(stats).length) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;background:var(--s1);border:1px solid var(--b1);border-radius:10px">
+    <span style="font-size:10px;font-weight:700;color:var(--t4);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">Portfolio Tags</span>
+    ${Object.entries(stats).map(([t,v])=>`
+      <div style="display:flex;align-items:center;gap:5px;cursor:pointer" onclick="document.getElementById('h-filter-tag').value='${t}';go('holdings')">
+        <span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:10px;background:${TAG_COLOR[t]}18;color:${TAG_COLOR[t]};border:1px solid ${TAG_COLOR[t]}44">${TAG_ICON[t]} ${t}</span>
+        <span style="font-size:11px;font-family:var(--mono);color:var(--t2)">₹${fI(v.cv)} · ${f(v.pct,1)}%</span>
+        <span style="font-size:10px;color:var(--t4)">${v.count} stocks</span>
+      </div>`).join('<div style="width:1px;height:16px;background:var(--b2)"></div>')}
+    <span style="font-size:10px;color:var(--t4);margin-left:auto">Click to filter →</span>
+  </div>`;
+}
+
 function renderLtcgAlert() {
   const el = document.getElementById('ds-ltcg-alert');
   if (!el) return;
@@ -7513,6 +7614,8 @@ function renderSummary() {
   set('ds-pos', D.holdings.length+' positions');
   // LTCG alert
   if(typeof renderLtcgAlert==='function') renderLtcgAlert();
+  // Tag exposure summary
+  _renderTagExposure();
   // Today panel + P&L attribution
   renderTodayPanel();
   renderPnlAttribution();
@@ -10996,6 +11099,14 @@ function _sdEditContent(h) {
   v('edit-target').value = h.target1 || '';
   v('edit-notes').value = h.notes || '';
   v('edit-ticker-result').textContent = '';
+  // Portfolio tag buttons
+  const tagHidden = v('edit-tag');
+  if (tagHidden) tagHidden.value = h.tag || '';
+  document.querySelectorAll('.tag-btn').forEach(btn => {
+    const active = btn.dataset.tag === (h.tag || '');
+    btn.style.outline = active ? '2px solid currentColor' : 'none';
+    btn.style.opacity = active ? '1' : '0.6';
+  });
   // Position type radio
   const posType = h.positionType || h.tradeType?.toLowerCase() || 'longterm';
   const rMap = { swing:'edit-pt-swing', longterm:'edit-pt-long', momentum:'edit-pt-mom' };
@@ -11078,6 +11189,17 @@ async function _sdTestTicker() {
   }
 }
 
+// Tag button toggle helper
+function _setTagBtn(btn, tag, container) {
+  const hidden = (container || document).querySelector('#edit-tag');
+  if (hidden) hidden.value = tag;
+  (container || document).querySelectorAll('.tag-btn').forEach(b => {
+    const active = b.dataset.tag === tag;
+    b.style.outline = active ? '2px solid currentColor' : 'none';
+    b.style.opacity = active ? '1' : '0.6';
+  });
+}
+
 async function _sdSaveEdit() {
   if (!_sdHid) return;
   const h = D.holdings.find(x => x.id == _sdHid);
@@ -11094,6 +11216,7 @@ async function _sdSaveEdit() {
   const newSL       = parseFloat(v('edit-sl').value) || null;
   const newTarget   = parseFloat(v('edit-target').value) || null;
   const newNotes    = (v('edit-notes').value || '').trim();
+  const newTag      = (v('edit-tag')?.value || '').trim();
   const posTypeEl   = document.querySelector('input[name="edit-postype"]:checked');
   const newPosType  = posTypeEl ? posTypeEl.value : (h.positionType || 'longterm');
 
@@ -11110,6 +11233,7 @@ async function _sdSaveEdit() {
   if (newSL)     h.stopLoss = newSL;
   if (newTarget) h.target1  = newTarget;
   h.notes        = newNotes;
+  h.tag          = newTag || undefined;
   h.positionType = newPosType;
 
   if (tickerChanged && newYfTicker) {
@@ -17428,6 +17552,156 @@ Give 3 specific coaching points (one sentence each): best edge to double down on
   el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
 }
 
+// ── Find My Edge — Trade Pattern Analyser ────────────────────────────────────
+// Reads ALL realised trades (D.realised + journal), computes statistical patterns
+// separating winners from losers: sector, holding period, entry vs 52W position,
+// P&L magnitude. Then asks AI to synthesise into a specific edge statement.
+async function findMyEdge() {
+  const el = document.getElementById('jnl-edge-content');
+  if (!el) return;
+
+  // Combine D.realised with journal entries that have an exit price
+  const journal  = typeof loadJournal === 'function' ? loadJournal().filter(t => t.exitPrice) : [];
+  const realised = D.realised || [];
+
+  const allTrades = [
+    ...realised.map(r => ({
+      symbol:    r.symbol,
+      sector:    D.holdings.find(h=>h.symbol===r.symbol)?.sector || 'Unknown',
+      buyDate:   r.buyDate,
+      sellDate:  r.sellDate,
+      holdDays:  r.holdDays || hDays(r.buyDate) || 0,
+      pl:        r.pl,
+      plPct:     r.plPct || (r.buyPrice > 0 ? (r.sellPrice - r.buyPrice) / r.buyPrice * 100 : 0),
+      buyPrice:  r.buyPrice,
+      sellPrice: r.sellPrice,
+    })),
+    ...journal.map(t => ({
+      symbol:   t.symbol,
+      sector:   t.sector || 'Unknown',
+      buyDate:  t.entryDate,
+      sellDate: t.exitDate,
+      holdDays: t.holdDays || 0,
+      pl:       t.plAbs || 0,
+      plPct:    t.plPct || 0,
+      buyPrice: t.entryPrice,
+      sellPrice:t.exitPrice,
+      reason:   t.reason,
+    })),
+  ];
+
+  if (allTrades.length < 3) {
+    el.innerHTML = '<div style="color:var(--t4);font-size:12px">Need at least 3 completed trades to find patterns. Log more trades in the Trade Journal or import from your broker.</div>';
+    return;
+  }
+
+  el.innerHTML = '<div style="display:flex;gap:10px;align-items:center;color:var(--t4);padding:12px"><div class="spin"></div> Analysing ' + allTrades.length + ' trades for patterns…</div>';
+
+  const winners = allTrades.filter(t => t.pl > 0);
+  const losers  = allTrades.filter(t => t.pl < 0);
+
+  // ── Statistical pattern computation ─────────────────────────────────────
+  const avg = arr => arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : 0;
+
+  // 1. Holding period
+  const winHold  = avg(winners.map(t=>t.holdDays));
+  const loseHold = avg(losers.map(t=>t.holdDays));
+
+  // 2. P&L magnitude
+  const avgWin  = avg(winners.map(t=>t.plPct));
+  const avgLoss = avg(losers.map(t=>Math.abs(t.plPct)));
+  const expectancy = (winners.length / allTrades.length) * avgWin - (losers.length / allTrades.length) * avgLoss;
+
+  // 3. Sector win rates
+  const sectorStats = {};
+  allTrades.forEach(t => {
+    const s = t.sector || 'Unknown';
+    if (!sectorStats[s]) sectorStats[s] = { wins:0, total:0, pl:0 };
+    sectorStats[s].total++;
+    sectorStats[s].pl += t.pl;
+    if (t.pl > 0) sectorStats[s].wins++;
+  });
+  const sectorList = Object.entries(sectorStats)
+    .filter(([,v]) => v.total >= 2)
+    .map(([s,v]) => ({ sector:s, wr: v.wins/v.total*100, pl: v.pl, count: v.total }))
+    .sort((a,b) => b.wr - a.wr);
+  const bestSector  = sectorList[0];
+  const worstSector = sectorList[sectorList.length-1];
+
+  // 4. Short vs long hold comparison
+  const shortTrades = allTrades.filter(t => t.holdDays < 30);
+  const longTrades  = allTrades.filter(t => t.holdDays >= 30);
+  const shortWR = shortTrades.length ? shortTrades.filter(t=>t.pl>0).length/shortTrades.length*100 : null;
+  const longWR  = longTrades.length  ? longTrades.filter(t=>t.pl>0).length/longTrades.length*100   : null;
+
+  // 5. Largest winners and losers
+  const top3W = [...winners].sort((a,b)=>b.plPct-a.plPct).slice(0,3);
+  const top3L = [...losers].sort((a,b)=>a.plPct-b.plPct).slice(0,3);
+
+  // ── Render statistical summary ───────────────────────────────────────────
+  const winRate = (winners.length / allTrades.length * 100).toFixed(0);
+  const fPct = v => (v>=0?'+':'')+v.toFixed(1)+'%';
+
+  let statsHtml = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">
+      <div style="background:var(--s2);border-radius:8px;padding:10px"><div style="font-size:9px;color:var(--t4);text-transform:uppercase;font-weight:600">Trades Analysed</div><div style="font-size:18px;font-weight:800;color:var(--t1);font-family:var(--mono)">${allTrades.length}</div><div style="font-size:10px;color:var(--t4)">${winners.length}W · ${losers.length}L</div></div>
+      <div style="background:var(--s2);border-radius:8px;padding:10px"><div style="font-size:9px;color:var(--t4);text-transform:uppercase;font-weight:600">Win Rate</div><div style="font-size:18px;font-weight:800;color:${+winRate>=50?'var(--grn)':'var(--red)'};font-family:var(--mono)">${winRate}%</div></div>
+      <div style="background:var(--s2);border-radius:8px;padding:10px"><div style="font-size:9px;color:var(--t4);text-transform:uppercase;font-weight:600">Avg Win / Loss</div><div style="font-size:14px;font-weight:700;font-family:var(--mono)"><span style="color:var(--grn)">+${avgWin.toFixed(1)}%</span> / <span style="color:var(--red)">−${avgLoss.toFixed(1)}%</span></div></div>
+      <div style="background:var(--s2);border-radius:8px;padding:10px"><div style="font-size:9px;color:var(--t4);text-transform:uppercase;font-weight:600">Expectancy</div><div style="font-size:18px;font-weight:800;color:${expectancy>=0?'var(--grn)':'var(--red)'};font-family:var(--mono)">${fPct(expectancy)}</div><div style="font-size:10px;color:var(--t4)">per trade</div></div>
+      <div style="background:var(--s2);border-radius:8px;padding:10px"><div style="font-size:9px;color:var(--t4);text-transform:uppercase;font-weight:600">Avg Hold: Winners</div><div style="font-size:18px;font-weight:800;color:var(--t1);font-family:var(--mono)">${winHold.toFixed(0)}d</div></div>
+      <div style="background:var(--s2);border-radius:8px;padding:10px"><div style="font-size:9px;color:var(--t4);text-transform:uppercase;font-weight:600">Avg Hold: Losers</div><div style="font-size:18px;font-weight:800;color:var(--t1);font-family:var(--mono)">${loseHold.toFixed(0)}d</div></div>
+    </div>`;
+
+  // Sector breakdown
+  if (sectorList.length) {
+    statsHtml += `<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Win Rate by Sector</div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        ${sectorList.map(s=>`<div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;width:100px;flex-shrink:0;color:var(--t2)">${s.sector}</span>
+          <div style="flex:1;height:7px;background:var(--s3);border-radius:4px;overflow:hidden">
+            <div style="width:${s.wr}%;height:100%;background:${s.wr>=60?'var(--grn)':s.wr>=40?'var(--yel)':'var(--red)'};border-radius:4px"></div>
+          </div>
+          <span style="font-size:10px;font-family:var(--mono);color:${s.wr>=60?'var(--grn)':s.wr>=40?'var(--yel)':'var(--red)'};width:32px;text-align:right">${s.wr.toFixed(0)}%</span>
+          <span style="font-size:10px;color:var(--t4);width:40px">${s.count} trades</span>
+        </div>`).join('')}
+      </div></div>`;
+  }
+
+  el.innerHTML = statsHtml + '<div style="color:var(--t4);font-size:11px;padding:10px;text-align:center"><div class="spin" style="display:inline-block;margin-right:8px"></div>AI is synthesising patterns…</div>';
+
+  // ── AI synthesis ─────────────────────────────────────────────────────────
+  const sectorContext = sectorList.map(s=>`${s.sector}: ${s.wr.toFixed(0)}% WR, ${s.count} trades, net ₹${fI(s.pl)}`).join('; ');
+  const holdContext = shortWR !== null && longWR !== null
+    ? `Short trades (<30d): ${shortWR.toFixed(0)}% WR. Long trades (≥30d): ${longWR.toFixed(0)}% WR.`
+    : '';
+  const top3WStr = top3W.map(t=>`${t.symbol} (+${t.plPct.toFixed(1)}%, ${t.holdDays}d)`).join(', ');
+  const top3LStr = top3L.map(t=>`${t.symbol} (${t.plPct.toFixed(1)}%, ${t.holdDays}d)`).join(', ');
+
+  const prompt = `You are a trading performance coach analysing an Indian retail equity investor's complete trade history.
+
+Stats: ${allTrades.length} trades · Win rate ${winRate}% · Avg win ${avgWin.toFixed(1)}% · Avg loss ${avgLoss.toFixed(1)}% · Expectancy ${fPct(expectancy)} per trade
+Hold days: Winners avg ${winHold.toFixed(0)}d, Losers avg ${loseHold.toFixed(0)}d
+Sector performance: ${sectorContext || 'insufficient data'}
+${holdContext}
+Best trades: ${top3WStr || 'none'}
+Worst trades: ${top3LStr || 'none'}
+
+Based on these numbers, write a specific "Find My Edge" report with exactly 4 sections:
+1. **My Edge** — one sentence stating the statistical edge (e.g. "Your edge is in holding quality stocks through earnings; your 47+ day trades have a 71% win rate vs 34% for shorter holds.")
+2. **Strongest Pattern** — the single most consistent pattern in winning trades (cite specific numbers)
+3. **Biggest Leak** — the single most consistent pattern in losing trades, with the specific cost
+4. **3 Rules to Follow** — three concrete, specific trading rules derived from this data (not generic advice)
+
+Be brutally honest and specific. Use the actual numbers. No generic advice.`;
+
+  try {
+    const result = await claude(prompt);
+    el.innerHTML = statsHtml + `<div class="ai-txt" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--b2)">${md2h(result)}</div>`;
+  } catch(e) {
+    el.innerHTML = statsHtml + `<div style="color:var(--t4);font-size:12px;margin-top:12px">Could not generate AI synthesis — check your AI provider settings.</div>`;
+  }
+}
+
 // ═══════════════════════════════════════════════════
 // 🌐 MACRO & INSTITUTIONAL
 // ═══════════════════════════════════════════════════
@@ -19430,6 +19704,9 @@ function initComparator() {
   document.getElementById('cmp-rows').innerHTML = '';
   document.getElementById('cmp-tally').style.display = 'none';
   document.getElementById('cmp-ai-panel').style.display = 'none';
+  const ccp = document.getElementById('cmp-chart-panel'); if(ccp) ccp.style.display='none';
+  const csp = document.getElementById('cmp-stats-panel'); if(csp) csp.style.display='none';
+  if(window._cmpChart){window._cmpChart.destroy();window._cmpChart=null;}
 }
 
 function _cmpResolve(selId) {
@@ -19593,6 +19870,109 @@ function runComparator() {
 
   // Store for AI
   window._cmpData = {pA, pB, sA, sB, winsA, winsB, winner};
+
+  // Update legend labels
+  const legA = document.getElementById('cmp-chart-legend-a');
+  const legB = document.getElementById('cmp-chart-legend-b');
+  if (legA) legA.textContent = `— ${sA.symbol}`;
+  if (legB) legB.textContent = `— ${sB.symbol}`;
+
+  // Load normalised price chart + stats in background
+  _cmpLoadChart(sA, sB);
+}
+
+// ── Comparator: normalised price chart overlay ────────────────────────────────
+async function _cmpLoadChart(sA, sB) {
+  const panel   = document.getElementById('cmp-chart-panel');
+  const canvas  = document.getElementById('cmp-chart-canvas');
+  const msgEl   = document.getElementById('cmp-chart-msg');
+  const statsEl = document.getElementById('cmp-stats-panel');
+  if (!panel || !canvas) return;
+
+  panel.style.display = '';
+  if (msgEl) msgEl.textContent = 'Loading 3-month chart…';
+
+  const yfA = sA.yfTicker || _symMapLookup(sA.symbol) || (sA.exchange==='BSE' ? sA.symbol+'.BO' : sA.symbol+'.NS');
+  const yfB = sB.yfTicker || _symMapLookup(sB.symbol) || (sB.exchange==='BSE' ? sB.symbol+'.BO' : sB.symbol+'.NS');
+
+  const [seriesA, seriesB] = await Promise.all([
+    fetchYFSeries(yfA, '3mo', '1d').catch(()=>null),
+    fetchYFSeries(yfB, '3mo', '1d').catch(()=>null),
+  ]);
+
+  if (!seriesA?.length || !seriesB?.length) {
+    if (msgEl) msgEl.textContent = 'Chart data unavailable';
+    return;
+  }
+
+  if (msgEl) msgEl.textContent = '';
+
+  // Normalise both series to 100 at start
+  const normA = seriesA.map(p => p.c / seriesA[0].c * 100);
+  const normB = seriesB.map(p => p.c / seriesB[0].c * 100);
+  const labels = seriesA.map(p => p.t.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}));
+
+  // Ensure Chart.js loaded
+  if (typeof Chart === 'undefined') {
+    await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+  }
+  if (window._cmpChart) { window._cmpChart.destroy(); window._cmpChart=null; }
+
+  window._cmpChart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: sA.symbol, data: normA, borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,.08)', borderWidth:2, pointRadius:0, tension:0.2, fill:false },
+        { label: sB.symbol, data: normB, borderColor:'#7c6af7', backgroundColor:'rgba(124,106,247,.08)', borderWidth:2, pointRadius:0, tension:0.2, fill:false, borderDash:[4,3] },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${(ctx.raw-100>=0?'+':'')+(ctx.raw-100).toFixed(1)}%`}}
+      },
+      scales:{
+        x:{ticks:{color:'#4a5578',maxTicksLimit:6,font:{size:10}},grid:{color:'rgba(255,255,255,.04)'}},
+        y:{ticks:{color:'#4a5578',callback:v=>(v-100>=0?'+':'')+(v-100).toFixed(1)+'%',font:{size:10}},grid:{color:'rgba(255,255,255,.04)'},position:'right'}
+      }
+    }
+  });
+
+  // ── Stats panel ───────────────────────────────────────────────────────────
+  if (statsEl) {
+    const retA = (normA[normA.length-1]-100).toFixed(1);
+    const retB = (normB[normB.length-1]-100).toFixed(1);
+
+    // Pearson correlation between daily returns
+    const retSerA = normA.slice(1).map((v,i)=>v-normA[i]);
+    const retSerB = normB.slice(1).map((v,i)=>v-normB[i]);
+    const n = Math.min(retSerA.length, retSerB.length);
+    const mA = retSerA.reduce((s,v)=>s+v,0)/n, mB = retSerB.reduce((s,v)=>s+v,0)/n;
+    let num=0,da2=0,db2=0;
+    for(let i=0;i<n;i++){const dA=retSerA[i]-mA,dB=retSerB[i]-mB;num+=dA*dB;da2+=dA*dA;db2+=dB*dB;}
+    const corr = da2>0&&db2>0 ? (num/Math.sqrt(da2*db2)).toFixed(2) : '—';
+    const corrNum = parseFloat(corr);
+    const corrLabel = corrNum>=0.8?'Very High':corrNum>=0.6?'High':corrNum>=0.4?'Moderate':corrNum>=0.2?'Low':'Very Low';
+    const corrColor = corrNum>=0.7?'var(--yel)':corrNum>=0.4?'var(--ac)':'var(--grn)';
+
+    // Volatility (std dev of daily returns)
+    const stdDev = arr => {const m=arr.reduce((s,v)=>s+v,0)/arr.length;return Math.sqrt(arr.reduce((s,v)=>s+(v-m)**2,0)/arr.length);};
+    const volA = (stdDev(retSerA)*Math.sqrt(252)).toFixed(1); // annualised
+    const volB = (stdDev(retSerB)*Math.sqrt(252)).toFixed(1);
+
+    statsEl.style.display = '';
+    statsEl.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
+        <div class="sc c${+retA>=0?'2':'5'}"><div class="sc-lbl">${sA.symbol} 3M Return</div><div class="sc-val ${+retA>=0?'up':'dn'}">${+retA>=0?'+':''}${retA}%</div></div>
+        <div class="sc c${+retB>=0?'2':'5'}"><div class="sc-lbl">${sB.symbol} 3M Return</div><div class="sc-val ${+retB>=0?'up':'dn'}">${+retB>=0?'+':''}${retB}%</div></div>
+        <div class="sc c3"><div class="sc-lbl">3M Correlation</div><div class="sc-val" style="color:${corrColor}">${corr}</div><div class="sc-sub">${corrLabel} co-movement</div></div>
+        <div class="sc c4"><div class="sc-lbl">Annualised Volatility</div><div class="sc-val" style="font-size:13px;color:var(--t2)">${sA.symbol} ${volA}% · ${sB.symbol} ${volB}%</div></div>
+      </div>
+      ${corrNum>=0.75?`<div style="margin-top:10px;padding:8px 12px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:6px;font-size:11px;color:var(--yel)">⚠ High correlation (${corr}) — these stocks move together. Holding both provides limited diversification benefit.</div>`:''}`;
+  }
 }
 
 async function runComparatorAI() {
