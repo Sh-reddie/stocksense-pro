@@ -165,6 +165,14 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 .tn-ix-val { font-size:12.5px; font-family:var(--mono); font-weight:700; margin-top:1px; }
 #tn-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
 #tn-lastref { white-space:nowrap; }
+/* Live P&L band */
+#tn-pnl { display:flex; align-items:center; gap:10px; padding:0 14px; border-left:1px solid var(--b2); border-right:1px solid var(--b2); flex-shrink:0; height:100%; cursor:pointer; transition:background .15s; }
+#tn-pnl:hover { background:var(--s2); }
+.tn-pnl-item { display:flex; flex-direction:column; align-items:center; gap:0; }
+.tn-pnl-lbl { font-size:8.5px; color:var(--t4); text-transform:uppercase; letter-spacing:.5px; font-weight:700; }
+.tn-pnl-val { font-size:12px; font-family:var(--mono); font-weight:800; line-height:1.2; }
+.tn-pnl-div { width:1px; height:22px; background:var(--b2); }
+@media(max-width:900px) { #tn-pnl { display:none; } }
 
 #tn-row2 { display:flex; align-items:center; padding:0 16px; height:40px; gap:2px; }
 .tn-tab { padding:6px 14px; font-size:13px; font-weight:500; color:var(--t3); cursor:pointer; border-radius:6px; white-space:nowrap; transition:all .15s; user-select:none; }
@@ -911,6 +919,23 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div id="tn-logo" onclick="go('dashboard')">
       <span id="tn-logo-icon">📊</span>
       <span id="tn-logo-text">StockSense<span style="color:var(--ac)">Pro</span></span>
+    </div>
+    <!-- Live P&L Band — updates on every price refresh -->
+    <div id="tn-pnl" onclick="go('dashboard')" title="Today's P&L · Total Return — click for dashboard">
+      <div class="tn-pnl-item">
+        <span class="tn-pnl-lbl">Day P&L</span>
+        <span class="tn-pnl-val" id="tn-day-pnl" style="color:var(--t3)">—</span>
+      </div>
+      <div class="tn-pnl-div"></div>
+      <div class="tn-pnl-item">
+        <span class="tn-pnl-lbl">Total Return</span>
+        <span class="tn-pnl-val" id="tn-total-ret" style="color:var(--t3)">—</span>
+      </div>
+      <div class="tn-pnl-div"></div>
+      <div class="tn-pnl-item">
+        <span class="tn-pnl-lbl">Portfolio</span>
+        <span class="tn-pnl-val" id="tn-port-val" style="color:var(--t3)">—</span>
+      </div>
     </div>
     <div id="tn-ticker">
       <div class="ix-scroll-track" id="ix-scroll-track">
@@ -3570,7 +3595,10 @@ textarea.fi{resize:vertical;min-height:70px;}
             </div>
           </div>
           <div class="fg"><label class="fl">Price Refresh Interval</label><select class="fi" id="cfg-ref"><option value="30">30 seconds</option><option value="60" selected>1 minute</option><option value="300">5 minutes</option></select></div>
-          <button class="btn btn-p" onclick="saveSettings()">Save Settings</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-p" style="flex:1" onclick="saveSettings()">Save Settings</button>
+            <button class="btn btn-g" style="white-space:nowrap" onclick="_aiCacheClear();toast('✅ AI cache cleared — next Analyze All will refresh all signals','ok')" title="Force re-run AI on all holdings, ignoring the 6-hour cache">🗑 Clear AI Cache</button>
+          </div>
           <div id="ai-test-result" style="margin-top:10px;font-size:12px;color:var(--t3)"></div>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--b2);display:flex;gap:10px;flex-wrap:wrap;align-items:center">
             <span style="font-size:12px;color:var(--t3);flex:1">🔒 App Lock</span>
@@ -3819,13 +3847,20 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="sd-body">
       <!-- CHART TAB -->
       <div class="sd-tp on" id="sd-tab-chart">
-        <div class="sd-tf-bar">
-          <button class="sd-tf on" onclick="loadSdChart('1d',this)">1D</button>
-          <button class="sd-tf" onclick="loadSdChart('5d',this)">5D</button>
-          <button class="sd-tf" onclick="loadSdChart('1mo',this)">1M</button>
-          <button class="sd-tf" onclick="loadSdChart('3mo',this)">3M</button>
-          <button class="sd-tf" onclick="loadSdChart('6mo',this)">6M</button>
-          <button class="sd-tf" onclick="loadSdChart('1y',this)">1Y</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+          <div class="sd-tf-bar" style="margin-bottom:0">
+            <button class="sd-tf on" id="sd-tf-1d"  onclick="loadSdChart('1d',this)">1D</button>
+            <button class="sd-tf"    id="sd-tf-5d"  onclick="loadSdChart('5d',this)">5D</button>
+            <button class="sd-tf"    id="sd-tf-1mo" onclick="loadSdChart('1mo',this)">1M</button>
+            <button class="sd-tf"    id="sd-tf-3mo" onclick="loadSdChart('3mo',this)">3M</button>
+            <button class="sd-tf"    id="sd-tf-6mo" onclick="loadSdChart('6mo',this)">6M</button>
+            <button class="sd-tf"    id="sd-tf-1y"  onclick="loadSdChart('1y',this)">1Y</button>
+          </div>
+          <!-- Candle toggle: line vs candlestick -->
+          <button id="sd-chart-type-btn" onclick="_toggleChartType()" title="Switch between line and candlestick chart"
+            style="font-size:10px;font-weight:700;padding:4px 10px;border-radius:6px;background:var(--s3);border:1px solid var(--b2);color:var(--t3);cursor:pointer;white-space:nowrap;transition:all .15s">
+            🕯 Candles
+          </button>
         </div>
         <div class="sd-sma-bar">
           <span style="font-size:10px;color:var(--t4);align-self:center;margin-right:2px">SMA:</span>
@@ -3834,6 +3869,8 @@ textarea.fi{resize:vertical;min-height:70px;}
           <button class="sd-sma-btn" data-sma="200" onclick="toggleSMA(200,this)">SMA 200</button>
         </div>
         <div class="sd-chart-wrap"><canvas id="sd-chart-canvas"></canvas><div id="sd-chart-msg" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--t4);font-size:12px"></div></div>
+        <!-- Volume bars row -->
+        <div id="sd-vol-wrap" style="height:44px;position:relative;margin-top:2px;display:none"><canvas id="sd-vol-canvas" style="width:100%;height:44px"></canvas></div>
         <div class="sd-stat-grid" id="sd-stats"></div>
       </div>
       <!-- FUNDAMENTALS TAB -->
@@ -5959,6 +5996,7 @@ async function refreshAll() {
   }
 
   save('holdings');save('watchlist');renderAll();
+  _updateNavPnl();
   tlSnapshot();
   checkStopLosses();
   checkAlerts();
@@ -6676,13 +6714,18 @@ function renderHoldings() {
         case 'qty':return`<td class="mn">${h.qty}</td>`;
         case 'avg':return`<td class="mn">₹${f(h.avgPrice)}</td>`;
         case 'ltp':{
-          const staleInd = h.ltpStale
-            ? ` <span title="Live price unavailable — click ↻ to retry with alternate exchange" style="color:var(--yel);font-size:10px;cursor:pointer" onclick="event.stopPropagation();retryStalePrice(${h.id})">↻</span>`
-            : '';
-          const _sm = !h.ltpStale && h.ltpUpdatedAt ? Math.round((Date.now()-new Date(h.ltpUpdatedAt).getTime())/60000) : null;
-          const ageStr = _sm !== null && _sm > 5
-            ? `<div style="font-size:9px;color:var(--t4);line-height:1.2;margin-top:1px">${_sm<60?_sm+'m':Math.round(_sm/60)+'h'} ago</div>`
-            : '';
+          const _ageMin = h.ltpUpdatedAt ? Math.round((Date.now()-new Date(h.ltpUpdatedAt).getTime())/60000) : null;
+          const _ageStr = _ageMin !== null ? (_ageMin < 60 ? _ageMin+'m' : Math.round(_ageMin/60)+'h') : null;
+          let staleInd = '', ageStr = '';
+          if (h.ltpStale) {
+            // Red STALE chip — price unavailable, shows age if known
+            const _staleSince = _ageStr ? ' · '+_ageStr+' old' : '';
+            staleInd = `<div style="margin-top:2px"><span onclick="event.stopPropagation();retryStalePrice(${h.id})" title="Price unavailable — click to retry" style="font-size:9px;font-weight:700;background:rgba(240,82,82,.15);color:var(--red);border:1px solid rgba(240,82,82,.35);border-radius:4px;padding:1px 5px;cursor:pointer;white-space:nowrap">STALE${_staleSince} ↻</span></div>`;
+          } else if (_ageMin !== null && _ageMin > 10) {
+            // Subtle grey age indicator — price is live but a few minutes old
+            const _col = _ageMin > 30 ? 'var(--yel)' : 'var(--t4)';
+            ageStr = `<div style="font-size:9px;color:${_col};line-height:1.2;margin-top:1px">${_ageStr} ago</div>`;
+          }
           return`<td class="mn">₹${f(ltp)}${staleInd}${ageStr}</td>`;
         }
         case 'cv':return`<td class="mn" style="font-weight:600">₹${fI(cv)}</td>`;
@@ -7534,7 +7577,46 @@ Reply ONLY with valid compact JSON (no markdown, no explanation):
 
 function applySentimentToUI(ctx){if(!ctx)return;const sc=ctx.sentimentScore||50;const el=document.getElementById('ds-sent');const ll=document.getElementById('ds-sentl');if(el){el.textContent=sc+'/100';el.style.color=sc>60?'var(--grn)':sc>40?'var(--yel)':'var(--red)';}if(ll)ll.textContent=ctx.sentimentLabel||'Neutral';}
 
-async function analyseHolding(h,ctx) {
+// ── AI Analysis Cache — 6-hour TTL ────────────────────────────────────────
+// Keyed on symbol so we never re-run analysis that's still fresh.
+// Stored in localStorage as 'ss_ai_cache_<SYMBOL>'.
+const AI_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+function _aiCacheGet(symbol) {
+  try {
+    const raw = localStorage.getItem('ss_ai_cache_' + symbol);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    if (Date.now() - ts > AI_CACHE_TTL_MS) { localStorage.removeItem('ss_ai_cache_' + symbol); return null; }
+    return data;
+  } catch(e) { return null; }
+}
+
+function _aiCacheSet(symbol, data) {
+  try { localStorage.setItem('ss_ai_cache_' + symbol, JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
+}
+
+function _aiCacheInvalidate(symbol) {
+  try { localStorage.removeItem('ss_ai_cache_' + symbol); } catch(e) {}
+}
+
+// Call to force fresh analysis (e.g. when user manually triggers re-run)
+function _aiCacheClear() {
+  Object.keys(localStorage).filter(k => k.startsWith('ss_ai_cache_')).forEach(k => localStorage.removeItem(k));
+}
+
+async function analyseHolding(h,ctx,{forceRefresh=false}={}) {
+  // Check 6-hour cache before hitting the API.
+  // Cache is keyed on symbol. forceRefresh=true skips cache (user-triggered re-run).
+  if (!forceRefresh) {
+    const cached = _aiCacheGet(h.symbol);
+    if (cached) {
+      // Apply cached fields back to holding object — same as live path below
+      Object.assign(h, cached);
+      h.lastAnalysed = cached.aiAnalysedAt || h.lastAnalysed;
+      return; // cache hit — no API call needed
+    }
+  }
   const ltp=h.ltp||h.avgPrice; const plp=((ltp-h.avgPrice)/h.avgPrice*100).toFixed(1); const days=hDays(h.buyDate)||0; const tt=days>=365?'LTCG':'STCG';
   const isHot=ctx?.hotSectors?.includes(h.sector); const isWeak=ctx?.weakSectors?.includes(h.sector);
   const pos52 = h.h52&&h.l52&&ltp ? Math.round((ltp-h.l52)/(h.h52-h.l52)*100) : null;
@@ -7565,6 +7647,15 @@ Reply ONLY compact JSON:
     if(Array.isArray(j.redFlags))h.redFlags=j.redFlags.slice(0,3);
     if(j.action)h.aiAction=j.action;if(j.reasoning)h.aiReasoning=j.reasoning;if(j.urgency)h.urgency=j.urgency;if(j.tradeType)h.tradeType=j.tradeType;
     h.aiError = null;
+    // Save to 6-hour cache so runAllAI() skips fresh holdings next time
+    h.aiAnalysedAt = new Date().toISOString();
+    _aiCacheSet(h.symbol, {
+      signal:h.signal, urgency:h.urgency, stopLoss:h.stopLoss, target1:h.target1, target2:h.target2,
+      t1Timeline:h.t1Timeline, t2Timeline:h.t2Timeline, confidence:h.confidence,
+      bullCase:h.bullCase, bearCase:h.bearCase, redFlags:h.redFlags,
+      aiAction:h.aiAction, aiReasoning:h.aiReasoning, tradeType:h.tradeType,
+      aiAnalysedAt:h.aiAnalysedAt, aiError:null,
+    });
   }catch(e){h.aiError=e.message||true;(window.D && D._aiErrors) && D._aiErrors.push(h.symbol+': '+(e.message||'error'));}
   h.lastAnalysed=new Date().toISOString();
 }
@@ -8214,7 +8305,7 @@ function renderExitTable(){renderExitPlannerV4();}
 async function genExitPlan(){if(!D.holdings.length){toast('Add holdings first','error');return;}await runAllAI();}
 
 
-async function aiSignal(h){await analyseHolding(h,D._marketCtx||{});}
+async function aiSignal(h){await analyseHolding(h,D._marketCtx||{},{forceRefresh:true});}
 async function refreshSentiment(){const ctx=await getMarketContext();D._marketCtx=ctx;applySentimentToUI(ctx);const b=document.getElementById('aibrief');if(b)b.innerHTML=`<div class="ai-txt">${md2h(ctx.brief||'')}</div>`;}
 
 
@@ -9340,7 +9431,10 @@ function ondropf(e,type){e.preventDefault();offdrag(e.currentTarget.id);const f=
 // ═══════════════════════════════════════════════════
 // STOCK DETAIL MODAL
 // ═══════════════════════════════════════════════════
-let _sdChart = null;
+let _sdChart    = null;
+let _sdVolChart = null;
+let _sdChartMode = 'line';    // 'line' | 'candle'
+let _sdLastRange = '1d';
 let _sdSym   = null;   // active YF symbol  e.g. "RELIANCE.NS"
 let _sdHid   = null;   // holding id if from holdings
 
@@ -9380,65 +9474,151 @@ async function loadSdChart(range, btn) {
 
   if(!series||series.length<2){
     if(msgEl){
-      let t=8; const iv=setInterval(()=>{t--;msgEl.textContent=`Chart unavailable — retrying in ${t}s… (market may be closed)`;if(t<=0)clearInterval(iv);},1000);
       msgEl.innerHTML='Chart unavailable — <button class="btn btn-g btn-xs" style="margin-left:6px" onclick="loadSdChart(\''+range+'\',null)">↻ Retry now</button>';
-      setTimeout(()=>{ clearInterval(iv); loadSdChart(range,null); }, 8000);
+      let t=8; const iv=setInterval(()=>{t--;if(t<=0){clearInterval(iv);loadSdChart(range,null);}},1000);
     }
     return;
   }
 
-  const labels = series.map(p=>p.t.toLocaleDateString('en-IN',{day:'2-digit',month:'short',hour:range==='1d'?'2-digit':undefined,minute:range==='1d'?'2-digit':undefined}));
-  const prices = series.map(p=>p.c);
-  const first = prices[0], last = prices[prices.length-1];
-  const isUp = last >= first;
-  const color = isUp ? '#2dd36f' : '#f05252';
+  _sdLastRange = range;
+  const intraday = ['1d','5d'].includes(range);
+  const labels = series.map(p=>p.t.toLocaleDateString('en-IN',{day:'2-digit',month:'short',hour:intraday?'2-digit':undefined,minute:intraday?'2-digit':undefined}));
+  const prices  = series.map(p=>p.c);
+  const first   = prices[0], last = prices[prices.length-1];
+  const isUp    = last >= first;
+  const upColor = '#2dd36f', dnColor = '#f05252';
+  const color   = isUp ? upColor : dnColor;
 
   // Load Chart.js if not present
   if(typeof Chart === 'undefined') {
     await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
   }
   if(_sdChart){_sdChart.destroy();_sdChart=null;}
+  if(_sdVolChart){_sdVolChart.destroy();_sdVolChart=null;}
 
-  // Build datasets: price + active SMAs
-  const datasets = [{
-    label:'Price',data:prices,
-    borderColor:color,backgroundColor:isUp?'rgba(45,211,111,.07)':'rgba(240,82,82,.07)',
-    borderWidth:2,pointRadius:0,tension:0.3,fill:true
-  }];
-  const SMA_COLORS = {20:'#fbbf24', 50:'#22d3ee', 200:'#8b5cf6'};
-  for (const period of [20, 50, 200]) {
-    if (_sdActiveSMAs.has(period) && prices.length >= period) {
-      const smaData = calcSMA(prices, period);
-      datasets.push({
-        label:`SMA ${period}`,
-        data: smaData,
-        borderColor: SMA_COLORS[period],
-        backgroundColor: 'transparent',
-        borderWidth: 1.5,
-        borderDash: [4, 3],
-        pointRadius: 0,
-        tension: 0,
-        fill: false
-      });
-    }
+  // ── Update toggle button label ───────────────────────────────────────────
+  const typeBtn = document.getElementById('sd-chart-type-btn');
+  const hasOHLC = series.some(p => p.o !== undefined);
+  if (typeBtn) {
+    typeBtn.style.opacity = hasOHLC ? '1' : '0.4';
+    typeBtn.style.pointerEvents = hasOHLC ? '' : 'none';
+    typeBtn.title = hasOHLC ? 'Switch chart type' : 'Candlestick unavailable for this range';
+    typeBtn.innerHTML = _sdChartMode === 'candle' ? '📈 Line' : '🕯 Candles';
   }
 
-  _sdChart = new Chart(canvas.getContext('2d'), {
-    type:'line',
-    data:{labels, datasets},
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      interaction:{mode:'index',intersect:false},
-      plugins:{
-        legend:{display: _sdActiveSMAs.size > 0, labels:{color:'#7888b0',font:{size:10},boxWidth:20}},
-        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': ₹'+f(ctx.raw,2)}}
-      },
-      scales:{
-        x:{ticks:{color:'#4a5578',maxTicksLimit:8,font:{size:10}},grid:{color:'rgba(255,255,255,.04)'}},
-        y:{ticks:{color:'#4a5578',callback:v=>'₹'+v,font:{size:10}},grid:{color:'rgba(255,255,255,.04)'},position:'right'}
+  const SMA_COLORS = {20:'#fbbf24', 50:'#22d3ee', 200:'#8b5cf6'};
+  const sharedScaleOpts = {
+    x:{ ticks:{color:'#4a5578',maxTicksLimit:8,font:{size:10}}, grid:{color:'rgba(255,255,255,.04)'}},
+    y:{ ticks:{color:'#4a5578',callback:v=>'₹'+v,font:{size:10}}, grid:{color:'rgba(255,255,255,.04)'}, position:'right'},
+  };
+
+  if (_sdChartMode === 'candle' && hasOHLC) {
+    // ── CANDLESTICK chart ──────────────────────────────────────────────────
+    // Render candles manually on canvas (no extra plugin needed)
+    const ctx2 = canvas.getContext('2d');
+    const w = canvas.offsetWidth, h = canvas.offsetHeight;
+    canvas.width = w; canvas.height = h;
+    ctx2.clearRect(0,0,w,h);
+
+    const opens  = series.map(p=>p.o);
+    const highs  = series.map(p=>p.h);
+    const lows   = series.map(p=>p.l);
+    const closes = series.map(p=>p.c);
+    const n = series.length;
+    const minP = Math.min(...lows), maxP = Math.max(...highs);
+    const padT=12, padB=24, padL=8, padR=50;
+    const chartW=w-padL-padR, chartH=h-padT-padB;
+    const toY = v => padT + chartH - ((v-minP)/(maxP-minP||1))*chartH;
+    const candleW = Math.max(2, Math.floor(chartW/n*0.65));
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    const gridColor = isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.06)';
+    const textColor = isDark ? '#4a5578' : '#94a3b8';
+    // Grid lines
+    ctx2.strokeStyle=gridColor; ctx2.lineWidth=1;
+    for(let i=0;i<=4;i++){const y=padT+i*(chartH/4);ctx2.beginPath();ctx2.moveTo(padL,y);ctx2.lineTo(w-padR,y);ctx2.stroke();}
+    // Y-axis labels
+    ctx2.fillStyle=textColor; ctx2.font='9px JetBrains Mono,monospace'; ctx2.textAlign='left';
+    for(let i=0;i<=4;i++){const v=maxP-i*(maxP-minP)/4;const y=padT+i*(chartH/4);ctx2.fillText('₹'+Math.round(v),w-padR+4,y+3);}
+    // Candles
+    series.forEach((p,i)=>{
+      const x = padL + (i/(n-1||1))*(chartW-candleW/2);
+      const isGreen = p.c >= p.o;
+      ctx2.strokeStyle = isGreen ? upColor : dnColor;
+      ctx2.fillStyle   = isGreen ? upColor : dnColor;
+      ctx2.globalAlpha = 0.9;
+      // Wick
+      ctx2.lineWidth=1.2;
+      ctx2.beginPath();ctx2.moveTo(x+candleW/2,toY(p.h));ctx2.lineTo(x+candleW/2,toY(p.l));ctx2.stroke();
+      // Body
+      const bodyTop=toY(Math.max(p.o,p.c)), bodyH=Math.max(1,Math.abs(toY(p.o)-toY(p.c)));
+      ctx2.fillRect(x,bodyTop,candleW,bodyH);
+      ctx2.globalAlpha=1;
+    });
+    // SMAs overlaid
+    for (const period of [20,50,200]) {
+      if (_sdActiveSMAs.has(period) && closes.length >= period) {
+        const smaData = calcSMA(closes, period);
+        ctx2.strokeStyle = SMA_COLORS[period]; ctx2.lineWidth=1.5; ctx2.setLineDash([4,3]);
+        ctx2.beginPath();
+        smaData.forEach((v,i)=>{ if(v===null)return; const x=padL+(i/(n-1||1))*(chartW-candleW/2)+candleW/2; if(i===0||smaData[i-1]===null)ctx2.moveTo(x,toY(v));else ctx2.lineTo(x,toY(v)); });
+        ctx2.stroke(); ctx2.setLineDash([]);
       }
     }
-  });
+    // X labels
+    ctx2.fillStyle=textColor; ctx2.font='9px sans-serif'; ctx2.textAlign='center';
+    const step=Math.max(1,Math.floor(n/6));
+    for(let i=0;i<n;i+=step){
+      const x=padL+(i/(n-1||1))*(chartW-candleW/2)+candleW/2;
+      ctx2.fillText(labels[i],x,h-4);
+    }
+    // We drew directly so we don't use Chart.js here — set a sentinel
+    _sdChart = { destroy: ()=>{ const c=document.getElementById('sd-chart-canvas'); if(c){const ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);} } };
+  } else {
+    // ── LINE chart (default) ───────────────────────────────────────────────
+    const datasets = [{
+      label:'Price', data:prices,
+      borderColor:color, backgroundColor:isUp?'rgba(45,211,111,.07)':'rgba(240,82,82,.07)',
+      borderWidth:2, pointRadius:0, tension:0.3, fill:true
+    }];
+    for (const period of [20,50,200]) {
+      if (_sdActiveSMAs.has(period) && prices.length >= period) {
+        datasets.push({ label:`SMA ${period}`, data:calcSMA(prices,period), borderColor:SMA_COLORS[period], backgroundColor:'transparent', borderWidth:1.5, borderDash:[4,3], pointRadius:0, tension:0, fill:false });
+      }
+    }
+    _sdChart = new Chart(canvas.getContext('2d'), {
+      type:'line', data:{labels, datasets},
+      options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+        plugins:{ legend:{display:_sdActiveSMAs.size>0,labels:{color:'#7888b0',font:{size:10},boxWidth:20}}, tooltip:{callbacks:{label:c=>c.dataset.label+': ₹'+f(c.raw,2)}} },
+        scales:sharedScaleOpts }
+    });
+  }
+
+  // ── Volume bar mini-chart ──────────────────────────────────────────────
+  const volWrap = document.getElementById('sd-vol-wrap');
+  const volCanvas = document.getElementById('sd-vol-canvas');
+  const hasVol = series.some(p => p.v > 0);
+  if (volWrap) volWrap.style.display = hasVol ? '' : 'none';
+  if (hasVol && volCanvas) {
+    const vols = series.map(p=>p.v||0);
+    const maxV = Math.max(...vols)||1;
+    const bgColors = series.map((p,i)=> p.c >= (i>0?series[i-1].c:p.c) ? 'rgba(45,211,111,.55)' : 'rgba(240,82,82,.55)');
+    if (_sdVolChart) { _sdVolChart.destroy(); _sdVolChart=null; }
+    _sdVolChart = new Chart(volCanvas.getContext('2d'), {
+      type:'bar', data:{ labels, datasets:[{data:vols,backgroundColor:bgColors,borderWidth:0,borderRadius:1}] },
+      options:{ responsive:true, maintainAspectRatio:false, animation:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'Vol: '+(c.raw>=1e7?(c.raw/1e7).toFixed(1)+'Cr':c.raw>=1e5?(c.raw/1e5).toFixed(1)+'L':c.raw.toLocaleString('en-IN'))}}},
+        scales:{ x:{display:false}, y:{display:false,max:maxV*1.5} } }
+    });
+  }
+}
+
+// Toggle between line and candlestick
+function _toggleChartType() {
+  _sdChartMode = _sdChartMode === 'candle' ? 'line' : 'candle';
+  const btn = document.getElementById('sd-chart-type-btn');
+  if (btn) btn.innerHTML = _sdChartMode === 'candle' ? '📈 Line' : '🕯 Candles';
+  const activeBtn = document.querySelector('.sd-tf.on');
+  loadSdChart(_sdLastRange, activeBtn);
 }
 
 function _sdPopulateStats(h, meta) {
@@ -9886,7 +10066,8 @@ async function _sdRunAI(id) {
   const el = document.getElementById('sd-ai-content');
   if(el) el.innerHTML='<div class="ai-ld" style="padding:20px"><div class="spin"></div>Running AI analysis…</div>';
   const ctx = D._marketCtx || await buildMarketContext();
-  await analyseHolding(h, ctx);
+  // User explicitly triggered — always bypass 6h cache
+  await analyseHolding(h, ctx, { forceRefresh: true });
   _sdAiContent(h);
   toast('AI analysis complete for '+h.symbol);
 }
@@ -10099,6 +10280,22 @@ const MARKET_OPEN_MIN  = 9*60+15;   // 9:15 IST
 const MARKET_CLOSE_MIN = 15*60+30;  // 15:30 IST
 const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+// NSE trading holidays 2025-2026 (YYYY-MM-DD in IST)
+const NSE_HOLIDAYS = new Set([
+  // 2025
+  '2025-01-26','2025-02-19','2025-03-14','2025-03-31',
+  '2025-04-10','2025-04-14','2025-04-18','2025-05-01',
+  '2025-08-15','2025-08-27','2025-10-02','2025-10-02',
+  '2025-10-21','2025-10-22','2025-10-28','2025-11-05',
+  '2025-12-25',
+  // 2026
+  '2026-01-26','2026-03-03','2026-03-20','2026-04-02',
+  '2026-04-03','2026-04-06','2026-04-14','2026-04-30',
+  '2026-05-01','2026-08-15','2026-09-15','2026-10-02',
+  '2026-10-09','2026-10-28','2026-11-04','2026-11-25',
+  '2026-12-25',
+]);
+
 function isMarketOpen() {
   const now = new Date();
   const day = now.getDay(); // 0=Sun,6=Sat
@@ -10106,6 +10303,9 @@ function isMarketOpen() {
   // Convert UTC to IST (UTC+5:30)
   const istMs = now.getTime() + (5*60+30)*60000;
   const ist = new Date(istMs);
+  // Check NSE holiday calendar
+  const dateStr = ist.toISOString().slice(0, 10); // YYYY-MM-DD
+  if (NSE_HOLIDAYS.has(dateStr)) return false;
   const minOfDay = ist.getUTCHours()*60 + ist.getUTCMinutes();
   return minOfDay >= MARKET_OPEN_MIN && minOfDay < MARKET_CLOSE_MIN;
 }
@@ -10738,6 +10938,38 @@ function renderInvestmentOS() {
   set('os-wnb-note', whyNotFlags ? 'Review valuation, leverage, weak ROE or drawdown flags before adding.' : 'No rule-based red flags from available local data.');
 }
 
+// ── Live P&L nav band update ──────────────────────────────────────────────
+function _updateNavPnl() {
+  if (!D.holdings.length) return;
+  const dayPL    = D.holdings.reduce((s,h) => s + (h.qty||0)*(h.chg||0), 0);
+  const invested = D.holdings.reduce((s,h) => s + (h.qty||0)*(h.avgPrice||0), 0);
+  const current  = D.holdings.reduce((s,h) => s + (h.qty||0)*(h.ltp||h.avgPrice||0), 0);
+  const totalRet = invested > 0 ? ((current - invested) / invested * 100) : 0;
+
+  const fmtINR = v => {
+    const a = Math.abs(v);
+    const s = v < 0 ? '−' : '+';
+    if (a >= 1e7) return s + '₹' + (a/1e7).toFixed(2) + 'Cr';
+    if (a >= 1e5) return s + '₹' + (a/1e5).toFixed(1) + 'L';
+    if (a >= 1e3) return s + '₹' + (a/1e3).toFixed(1) + 'K';
+    return s + '₹' + Math.round(a);
+  };
+  const fmtPort = v => {
+    if (v >= 1e7) return '₹' + (v/1e7).toFixed(2) + 'Cr';
+    if (v >= 1e5) return '₹' + (v/1e5).toFixed(1) + 'L';
+    return '₹' + Math.round(v).toLocaleString('en-IN');
+  };
+
+  const dayEl  = document.getElementById('tn-day-pnl');
+  const retEl  = document.getElementById('tn-total-ret');
+  const portEl = document.getElementById('tn-port-val');
+  const grn = 'var(--grn)', red = 'var(--red)', t3 = 'var(--t3)';
+
+  if (dayEl)  { dayEl.textContent  = fmtINR(dayPL);           dayEl.style.color  = dayPL > 0 ? grn : dayPL < 0 ? red : t3; }
+  if (retEl)  { retEl.textContent  = (totalRet>=0?'+':'')+totalRet.toFixed(1)+'%'; retEl.style.color  = totalRet > 0 ? grn : totalRet < 0 ? red : t3; }
+  if (portEl) { portEl.textContent = fmtPort(current);         portEl.style.color = t3; }
+}
+
 function renderAll() {
   renderSummary();
   renderDashHoldings();
@@ -10751,6 +10983,7 @@ function renderAll() {
   renderWatchlist();
   renderDashInsights();
   renderInvestmentOS();
+  _updateNavPnl();
 }
 
 
@@ -12672,9 +12905,46 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 })();
 
+// ── Web Audio alert tones (zero deps, works offline) ──────────────────────
+function _playAlertTone(type) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const master = ctx.createGain();
+    master.gain.value = 0.28;
+    master.connect(ctx.destination);
+    const _beep = (freq, start, dur, vol=1) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(master);
+      o.frequency.value = freq;
+      o.type = 'sine';
+      g.gain.setValueAtTime(vol, ctx.currentTime + start);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+      o.start(ctx.currentTime + start);
+      o.stop(ctx.currentTime + start + dur + 0.05);
+    };
+    if (type === 'sl') {
+      // Stop-loss hit: two descending tones — urgent, alarming
+      _beep(880, 0,    0.18);
+      _beep(660, 0.2,  0.18);
+      _beep(440, 0.4,  0.28);
+    } else if (type === 'target') {
+      // Target hit: ascending celebratory chime
+      _beep(523, 0,    0.12);
+      _beep(659, 0.14, 0.12);
+      _beep(784, 0.28, 0.22);
+    } else {
+      // Generic alert: single mid tone
+      _beep(660, 0, 0.2);
+    }
+    if (navigator.vibrate) navigator.vibrate(type === 'sl' ? [200, 80, 200, 80, 300] : [150, 60, 150]);
+  } catch(e) { /* AudioContext not available */ }
+}
+
 function checkAlerts() {
   const alerts = loadAlerts();
   let hitCount = 0;
+  let playSL = false, playTarget = false;
   alerts.forEach(a => {
     const h = D.holdings.find(x => x.symbol === a.sym) || D.watchlist.find(x => x.symbol === a.sym);
     const ltp = h ? (h.ltp || h.avgPrice || 0) : 0;
@@ -12686,12 +12956,17 @@ function checkAlerts() {
       const msg  = `${dir} ${a.sym} — ${a.label} hit! ₹${ltp.toFixed(2)} ${a.type==='above'?'≥':'≤'} ₹${a.price}`;
       toast(msg, a.type === 'below' ? 'error' : 'success');
       addNotif('alert', msg, a.sym);
+      if (a.label === 'Stop Loss') playSL = true;
+      else if (a.label?.startsWith('Target')) playTarget = true;
       // Browser notification (tab open)
       if('Notification' in window && Notification.permission === 'granted') new Notification('StockSense Alert', { body: msg, icon: '/icon-192.png' });
       // Push notification (even when tab closed)
       _sendPush(`🔔 ${a.sym} Alert`, msg, 'ss-price-alert', '/?tab=alerts');
     }
   });
+  // Play tone after processing all alerts (one tone even if multiple fire)
+  if (playSL) _playAlertTone('sl');
+  else if (playTarget) _playAlertTone('target');
   saveAlerts(alerts);
   renderAlerts();
   if(hitCount === 0) toast('✅ Alert check done — no new triggers');
@@ -13822,20 +14097,8 @@ function calcPortfolioXIRR() {
 // ═══════════════════════════════════════════════════
 // STOP-LOSS BREACH CHECK
 // ═══════════════════════════════════════════════════
-function playBeep() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.2);
-  } catch(e) {}
-}
+// Legacy alias — replaced by _playAlertTone('sl') above
+function playBeep() { _playAlertTone('sl'); }
 
 function checkStopLosses() {
   let newBreaches = 0;
