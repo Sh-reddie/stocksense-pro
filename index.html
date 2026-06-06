@@ -913,6 +913,8 @@ textarea.fi{resize:vertical;min-height:70px;}
 
 <!-- TOP NAV -->
 <div id="topnav">
+  <!-- Multi-device sync banner — hidden by default, shown when server data is newer than local -->
+  <div id="kv-multidev-banner" style="display:none;background:rgba(34,211,238,.08);border-bottom:1px solid rgba(34,211,238,.2);padding:5px 16px;display:none;align-items:center;justify-content:space-between;gap:8px"></div>
   <!-- Row 1: Logo + Indices ticker + Actions -->
   <div id="tn-row1">
     <button id="tn-hamburger" onclick="toggleMobileNav()" aria-label="Menu">☰</button>
@@ -971,6 +973,7 @@ textarea.fi{resize:vertical;min-height:70px;}
       <button class="btn btn-p btn-sm btn-ai-mob" onclick="runAllAI()" title="Run AI Analysis">🤖</button>
       <span id="kv-sync-dot" style="font-size:10px" title="Cloud sync status"></span>
       <span id="kv-sync-txt" style="font-size:10px;color:var(--t4);display:none" class="kv-sync-txt-el"></span>
+      <button class="btn btn-g btn-sm" onclick="exportPortfolioSnapshot()" title="One-page PDF portfolio snapshot — Ctrl+P or ⌘+P to save as PDF">📄</button>
       <button class="btn btn-g btn-sm" onclick="exportBackup()" title="Download backup of all portfolio data">💾</button>
       <button class="btn btn-g btn-sm" onclick="openSpotlight('holdings')">+ Stock</button>
       <button class="btn btn-g btn-sm notif-btn" onclick="go('notifications')" title="Notifications">🔔<span id="notif-badge" class="notif-badge"></span></button>
@@ -2502,8 +2505,9 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div class="sec" id="sec-screener">
     <div class="sec-head">
       <div class="sec-title">🔍 Stock Screener</div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-p btn-sm" onclick="runScreener()">🔍 Screen Now</button>
+        <button class="btn btn-g btn-sm" onclick="runScreenerWithRefresh()" title="Refresh your portfolio prices first, then screen — ensures signals and 52W positions are live">⚡ Refresh + Screen</button>
         <button class="btn btn-g btn-sm" onclick="runScreenerAI()">🤖 AI Pick</button>
       </div>
     </div>
@@ -2517,6 +2521,8 @@ textarea.fi{resize:vertical;min-height:70px;}
           <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('deepvalue')" title="PE<15, near 52W low — contrarian">🛒 Deep Value</button>
           <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('quality')"  title="ROE>20%, low debt">🏆 Quality</button>
           <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('contrarian')" title="Down >25% from 52W high, but profitable">↩ Contrarian</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('buy-near-low')" title="BUY signal + near 52W low — best entry setup" style="color:var(--grn);border-color:rgba(45,211,111,.4)">🎯 Buy Near Low</button>
+          <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('highroe-lowpe')" title="ROE>18%, PE<20 — quality at value price" style="color:var(--cyn);border-color:rgba(34,211,238,.4)">💎 Quality Value</button>
           <button class="btn btn-g btn-xs" onclick="applyScreenerPreset('reset')"    style="color:var(--t4)">✕ Reset</button>
         </div>
         <div class="fg"><label class="fl">Sector</label>
@@ -3393,7 +3399,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="sec-title">📣 AI Earnings Preview</div>
         <div style="font-size:12px;color:var(--t4);margin-top:2px">Pre-earnings hold/exit strategy for every holding · consensus outlook · risk rating</div>
       </div>
-      <button class="btn btn-p btn-sm" id="ep2-ai-btn" onclick="runEarningsAI()">🤖 Analyse All Holdings</button>
+      <button class="btn btn-p btn-sm" id="ep2-ai-btn" onclick="runEarningsAIPerStock()">🤖 AI Per-Stock Preview</button>
     </div>
     <div class="sg sg-4 gap" style="margin-bottom:16px">
       <div class="sc c2">HOLD THROUGH EARNINGS <div id="ep2-hold" style="font-size:22px;font-weight:700">0</div></div>
@@ -3402,6 +3408,8 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="sc c4">ANALYSED <div id="ep2-total" style="font-size:22px;font-weight:700">0</div></div>
     </div>
     <div id="ep2-ai-plan" style="display:none;margin-bottom:16px"></div>
+    <!-- Per-stock AI earnings cards -->
+    <div id="ep2-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:16px"></div>
     <div id="ep2-table-wrap"></div>
   </div>
 
@@ -4852,6 +4860,24 @@ const _kv = {
       this.available = true;
 
       if (data && (data.holdings?.length > 0 || data.realised?.length > 0 || data.watchlist?.length > 0)) {
+        // ── Multi-device conflict detection ────────────────────────────────
+        // If KV was saved more recently than our last local save AND our local
+        // data differs, show a banner so user knows another device updated things.
+        const localSavedAt  = localStorage.getItem('ss_last_saved_at');
+        const serverSavedAt = data._savedAt;
+        if (localSavedAt && serverSavedAt && serverSavedAt > localSavedAt) {
+          const serverDate = new Date(serverSavedAt);
+          const ageMin = Math.round((Date.now() - serverDate.getTime()) / 60000);
+          const ageStr = ageMin < 60 ? ageMin + ' min ago' : Math.round(ageMin/60) + 'h ago';
+          const banner = document.getElementById('kv-multidev-banner');
+          if (banner) {
+            banner.style.display = '';
+            banner.innerHTML = `<span style="font-size:11px;color:var(--cyn)">📱 Loaded from another device (saved ${ageStr}) — local changes overwritten</span>
+              <button onclick="document.getElementById('kv-multidev-banner').style.display='none'" style="background:none;border:none;cursor:pointer;color:var(--t4);font-size:12px;margin-left:8px">✕</button>`;
+          }
+        }
+        localStorage.setItem('ss_last_saved_at', serverSavedAt || new Date().toISOString());
+
         // Server data is the source of truth — merge into D and localStorage
         const keys = ['holdings','realised','watchlist','dividends','cfg','orders'];
         let changed = false;
@@ -4920,6 +4946,7 @@ const _kv = {
       const { ok, savedAt } = await r.json();
       if (ok) {
         this.available = true;
+        if (savedAt) localStorage.setItem('ss_last_saved_at', savedAt);
         this._setIndicator('synced', savedAt);
       } else {
         this._setIndicator('error');
@@ -6040,6 +6067,7 @@ async function refreshAll() {
   if(typeof checkCustomAlerts==='function') checkCustomAlerts();
   checkTargetHits();
   check52WAlerts();
+  checkWatchlistTriggers();
   const elapsed=((Date.now()-t0)/1000).toFixed(1);
   const now=new Date().toLocaleTimeString('en-IN');
   const lastEl=document.getElementById('lastRef');
@@ -8664,6 +8692,43 @@ function check52WAlerts() {
   });
 }
 
+// ── Watchlist Entry Trigger Alerts ───────────────────────────────────────────
+// Fires when a watchlist stock crosses into its AI-computed entry zone.
+// Also alerts WAIT→ENTER NOW when price drops to the suggested entry range.
+const _wlTriggerFired = new Set();
+
+function checkWatchlistTriggers() {
+  if (!D.watchlist.length) return;
+  D.watchlist.forEach(w => {
+    const ltp = w.ltp;
+    if (!ltp || !w.wlDecision) return;
+
+    // Already in ENTER NOW zone — fire once per session
+    const enterKey = `${w.symbol}-enter`;
+    if (w.wlDecision === 'ENTER NOW' && !_wlTriggerFired.has(enterKey)) {
+      _wlTriggerFired.add(enterKey);
+      const msg = `🎯 ${w.symbol} is in your entry zone (ENTER NOW) — LTP ₹${f(ltp)}. ${w.wlWhyEnter||''}`;
+      toast(msg, 'success');
+      addNotif(msg, 'target', w.symbol);
+      _sendPush(`🎯 ${w.symbol} — Entry Signal`, msg, 'ss-wl-entry-'+w.symbol, '/');
+      _playAlertTone('target');
+    }
+
+    // WAIT stock: price has pulled back into entry range
+    const pullbackKey = `${w.symbol}-pullback`;
+    if (w.wlDecision === 'WAIT' && w.wlEntryLow && w.wlEntryHigh
+        && ltp >= w.wlEntryLow * 0.99 && ltp <= w.wlEntryHigh * 1.01
+        && !_wlTriggerFired.has(pullbackKey)) {
+      _wlTriggerFired.add(pullbackKey);
+      const msg = `📉 ${w.symbol} pulled back to entry zone ₹${w.wlEntryLow}–₹${w.wlEntryHigh} — LTP ₹${f(ltp)}. ${w.wlWhyEnter||'Consider entering.'}`;
+      toast(msg, 'success');
+      addNotif(msg, 'target', w.symbol);
+      _sendPush(`📉 ${w.symbol} — Entry Zone Hit`, msg, 'ss-wl-pb-'+w.symbol, '/');
+      _playAlertTone('target');
+    }
+  });
+}
+
 function addNotif(msg, type='info') {
   const arr = JSON.parse(localStorage.getItem('ss_notifs')||'[]');
   arr.unshift({ msg, type, ts: new Date().toISOString() });
@@ -8951,6 +9016,167 @@ async function exportExcel() {
   XLSX.writeFile(wb, `StockSense_${today}.xlsx`);
   toast('✅ Excel exported — StockSense_'+today+'.xlsx');
 }
+// ── One-Page Portfolio Snapshot PDF ────────────────────────────────────────
+// Opens a print-optimized HTML page in a new tab.
+// User presses Ctrl+P / ⌘+P → "Save as PDF" to get the file.
+function exportPortfolioSnapshot() {
+  if (!D.holdings.length) { toast('No holdings to export', 'error'); return; }
+
+  const today = new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+  const inv   = D.holdings.reduce((s,h) => s + h.qty*h.avgPrice, 0);
+  const cv    = D.holdings.reduce((s,h) => s + h.qty*(h.ltp||h.avgPrice), 0);
+  const pl    = cv - inv;
+  const plp   = inv > 0 ? pl/inv*100 : 0;
+  const dayPL = D.holdings.reduce((s,h) => s + (h.qty||0)*(h.chg||0), 0);
+
+  // Signal breakdown
+  const sigCounts = {};
+  D.holdings.forEach(h => { const s=(h.signal||'HOLD').split(/[ _]/)[0]; sigCounts[s]=(sigCounts[s]||0)+1; });
+
+  // LTCG alerts — holdings within 60 days of 1-year mark
+  const ltcgAlerts = D.holdings
+    .map(h => ({ h, days: hDays(h.buyDate)||0, daysTo: Math.max(0, 365-(hDays(h.buyDate)||0)) }))
+    .filter(x => x.daysTo > 0 && x.daysTo <= 60)
+    .sort((a,b) => a.daysTo - b.daysTo)
+    .slice(0, 5);
+
+  // Top AI actions
+  const aiActions = D.holdings
+    .filter(h => h.aiAction || h.urgency === 'ACT TODAY')
+    .sort((a,b) => (b.urgency==='ACT TODAY'?1:0)-(a.urgency==='ACT TODAY'?1:0))
+    .slice(0, 5);
+
+  // Sector allocation
+  const sMap = {};
+  D.holdings.forEach(h => { const s=h.sector||'Other'; sMap[s]=(sMap[s]||0)+h.qty*(h.ltp||h.avgPrice); });
+  const sectors = Object.entries(sMap).sort((a,b)=>b[1]-a[1]).slice(0, 8);
+
+  const fv = (v, d=2) => v != null ? v.toFixed(d) : '—';
+  const fi = v => { if(!v) return '—'; const a=Math.abs(v); const s=v<0?'-':''; if(a>=1e7) return s+'₹'+(a/1e7).toFixed(2)+'Cr'; if(a>=1e5) return s+'₹'+(a/1e5).toFixed(1)+'L'; return s+'₹'+Math.round(a).toLocaleString('en-IN'); };
+  const sigColor = s => s?.includes('BUY')?'#16a34a':s?.includes('SELL')||s?.includes('EXIT')||s?.includes('REDUCE')?'#dc2626':'#b45309';
+
+  const holdRows = D.holdings.map(h => {
+    const ltp=h.ltp||h.avgPrice, hpl=(ltp-h.avgPrice)*h.qty, hplp=(ltp-h.avgPrice)/h.avgPrice*100;
+    const sig = (h.signal||'HOLD').split(/[ _]/)[0];
+    return `<tr>
+      <td><b>${h.symbol}</b><br><span class="sub">${h.sector||'—'}</span></td>
+      <td>${h.qty}</td>
+      <td>₹${fv(h.avgPrice)}</td>
+      <td>₹${fv(ltp)}</td>
+      <td class="${hpl>=0?'up':'dn'}">${hpl>=0?'+':''}${fv(hplp,1)}%</td>
+      <td class="${hpl>=0?'up':'dn'}">${hpl>=0?'+':''}${fi(hpl)}</td>
+      <td style="color:${sigColor(sig)};font-weight:700">${sig}</td>
+      <td class="sub">${h.stopLoss?'₹'+fv(h.stopLoss):'—'}</td>
+      <td class="sub">${h.target1?'₹'+fv(h.target1):'—'}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>StockSense Portfolio Snapshot — ${today}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;padding:20px 24px;}
+  h1{font-size:18px;font-weight:800;color:#1e293b;letter-spacing:-.3px;}
+  h2{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#475569;margin:14px 0 6px;border-bottom:1.5px solid #e2e8f0;padding-bottom:4px;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #4f8ef7;}
+  .brand{color:#4f8ef7;font-size:20px;font-weight:800;}
+  .brand span{color:#1e293b;}
+  .date{font-size:11px;color:#94a3b8;margin-top:4px;}
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px;}
+  .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;}
+  .stat-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;font-weight:600;}
+  .stat-val{font-size:16px;font-weight:800;margin-top:3px;color:#1e293b;font-family:'Courier New',monospace;}
+  .up{color:#16a34a!important;} .dn{color:#dc2626!important;}
+  table{width:100%;border-collapse:collapse;font-size:10.5px;}
+  th{background:#f1f5f9;font-weight:700;text-align:left;padding:5px 7px;color:#475569;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;}
+  td{padding:4px 7px;border-bottom:1px solid #f1f5f9;vertical-align:middle;}
+  tr:hover td{background:#fafbff;}
+  .sub{color:#94a3b8;font-size:9.5px;}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;}
+  .signal-grid{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0;}
+  .sig-badge{padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;background:#f1f5f9;color:#475569;}
+  .ltcg-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9;font-size:10.5px;}
+  .action-row{padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:10.5px;}
+  .sector-bar{display:flex;align-items:center;gap:8px;margin:3px 0;}
+  .bar-fill{height:8px;background:#4f8ef7;border-radius:4px;min-width:4px;}
+  .footer{margin-top:16px;padding-top:8px;border-top:1px solid #e2e8f0;font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;}
+  .print-btn{position:fixed;top:16px;right:16px;padding:8px 16px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;box-shadow:0 2px 8px rgba(79,142,247,.4);}
+  @media print{.print-btn{display:none;}body{padding:12px 16px;}}
+  @page{size:A4;margin:12mm 14mm;}
+</style>
+</head><body>
+<button class="print-btn" onclick="window.print()">⌘+P / Ctrl+P → Save as PDF</button>
+<div class="header">
+  <div>
+    <div class="brand">StockSense<span>Pro</span></div>
+    <div style="font-size:13px;font-weight:700;color:#475569;margin-top:2px">Portfolio Snapshot</div>
+    <div class="date">Generated ${today} · ${D.holdings.length} holdings</div>
+  </div>
+  <div style="text-align:right">
+    <div style="font-size:22px;font-weight:800;color:#1e293b;font-family:'Courier New'">${fi(cv)}</div>
+    <div style="font-size:11px;color:${pl>=0?'#16a34a':'#dc2626'};font-weight:700">${pl>=0?'+':''}${fi(pl)} (${fv(plp,1)}%) total return</div>
+    <div style="font-size:10px;color:#94a3b8;margin-top:2px">Day: <span style="color:${dayPL>=0?'#16a34a':'#dc2626'};font-weight:600">${dayPL>=0?'+':''}${fi(dayPL)}</span></div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-lbl">Invested</div><div class="stat-val">${fi(inv)}</div></div>
+  <div class="stat"><div class="stat-lbl">Current Value</div><div class="stat-val">${fi(cv)}</div></div>
+  <div class="stat"><div class="stat-lbl">Unrealised P&L</div><div class="stat-val ${pl>=0?'up':'dn'}">${pl>=0?'+':''}${fi(pl)}</div></div>
+  <div class="stat"><div class="stat-lbl">Total Return</div><div class="stat-val ${plp>=0?'up':'dn'}">${fv(plp,1)}%</div></div>
+  <div class="stat"><div class="stat-lbl">Day P&L</div><div class="stat-val ${dayPL>=0?'up':'dn'}">${dayPL>=0?'+':''}${fi(dayPL)}</div></div>
+</div>
+
+<h2>Holdings</h2>
+<table>
+  <thead><tr><th>Stock</th><th>Qty</th><th>Avg Price</th><th>LTP</th><th>Return%</th><th>P&L</th><th>Signal</th><th>Stop Loss</th><th>Target 1</th></tr></thead>
+  <tbody>${holdRows}</tbody>
+</table>
+
+<div class="two-col">
+  <div>
+    <h2>AI Signal Summary</h2>
+    <div class="signal-grid">
+      ${Object.entries(sigCounts).map(([s,n])=>`<div class="sig-badge" style="color:${sigColor(s)};background:${sigColor(s)}15">${s}: ${n}</div>`).join('')}
+    </div>
+    ${aiActions.length ? `
+    <h2>Top Actions</h2>
+    ${aiActions.map(h=>`<div class="action-row">
+      <span style="font-weight:700;color:${sigColor(h.signal)}">${h.symbol}</span>
+      ${h.urgency==='ACT TODAY'?'<span style="color:#dc2626;font-size:9px;font-weight:700;margin-left:4px">● ACT TODAY</span>':''}
+      <span style="color:#64748b;margin-left:6px">${(h.aiAction||h.action||'Review position').slice(0,80)}</span>
+    </div>`).join('')}` : ''}
+
+    ${ltcgAlerts.length ? `
+    <h2>LTCG Calendar Alerts</h2>
+    ${ltcgAlerts.map(x=>`<div class="ltcg-row">
+      <span style="font-weight:700">${x.h.symbol}</span>
+      <span style="color:#b45309">${x.daysTo}d to LTCG</span>
+      <span style="color:#94a3b8">${new Date(new Date(x.h.buyDate).getTime()+365*86400000).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</span>
+    </div>`).join('')}` : ''}
+  </div>
+
+  <div>
+    <h2>Sector Allocation</h2>
+    ${sectors.map(([s,v])=>`<div class="sector-bar">
+      <span style="width:90px;flex-shrink:0;font-size:10px">${s}</span>
+      <div class="bar-fill" style="width:${Math.round(v/cv*100)*3}px"></div>
+      <span style="font-size:10px;color:#64748b;margin-left:4px">${(v/cv*100).toFixed(1)}%</span>
+    </div>`).join('')}
+  </div>
+</div>
+
+<div class="footer">
+  <span>StockSense Pro · For personal use only · Not SEBI-registered investment advice</span>
+  <span>Portfolio as of ${today}</span>
+</div>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=900,height=700');
+  if (win) { win.document.write(html); win.document.close(); }
+  else toast('Pop-up blocked — allow pop-ups for this site', 'error');
+}
+
 function exportPDF(fyParam) {
   const fy    = fyParam || document.getElementById('tax-fy')?.value || '2025-26';
   const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
@@ -10431,6 +10657,35 @@ async function openDetail(id) {
     if(firstTf) firstTf.classList.add('on');
     loadSdChart('1d', firstTf);
   }, 100);
+
+  // Auto-sentiment in background — fetch+score if stale (>6h) or missing.
+  // Updates the Sentiment tab silently; no spinner shown unless user opens the tab.
+  const _sentStale = !h._sentimentAt || (Date.now() - h._sentimentAt > 6*60*60*1000);
+  if (_sentStale && localStorage.getItem('orKey')) {
+    setTimeout(async () => {
+      try {
+        const headlines = await fetchStockHeadlines(h.symbol).catch(()=>[]);
+        const result = await scoreSentiment(h.symbol, headlines, h.sector).catch(()=>null);
+        if (result?.sentiment) {
+          h._sentiment = result;
+          h._sentimentHeadlines = headlines;
+          h._sentimentAt = Date.now();
+          save('holdings');
+          // Update the sentiment tab dot in the tab bar
+          const sentTab = document.getElementById('sdt-sent');
+          if (sentTab) {
+            const col = result.sentiment==='Bullish'?'var(--grn)':result.sentiment==='Bearish'?'var(--red)':'var(--yel)';
+            const ic  = result.sentiment==='Bullish'?'▲':result.sentiment==='Bearish'?'▼':'↔';
+            sentTab.innerHTML = `🗞 <span style="color:${col};font-size:10px;font-weight:800">${ic}</span>`;
+          }
+          // If sentiment tab is currently open, refresh it
+          if (document.getElementById('sd-tab-sent')?.classList.contains('on')) {
+            _sdSentimentContent(h);
+          }
+        }
+      } catch(e) {}
+    }, 800); // small delay so modal animation completes first
+  }
 }
 
 async function openIndexDetail(yfSym, name) {
@@ -15699,6 +15954,15 @@ let _scrResults = [];
 
 function renderScreener() { /* open with default filters visible */ }
 
+// Refresh portfolio prices first, then run screener — ensures live signals
+async function runScreenerWithRefresh() {
+  if (D.holdings.length || D.watchlist.length) {
+    toast('↻ Refreshing prices for live screening…', 'info');
+    await refreshAll();
+  }
+  runScreener();
+}
+
 // Apply a named filter preset and immediately run the screener
 function applyScreenerPreset(preset) {
   const set = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
@@ -15707,25 +15971,29 @@ function applyScreenerPreset(preset) {
   set('scr-52w','75'); set('scr-mcap',''); set('scr-signal','');
   switch(preset) {
     case 'garp':
-      // Growth At Reasonable Price: solid ROE, fair PE, not at highs
       set('scr-pe','25'); set('scr-roe','15'); set('scr-52w','75');
       toast('📋 GARP: PE<25 · ROE>15% · not at 52W high'); break;
     case 'momentum':
-      // Near 52W high = breakout candidates
       set('scr-52w','100'); set('scr-signal','buy'); set('scr-roe','10');
       toast('🚀 Momentum: Buy signal · no PE/52W cap'); break;
     case 'deepvalue':
-      // Cheap stocks near 52W lows — contrarian picks
       set('scr-pe','15'); set('scr-52w','30'); set('scr-roe','8');
       toast('🛒 Deep Value: PE<15 · 52W pos <30% · ROE>8%'); break;
     case 'quality':
-      // High ROE, low debt proxy (PE as valuation check)
       set('scr-pe','50'); set('scr-roe','20');
-      toast('🏆 Quality: ROE>20% · PE<50 (quality at any price)'); break;
+      toast('🏆 Quality: ROE>20% · PE<50'); break;
     case 'contrarian':
-      // Down significantly from 52W high but still profitable
       set('scr-52w','40'); set('scr-roe','10'); set('scr-pe','35');
       toast('↩ Contrarian: 52W pos <40% · profitable (ROE>10%)'); break;
+    // ── New smart presets ──────────────────────────────────────────────────
+    case 'buy-near-low':
+      // BUY signal but near 52W low — the most actionable setup
+      set('scr-signal','buy'); set('scr-52w','35'); set('scr-roe','10'); set('scr-pe','40');
+      toast('🎯 Buy Near Low: BUY signal · 52W pos <35% · real value zone'); break;
+    case 'highroe-lowpe':
+      // Classic value: high quality at cheap price
+      set('scr-roe','18'); set('scr-pe','20'); set('scr-52w','100');
+      toast('💎 High Quality Value: ROE>18% · PE<20'); break;
     case 'reset':
     default:
       toast('Filters reset'); return;
@@ -17322,6 +17590,102 @@ function renderEarningsPreview() {
       <td><span style="font-size:11px;font-weight:700;color:${vColor[r.verdict]}">${r.verdict}</span></td>
     </tr>`).join('')}</tbody>
   </table>`;
+}
+
+// ── Per-stock AI Earnings Preview Cards ───────────────────────────────────────
+// Generates expected EPS, revenue growth, key watch item, and price impact
+// scenario for each holding. Cached in holding object for 24h.
+const EARNINGS_CACHE_TTL = 24 * 60 * 60 * 1000;
+
+async function runEarningsAIPerStock() {
+  if (!D.holdings.length) { toast('No holdings — add some first', 'error'); return; }
+  if (!localStorage.getItem('orKey')) { toast('Set OpenRouter API key in Settings first', 'error'); return; }
+
+  const btn = document.getElementById('ep2-ai-btn');
+  const cardsEl = document.getElementById('ep2-cards');
+  if (!cardsEl) return;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating…'; }
+
+  // Render loading skeletons
+  cardsEl.innerHTML = D.holdings.slice(0, 12).map(h =>
+    `<div class="pn" id="ep-card-${h.id}"><div class="pn-b" style="display:flex;gap:10px;align-items:center;min-height:80px;color:var(--t4)"><div class="spin"></div><span style="font-size:12px">Generating ${h.symbol} preview…</span></div></div>`
+  ).join('');
+
+  // Run in batches of 3 to avoid rate limits
+  const stocks = D.holdings.slice(0, 12);
+  for (let i = 0; i < stocks.length; i += 3) {
+    await Promise.all(stocks.slice(i, i + 3).map(async h => {
+      // Check 24h cache
+      const cacheKey = `ss_ep_${h.symbol}`;
+      const cached = (() => { try { const c=JSON.parse(localStorage.getItem(cacheKey)||'null'); return c && (Date.now()-c.ts < EARNINGS_CACHE_TTL) ? c.data : null; } catch(e){return null;} })();
+      if (cached) { _renderEarningsCard(h, cached); return; }
+
+      const ltp = h.ltp||h.avgPrice;
+      const gainPct = ((ltp-h.avgPrice)/h.avgPrice*100).toFixed(1);
+      const prompt = `Senior Indian equity research analyst. Generate pre-earnings outlook for ${h.symbol} (${h.sector||'Diversified'}, NSE).
+LTP: ₹${f(ltp)} | Cost: ₹${f(h.avgPrice)} | P&L: ${gainPct}% | Held: ${hDays(h.buyDate)||0} days | PE: ${h.pe||'N/A'} | ROE: ${h.roe?(h.roe*100).toFixed(0)+'%':'N/A'}
+Reply ONLY compact JSON:
+{"nextResultMonth":"<e.g. Jul 2026>","expectedEPS":"<₹ figure or % YoY change>","expectedRevGrowth":"<% YoY>","keyWatchItem":"<1 specific metric or event to watch>","beatScenario":"<price impact if beat, e.g. +5-8%>","missScenario":"<price impact if miss, e.g. -7-12%>","verdict":"HOLD|TRIM|ADD|EXIT","confidence":"HIGH|MEDIUM|LOW","rationale":"<2 sentences>"}`;
+      try {
+        const raw = await claudeJSON(prompt);
+        const j = (raw && typeof raw==='object') ? raw : (extractJSON(raw)||null);
+        if (j) {
+          try { localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: j })); } catch(e) {}
+          _renderEarningsCard(h, j);
+        }
+      } catch(e) {
+        const card = document.getElementById(`ep-card-${h.id}`);
+        if (card) card.innerHTML = `<div class="pn-b" style="color:var(--t4);font-size:11px;padding:12px">Could not generate preview for ${h.symbol}</div>`;
+      }
+    }));
+    if (i + 3 < stocks.length) await new Promise(r => setTimeout(r, 2000));
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = '🤖 Analyse All Holdings'; }
+}
+
+function _renderEarningsCard(h, j) {
+  const card = document.getElementById(`ep-card-${h.id}`);
+  if (!card) return;
+  const vColor = { HOLD:'var(--ac)', TRIM:'var(--yel)', ADD:'var(--grn)', EXIT:'var(--red)' };
+  const cColor = { HIGH:'var(--grn)', MEDIUM:'var(--yel)', LOW:'var(--t4)' };
+  card.innerHTML = `
+    <div class="pn-h" style="padding:12px 14px 8px">
+      <div style="display:flex;align-items:center;gap:8px;width:100%">
+        <div>
+          <div style="font-weight:700;font-size:13px">${h.symbol}</div>
+          <div style="font-size:10px;color:var(--t4)">${h.sector||'—'} · ${j.nextResultMonth||'upcoming'}</div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+          <span style="font-size:11px;font-weight:700;color:${cColor[j.confidence]||'var(--t4)'}">${j.confidence||'—'}</span>
+          <span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;background:${vColor[j.verdict]||'var(--t3)'}20;color:${vColor[j.verdict]||'var(--t3)'};border:1px solid ${vColor[j.verdict]||'var(--b2)'}44">${j.verdict||'—'}</span>
+        </div>
+      </div>
+    </div>
+    <div class="pn-b" style="padding:8px 14px 14px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+        <div style="background:var(--s2);border-radius:6px;padding:6px 8px">
+          <div style="font-size:9px;color:var(--t4);text-transform:uppercase;font-weight:600">Expected EPS</div>
+          <div style="font-size:12px;font-weight:700;color:var(--t1);margin-top:2px">${j.expectedEPS||'N/A'}</div>
+        </div>
+        <div style="background:var(--s2);border-radius:6px;padding:6px 8px">
+          <div style="font-size:9px;color:var(--t4);text-transform:uppercase;font-weight:600">Revenue Growth</div>
+          <div style="font-size:12px;font-weight:700;color:var(--t1);margin-top:2px">${j.expectedRevGrowth||'N/A'}</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:8px"><span style="font-weight:700;color:var(--t2)">Watch:</span> ${j.keyWatchItem||'—'}</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <div style="flex:1;padding:5px 8px;background:rgba(45,211,111,.08);border:1px solid rgba(45,211,111,.25);border-radius:6px">
+          <div style="font-size:9px;color:var(--grn);font-weight:700">BEAT</div>
+          <div style="font-size:11px;color:var(--t2)">${j.beatScenario||'—'}</div>
+        </div>
+        <div style="flex:1;padding:5px 8px;background:rgba(240,82,82,.08);border:1px solid rgba(240,82,82,.25);border-radius:6px">
+          <div style="font-size:9px;color:var(--red);font-weight:700">MISS</div>
+          <div style="font-size:11px;color:var(--t2)">${j.missScenario||'—'}</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--t3);line-height:1.5">${j.rationale||''}</div>
+    </div>`;
 }
 
 async function runEarningsAI() {
@@ -21810,6 +22174,58 @@ function _applyHarvestSort() {
 </div>
 
 <script>
+// ── Keyboard Shortcuts ───────────────────────────────
+// Only fire when no input/textarea is focused.
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return; // don't intercept browser shortcuts
+
+  switch(e.key) {
+    case 'r': case 'R':
+      e.preventDefault();
+      refreshAll();
+      break;
+    case 'a': case 'A':
+      e.preventDefault();
+      runAllAI();
+      break;
+    case '/':
+      e.preventDefault();
+      // Open spotlight search
+      if (typeof openSpotlight === 'function') openSpotlight('holdings');
+      break;
+    case 'Escape':
+      // Close topmost open modal
+      document.querySelectorAll('.modal.open, .modal[style*="flex"]').forEach(m => {
+        if (typeof closeM === 'function') closeM(m.id);
+      });
+      // Close chat panel
+      const chatPanel = document.getElementById('chat-panel');
+      if (chatPanel?.classList.contains('open')) chatPanel.classList.remove('open');
+      break;
+    case 'd': case 'D':
+      e.preventDefault();
+      if (typeof go === 'function') go('dashboard');
+      break;
+    case 'h':
+      e.preventDefault();
+      if (typeof go === 'function') go('holdings');
+      break;
+    case 'w': case 'W':
+      e.preventDefault();
+      if (typeof go === 'function') go('watchlist');
+      break;
+    case 'n': case 'N':
+      e.preventDefault();
+      if (typeof go === 'function') go('notifications');
+      break;
+    case '?':
+      // Show shortcut cheatsheet toast
+      toast('⌨ R=Refresh · A=AI Analyze · /=Search · D=Dashboard · H=Holdings · W=Watchlist · N=Notifications · Esc=Close', 'info');
+      break;
+  }
+});
+
 // ── PWA Service Worker Registration ──────────────────
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
