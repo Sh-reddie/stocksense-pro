@@ -5482,7 +5482,7 @@ async function _proxyFetch(url, timeoutMs = 10000) {
 }
 
 /* v7/finance/quote — batch fetch up to 20 symbols in ONE call */
-const QUOTE_FIELDS = 'regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketPreviousClose,regularMarketVolume,averageDailyVolume10Day,fiftyTwoWeekHigh,fiftyTwoWeekLow,shortName,longName,trailingPE,forwardPE,priceToBook,trailingEps,marketCap,dividendYield,beta,returnOnEquity,debtToEquity,revenueGrowth,earningsGrowth,currentRatio,recommendationKey';
+const QUOTE_FIELDS = 'regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketPreviousClose,regularMarketVolume,averageDailyVolume10Day,fiftyTwoWeekHigh,fiftyTwoWeekLow,shortName,longName,trailingPE,forwardPE,priceToBook,trailingEps,marketCap,dividendYield,beta,returnOnEquity,debtToEquity,revenueGrowth,earningsGrowth,currentRatio,recommendationKey,earningsTimestamp,earningsTimestampStart,earningsTimestampEnd';
 
 async function _fetchQuoteBatch(yfSymbols) {
   if (!yfSymbols.length) return new Map();
@@ -5519,7 +5519,7 @@ async function _fetchQuoteBatch(yfSymbols) {
 function _quoteToPrice(q) {
   if (!q || !q.regularMarketPrice) return null;
   const prev = q.regularMarketPreviousClose || q.regularMarketPrice;
-  return { ltp: +q.regularMarketPrice.toFixed(2), prev: +prev.toFixed(2), chg: +(q.regularMarketChange||0).toFixed(2), chgP: +(q.regularMarketChangePercent||0).toFixed(2), h52: q.fiftyTwoWeekHigh||null, l52: q.fiftyTwoWeekLow||null, vol: q.regularMarketVolume||null, avgVol: q.averageDailyVolume10Day||null, name: q.longName||q.shortName||null };
+  return { ltp: +q.regularMarketPrice.toFixed(2), prev: +prev.toFixed(2), chg: +(q.regularMarketChange||0).toFixed(2), chgP: +(q.regularMarketChangePercent||0).toFixed(2), h52: q.fiftyTwoWeekHigh||null, l52: q.fiftyTwoWeekLow||null, vol: q.regularMarketVolume||null, avgVol: q.averageDailyVolume10Day||null, earningsTs: q.earningsTimestampStart || q.earningsTimestamp || null, name: q.longName||q.shortName||null };
 }
 function _quoteToFund(q) {
   if (!q) return null;
@@ -6156,7 +6156,7 @@ async function refreshAll() {
   // ── Apply batch results ────────────────────────────────────────────────────
   D.holdings.forEach(h=>{
     const hit=_lookupQuoteFor(h, quoteMap);
-    if(hit){const {yfSym,q,p}=hit;h.ltp=p.ltp;h.chg=p.chg;h.chgP=p.chgP;h.h52=p.h52||h.h52;h.l52=p.l52||h.l52;h.vol=p.vol;if(p.avgVol)h.avgVol=p.avgVol;h.ltpStale=false;h.ltpUpdatedAt=new Date().toISOString();if(q)_cacheSet(yfSym,p,q);_symMapSave(h.symbol,yfSym);updated++;}
+    if(hit){const {yfSym,q,p}=hit;h.ltp=p.ltp;h.chg=p.chg;h.chgP=p.chgP;h.h52=p.h52||h.h52;h.l52=p.l52||h.l52;h.vol=p.vol;if(p.avgVol)h.avgVol=p.avgVol;if(p.earningsTs)h.earningsTs=p.earningsTs;h.ltpStale=false;h.ltpUpdatedAt=new Date().toISOString();if(q)_cacheSet(yfSym,p,q);_symMapSave(h.symbol,yfSym);updated++;}
     else{failedHoldings.push(h);}
   });
   D.watchlist.forEach(w=>{
@@ -6273,6 +6273,7 @@ async function refreshAll() {
   checkStopLosses();
   checkAlerts();
   if(typeof checkCustomAlerts==='function') checkCustomAlerts();
+  if(typeof _syncEarningsToCalendar==='function') _syncEarningsToCalendar();
   checkTargetHits();
   check52WAlerts();
   checkWatchlistTriggers();
@@ -7068,7 +7069,7 @@ const COL_DEFS = {
   basic:  [{k:'stock',l:'Stock'},{k:'qty',l:'Qty'},{k:'avg',l:'Avg Cost'},{k:'ltp',l:'LTP'},{k:'cv',l:'Curr Value'},{k:'chg',l:'Day Chg%'},{k:'pl',l:'P&L'},{k:'plp',l:'P&L%'},{k:'xirr',l:'XIRR'},{k:'cagr',l:'CAGR vs N50'},{k:'sig',l:'Signal'},{k:'forecast',l:'Forecast'},{k:'sent',l:'Sentiment'}],
   tech:   [{k:'rsi',l:'RSI'},{k:'52h',l:'52W Range'},{k:'atr',l:'ATR'},{k:'vol',l:'Volume'}],
   fund:   [{k:'pe',l:'P/E'},{k:'pb',l:'P/B'},{k:'roe',l:'ROE%'},{k:'de',l:'D/E'},{k:'eps',l:'EPS'},{k:'fscore',l:'F-Score'}],
-  risk:   [{k:'sl',l:'Stop Loss'},{k:'t1',l:'Target 1'},{k:'t2',l:'Target 2'},{k:'days',l:'Days'},{k:'tax',l:'Tax Type'}],
+  risk:   [{k:'sl',l:'Stop Loss'},{k:'t1',l:'Target 1'},{k:'t2',l:'Target 2'},{k:'days',l:'Days'},{k:'tax',l:'Tax Type'},{k:'earnings',l:'Earnings'}],
 };
 function togCols(grp, btn) {
   if(grp==='basic') return; // always on
@@ -7206,6 +7207,15 @@ function renderHoldings() {
         case 't2':return`<td class="mn" style="color:var(--ac2)">₹${f(h.target2)}</td>`;
         case 'days':return`<td class="mn">${days}d</td>`;
         case 'tax':return`<td><span class="tag ${taxT(days)==='LTCG'?'t-ltcg':'t-stcg'}">${taxT(days)}</span></td>`;
+        case 'earnings': {
+          if (!h.earningsTs) return `<td class="mn" style="color:var(--t4)">—</td>`;
+          const eDate = new Date(h.earningsTs * 1000);
+          const daysTo = Math.round((eDate - Date.now()) / 86400000);
+          if (daysTo < -14) return `<td class="mn" style="color:var(--t4);font-size:10px">${eDate.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</td>`;
+          const eCol = daysTo <= 2 ? 'var(--red)' : daysTo <= 7 ? 'var(--orn)' : 'var(--yel)';
+          const eLbl = daysTo < 0 ? `${Math.abs(daysTo)}d ago` : daysTo === 0 ? 'TODAY' : `in ${daysTo}d`;
+          return `<td class="mn"><span title="${eDate.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}" style="font-size:10px;font-weight:700;color:${eCol};cursor:default;white-space:nowrap">📅 ${eLbl}</span></td>`;
+        }
         case 'forecast': {
           const ltp2=h.ltp||h.avgPrice;
           // Use AI target1 if available, else apply simple 15% upside as placeholder
@@ -15277,6 +15287,39 @@ function saveCalEvent() {
 function deleteCalEvent(id) {
   saveCalEvents(loadCalEvents().filter(e=>String(e.id)!==String(id)));
   renderCalendar();
+}
+
+// ── Auto-sync real YF earnings dates to calendar ─────────────────────────────
+function _syncEarningsToCalendar() {
+  try {
+    const events = loadCalEvents();
+    let changed = false;
+    D.holdings.forEach(h => {
+      if (!h.earningsTs) return;
+      const eDate = new Date(h.earningsTs * 1000);
+      const daysTo = Math.round((eDate - Date.now()) / 86400000);
+      if (daysTo < -7 || daysTo > 90) return; // only upcoming / very recent
+      const dateStr = eDate.toISOString().split('T')[0];
+      const yfKey = `yfearnings_${h.symbol}`;
+      // Remove old YF-sourced entry for this symbol
+      const oldIdx = events.findIndex(e => e._yfKey === yfKey);
+      if (oldIdx >= 0) {
+        if (events[oldIdx].date === dateStr) return; // already correct
+        events.splice(oldIdx, 1);
+      }
+      // Also remove old guessed entries for this symbol
+      const guessIdx = events.findIndex(e => !e._yfKey && e.type === 'res' && e.title === `${h.symbol} Q Results`);
+      if (guessIdx >= 0) events.splice(guessIdx, 1);
+      events.push({ id: Date.now() + Math.random(), title: `${h.symbol} Results`, date: dateStr, type: 'res', _yfKey: yfKey });
+      changed = true;
+      // Notify if within 3 days
+      if (daysTo >= 0 && daysTo <= 3 && !h._earningsNotified) {
+        h._earningsNotified = true;
+        addNotif('warn', `📅 ${h.symbol} results in ${daysTo === 0 ? 'TODAY' : daysTo + ' day(s)'}`, h.symbol);
+      }
+    });
+    if (changed) { saveCalEvents(events); if (typeof renderCalendar === 'function') renderCalendar(); }
+  } catch(e) {}
 }
 
 // Pre-populate with result dates for current holdings quarter
