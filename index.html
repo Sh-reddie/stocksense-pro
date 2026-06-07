@@ -1788,6 +1788,39 @@ textarea.fi{resize:vertical;min-height:70px;}
       </div>
       <div class="pn-b" style="padding:0"><div id="alrt-history-list"></div></div>
     </div>
+    <!-- Corporate Action Modal -->
+    <div id="ca-action-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:3000;align-items:center;justify-content:center;padding:16px">
+      <div style="background:var(--s2);border:1px solid var(--b2);border-radius:var(--radius-lg);padding:24px;width:420px;max-width:95vw">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+          <div style="font-family:var(--display);font-size:16px;font-weight:700">📋 Log Corporate Action</div>
+          <button onclick="document.getElementById('ca-action-modal').style.display='none'" style="background:none;border:none;font-size:20px;color:var(--t4);cursor:pointer">×</button>
+        </div>
+        <div id="ca-modal-stock" style="font-size:13px;font-weight:600;color:var(--ac);margin-bottom:14px"></div>
+        <div class="fg" style="margin-bottom:12px">
+          <label class="fl">Action Type</label>
+          <select class="fi" id="ca-action-type" onchange="_caPreview()">
+            <option value="bonus">Bonus Issue (e.g. 1:1 = 1 free share per share held)</option>
+            <option value="split">Stock Split (e.g. 2:1 = 1 share becomes 2)</option>
+            <option value="rights">Rights Issue (e.g. 1:4 = 1 new share per 4 held)</option>
+            <option value="consolidation">Consolidation (e.g. 1:2 = 2 shares become 1)</option>
+          </select>
+        </div>
+        <div class="fr gap" style="margin-bottom:12px">
+          <div class="fg" style="margin-bottom:0"><label class="fl">Ratio — New</label><input class="fi" id="ca-ratio-new" type="number" value="1" min="1" oninput="_caPreview()"></div>
+          <div style="align-self:flex-end;padding-bottom:10px;font-size:18px;color:var(--t4)">:</div>
+          <div class="fg" style="margin-bottom:0"><label class="fl">Ratio — Old</label><input class="fi" id="ca-ratio-old" type="number" value="1" min="1" oninput="_caPreview()"></div>
+        </div>
+        <div id="ca-preview" style="background:var(--s3);border:1px solid var(--b1);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:12px;display:none">
+          <div style="font-weight:700;color:var(--t2);margin-bottom:6px">Preview</div>
+          <div id="ca-preview-text" style="color:var(--t3);line-height:1.8"></div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-g" onclick="document.getElementById('ca-action-modal').style.display='none'">Cancel</button>
+          <button class="btn btn-p" onclick="_caApply()">✓ Apply</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Swap Calculator Modal -->
     <div id="swap-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:3000;align-items:center;justify-content:center;padding:16px">
       <div style="background:var(--s2);border:1px solid var(--b2);border-radius:var(--radius-lg);padding:24px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto">
@@ -2408,6 +2441,7 @@ textarea.fi{resize:vertical;min-height:70px;}
       <button class="btn btn-xs strat-tab" id="stab-factors" onclick="switchStratTab('factors')">📊 Factor Scoring</button>
       <button class="btn btn-xs strat-tab" id="stab-optimise" onclick="switchStratTab('optimise')">⚖ Portfolio Optimiser</button>
       <button class="btn btn-xs strat-tab" id="stab-options" onclick="switchStratTab('options')">📈 Options Strategy</button>
+      <button class="btn btn-xs strat-tab" id="stab-optcalc" onclick="switchStratTab('optcalc')">🎯 Options P&L</button>
     </div>
 
     <!-- ── TAB: Market Regime + RSI ── -->
@@ -2551,6 +2585,66 @@ textarea.fi{resize:vertical;min-height:70px;}
           <button class="btn btn-xs btn-p" onclick="runOptimiseAI()">🧠 Get AI Plan</button>
         </div>
         <div class="pn-b"><div id="opt-ai-txt" style="color:var(--t3);font-size:13px;line-height:1.7">Run optimisation first, then get an AI-generated rebalancing plan with specific rupee amounts and priority order.</div></div>
+      </div>
+    </div>
+
+    <!-- ── TAB: Options P&L Calculator ── -->
+    <div id="strat-optcalc" class="strat-panel" style="display:none">
+      <div style="background:rgba(255,200,0,.07);border:1px solid rgba(255,200,0,.25);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--yel)">
+        ⚠ <strong>Educational only.</strong> Real premiums depend on IV, time decay, and bid-ask spread. This calculator uses theoretical Black-Scholes approximation.
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+        <!-- Inputs -->
+        <div class="pn">
+          <div class="pn-h"><div class="pn-t">🎛 Trade Setup</div></div>
+          <div class="pn-b" style="display:flex;flex-direction:column;gap:10px">
+            <div class="fr gap">
+              <div class="fg" style="margin-bottom:0">
+                <label class="fl">Instrument</label>
+                <select class="fi" id="oc-inst" onchange="_ocFillSpot()">
+                  <option value="">Custom</option>
+                  <option value="24500">Nifty 50 (spot)</option>
+                  <option value="52000">BankNifty (spot)</option>
+                  <option value="80000">Sensex (spot)</option>
+                </select>
+              </div>
+              <div class="fg" style="margin-bottom:0">
+                <label class="fl">Option Type</label>
+                <select class="fi" id="oc-type" onchange="_ocCalc()">
+                  <option value="CE">Call (CE)</option>
+                  <option value="PE">Put (PE)</option>
+                </select>
+              </div>
+            </div>
+            <div class="fr gap">
+              <div class="fg" style="margin-bottom:0"><label class="fl">Spot Price (₹)</label><input class="fi" id="oc-spot" type="number" placeholder="e.g. 24500" oninput="_ocCalc()"></div>
+              <div class="fg" style="margin-bottom:0"><label class="fl">Strike Price (₹)</label><input class="fi" id="oc-strike" type="number" placeholder="e.g. 24600" oninput="_ocCalc()"></div>
+            </div>
+            <div class="fr gap">
+              <div class="fg" style="margin-bottom:0"><label class="fl">Premium Paid (₹)</label><input class="fi" id="oc-premium" type="number" placeholder="e.g. 120" oninput="_ocCalc()"></div>
+              <div class="fg" style="margin-bottom:0"><label class="fl">Lots</label><input class="fi" id="oc-lots" type="number" value="1" min="1" oninput="_ocCalc()"></div>
+            </div>
+            <div class="fr gap">
+              <div class="fg" style="margin-bottom:0"><label class="fl">Lot Size</label><input class="fi" id="oc-lotsize" type="number" value="50" min="1" oninput="_ocCalc()"></div>
+              <div class="fg" style="margin-bottom:0"><label class="fl">Days to Expiry</label><input class="fi" id="oc-dte" type="number" value="7" min="0" max="90" oninput="_ocCalc()"></div>
+            </div>
+          </div>
+        </div>
+        <!-- Key metrics -->
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="pn" style="padding:14px 16px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="oc-metrics">
+              <div style="text-align:center"><div style="font-size:10px;color:var(--t4)">BREAKEVEN</div><div style="font-size:20px;font-weight:700;color:var(--ac)" id="oc-be">—</div></div>
+              <div style="text-align:center"><div style="font-size:10px;color:var(--t4)">MAX LOSS</div><div style="font-size:20px;font-weight:700;color:var(--red)" id="oc-maxloss">—</div></div>
+              <div style="text-align:center"><div style="font-size:10px;color:var(--t4)">CAPITAL AT RISK</div><div style="font-size:18px;font-weight:700;color:var(--orn)" id="oc-capital">—</div></div>
+              <div style="text-align:center"><div style="font-size:10px;color:var(--t4)">MOVE NEEDED</div><div style="font-size:18px;font-weight:700;color:var(--t2)" id="oc-move">—</div></div>
+            </div>
+          </div>
+          <div class="pn" style="padding:12px 14px;flex:1">
+            <div style="font-size:10px;color:var(--t4);margin-bottom:8px;text-transform:uppercase;letter-spacing:.8px">P&L at Expiry</div>
+            <div id="oc-pnl-table" style="font-size:11px"></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -7314,7 +7408,7 @@ function renderHoldings() {
             </div>
           </td>`;
         }
-        case 'act':return`<td style="white-space:nowrap"><button class="btn btn-g btn-xs" onclick="openDetail(${h.id})" style="margin-right:4px">Detail</button><button class="btn btn-yel btn-xs" onclick="openSellModal(${h.id})" style="margin-right:4px" title="Log a sell trade">Sell</button><button class="btn btn-p btn-xs" onclick="openAvgDown(${h.id})" style="margin-right:4px" title="Average-Down Calculator">Avg↓</button><button class="btn btn-g btn-xs" onclick="openNoteModal(${h.id})" style="margin-right:4px" title="${h.note?'Edit note: '+h.note.replace(/"/g,'&quot;'):'Add conviction note'}">${h.note?'📝':'📋'}</button><button class="btn btn-g btn-xs" onclick="openTrailSLModal(${h.id})" style="margin-right:4px" title="${h.trailSlPct?'Trailing SL active: '+h.trailSlPct+'% below high':'Set trailing stop loss'}" style="color:${h.trailSlPct?'var(--cyn)':'inherit'}">${h.trailSlPct?'⟳SL':'TSL'}</button><button class="btn btn-g btn-xs" onclick="openSwapModal(${h.id})" style="margin-right:4px" title="Swap Calculator — sell this, buy another">↔</button><button class="btn btn-red btn-xs" onclick="rmHolding(${h.id})">✕</button></td>`;
+        case 'act':return`<td style="white-space:nowrap"><button class="btn btn-g btn-xs" onclick="openDetail(${h.id})" style="margin-right:4px">Detail</button><button class="btn btn-yel btn-xs" onclick="openSellModal(${h.id})" style="margin-right:4px" title="Log a sell trade">Sell</button><button class="btn btn-p btn-xs" onclick="openAvgDown(${h.id})" style="margin-right:4px" title="Average-Down Calculator">Avg↓</button><button class="btn btn-g btn-xs" onclick="openNoteModal(${h.id})" style="margin-right:4px" title="${h.note?'Edit note: '+h.note.replace(/"/g,'&quot;'):'Add conviction note'}">${h.note?'📝':'📋'}</button><button class="btn btn-g btn-xs" onclick="openTrailSLModal(${h.id})" style="margin-right:4px" title="${h.trailSlPct?'Trailing SL active: '+h.trailSlPct+'% below high':'Set trailing stop loss'}" style="color:${h.trailSlPct?'var(--cyn)':'inherit'}">${h.trailSlPct?'⟳SL':'TSL'}</button><button class="btn btn-g btn-xs" onclick="openSwapModal(${h.id})" style="margin-right:4px" title="Swap Calculator — sell this, buy another">↔</button><button class="btn btn-g btn-xs" onclick="openCaModal(${h.id})" style="margin-right:4px" title="Log corporate action (split/bonus/rights)">CA</button><button class="btn btn-red btn-xs" onclick="rmHolding(${h.id})">✕</button></td>`;
         default:return'<td>—</td>';
       }
     }
@@ -9532,7 +9626,7 @@ async function exportExcel() {
   const today = new Date().toISOString().split('T')[0];
 
   // Sheet 1: Holdings
-  const holdRows = [['Symbol','Name','Exchange','Qty','Avg Price','LTP','Invested','Current Value','P&L','P&L %','Days Held','Tax Type','Buy Date','Stop Loss','Target 1','Target 2']];
+  const holdRows = [['Symbol','Name','Exchange','Sector','Qty','Avg Price','LTP','Invested','Current Value','P&L','P&L %','Days Held','Tax Type','Buy Date','Stop Loss','Target 1','Target 2','Signal','RSI','F-Score','Earnings Date','Insider %','Pledged %']];
   D.holdings.forEach(h => {
     const ltp = h.ltp||h.avgPrice;
     const inv = h.qty*h.avgPrice;
@@ -9540,10 +9634,14 @@ async function exportExcel() {
     const pl = cv-inv;
     const plp = inv>0?pl/inv*100:0;
     const days = hDays(h.buyDate)||0;
-    holdRows.push([h.symbol,h.name||h.symbol,h.exchange||'NSE',h.qty,h.avgPrice,ltp,inv,cv,+pl.toFixed(2),+plp.toFixed(2),days,taxT(days),h.buyDate||'',h.stopLoss||'',h.target1||'',h.target2||'']);
+    const fs = _piotroski(h);
+    const fScore = fs.dataPoints ? `${fs.score}/${fs.dataPoints}` : '';
+    const earningsDate = h.earningsTs ? new Date(h.earningsTs*1000).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '';
+    const pledgePct = _PLEDGE_DICT[h.symbol] > 0 ? _PLEDGE_DICT[h.symbol]+'%' : '';
+    holdRows.push([h.symbol,h.name||h.symbol,h.exchange||'NSE',h.sector||'',h.qty,h.avgPrice,ltp,+inv.toFixed(2),+cv.toFixed(2),+pl.toFixed(2),+plp.toFixed(2),days,taxT(days),h.buyDate||'',h.stopLoss||'',h.target1||'',h.target2||'',h.signal||'',h.rsi||'',fScore,earningsDate,h.insiderPct!=null?h.insiderPct+'%':'',pledgePct]);
   });
   const wsH = XLSX.utils.aoa_to_sheet(holdRows);
-  wsH['!cols'] = holdRows[0].map((_,i)=>({wch:[12,24,10,8,12,12,14,14,12,10,10,10,12,12,12,12][i]||12}));
+  wsH['!cols'] = holdRows[0].map((_,i)=>({wch:[10,22,8,14,6,10,10,12,12,10,8,8,8,10,10,10,10,12,6,8,14,10,10][i]||10}));
   XLSX.utils.book_append_sheet(wb, wsH, 'Holdings');
 
   // Sheet 2: Realised P&L
@@ -24600,6 +24698,173 @@ function _renderBriefDelta() {
     <div class="pn-h"><div class="pn-t">🔄 Changes Since Last Refresh</div></div>
     <div class="pn-b" style="max-height:200px;overflow-y:auto">${rows}</div>
   </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██  CORPORATE ACTION ADJUSTER (Bonus / Split / Rights / Consolidation)
+// ═══════════════════════════════════════════════════════════════════════════
+let _caHid = null;
+
+function openCaModal(hid) {
+  _caHid = hid;
+  const h = D.holdings.find(x => x.id == hid);
+  if (!h) return;
+  const el = document.getElementById('ca-modal-stock');
+  if (el) el.textContent = `${h.symbol} · ${h.qty} shares @ ₹${f(h.avgPrice)}`;
+  document.getElementById('ca-action-type').value = 'bonus';
+  document.getElementById('ca-ratio-new').value = '1';
+  document.getElementById('ca-ratio-old').value = '1';
+  document.getElementById('ca-preview').style.display = 'none';
+  document.getElementById('ca-action-modal').style.display = 'flex';
+  _caPreview();
+}
+
+function _caPreview() {
+  const h = D.holdings.find(x => x.id == _caHid);
+  if (!h) return;
+  const type = document.getElementById('ca-action-type')?.value;
+  const rNew = parseInt(document.getElementById('ca-ratio-new')?.value) || 1;
+  const rOld = parseInt(document.getElementById('ca-ratio-old')?.value) || 1;
+  if (!rNew || !rOld) return;
+
+  let newQty, newAvg, desc;
+  if (type === 'bonus') {
+    // 1:1 bonus: for every 1 share held, get 1 free. Total becomes 2× original.
+    newQty = Math.round(h.qty * (rNew + rOld) / rOld);
+    newAvg = +(h.avgPrice * rOld / (rNew + rOld)).toFixed(2);
+    desc = `Bonus ${rNew}:${rOld} — you receive ${rNew} free share${rNew>1?'s':''} per ${rOld} held`;
+  } else if (type === 'split') {
+    // 2:1 split: 1 share becomes 2, price halves
+    newQty = Math.round(h.qty * rNew / rOld);
+    newAvg = +(h.avgPrice * rOld / rNew).toFixed(2);
+    desc = `Split ${rNew}:${rOld} — each share becomes ${rNew/rOld} shares`;
+  } else if (type === 'rights') {
+    // 1:4 rights: 1 new share per 4 held (at issue price — simplification: use avg price)
+    newQty = Math.round(h.qty + h.qty * rNew / rOld);
+    newAvg = h.avgPrice; // simplified: rights at market price → no cost basis change
+    desc = `Rights ${rNew}:${rOld} — ${Math.round(h.qty*rNew/rOld)} new shares added (at existing avg price)`;
+  } else {
+    // Consolidation: 2:1 = every 2 shares become 1
+    newQty = Math.round(h.qty * rNew / rOld);
+    newAvg = +(h.avgPrice * rOld / rNew).toFixed(2);
+    desc = `Consolidation ${rNew}:${rOld} — ${rOld} shares become ${rNew}`;
+  }
+
+  const el = document.getElementById('ca-preview');
+  const txt = document.getElementById('ca-preview-text');
+  if (el && txt) {
+    el.style.display = '';
+    txt.innerHTML = `${desc}<br>
+      <strong>Qty:</strong> ${h.qty} → <span style="color:var(--ac);font-weight:700">${newQty}</span><br>
+      <strong>Avg Price:</strong> ₹${f(h.avgPrice)} → <span style="color:var(--ac);font-weight:700">₹${f(newAvg)}</span><br>
+      <span style="color:var(--t4);font-size:10px">Total invested stays ₹${fI(h.qty*h.avgPrice)} (cost basis unchanged)</span>`;
+  }
+}
+
+function _caApply() {
+  const h = D.holdings.find(x => x.id == _caHid);
+  if (!h) return;
+  const type = document.getElementById('ca-action-type')?.value;
+  const rNew = parseInt(document.getElementById('ca-ratio-new')?.value) || 1;
+  const rOld = parseInt(document.getElementById('ca-ratio-old')?.value) || 1;
+
+  const oldQty = h.qty, oldAvg = h.avgPrice;
+  let newQty, newAvg;
+  if (type === 'bonus') {
+    newQty = Math.round(h.qty * (rNew + rOld) / rOld);
+    newAvg = +(h.avgPrice * rOld / (rNew + rOld)).toFixed(2);
+  } else if (type === 'split') {
+    newQty = Math.round(h.qty * rNew / rOld);
+    newAvg = +(h.avgPrice * rOld / rNew).toFixed(2);
+  } else if (type === 'rights') {
+    newQty = Math.round(h.qty + h.qty * rNew / rOld);
+    newAvg = h.avgPrice;
+  } else {
+    newQty = Math.round(h.qty * rNew / rOld);
+    newAvg = +(h.avgPrice * rOld / rNew).toFixed(2);
+  }
+
+  // Log to history
+  if (!h.corpActions) h.corpActions = [];
+  h.corpActions.push({ type, rNew, rOld, oldQty, oldAvg, newQty, newAvg, at: new Date().toISOString() });
+
+  h.qty = newQty;
+  h.avgPrice = newAvg;
+  // Adjust SL and targets proportionally for splits/consolidations
+  if (type === 'split' || type === 'consolidation') {
+    const factor = rOld / rNew;
+    if (h.stopLoss) h.stopLoss = +(h.stopLoss * rNew / rOld).toFixed(2);
+    if (h.target1)  h.target1  = +(h.target1  * rNew / rOld).toFixed(2);
+    if (h.target2)  h.target2  = +(h.target2  * rNew / rOld).toFixed(2);
+  }
+
+  save('holdings');
+  renderHoldings();
+  document.getElementById('ca-action-modal').style.display = 'none';
+  toast(`✅ ${h.symbol}: ${type} applied — ${oldQty} shares @ ₹${f(oldAvg)} → ${newQty} shares @ ₹${f(newAvg)}`, 'ok');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██  OPTIONS P&L CALCULATOR
+// ═══════════════════════════════════════════════════════════════════════════
+function _ocFillSpot() {
+  const val = document.getElementById('oc-inst')?.value;
+  if (val) { const el = document.getElementById('oc-spot'); if(el) el.value = val; }
+  _ocCalc();
+}
+
+function _ocCalc() {
+  const spot    = parseFloat(document.getElementById('oc-spot')?.value)    || 0;
+  const strike  = parseFloat(document.getElementById('oc-strike')?.value)  || 0;
+  const premium = parseFloat(document.getElementById('oc-premium')?.value) || 0;
+  const lots    = parseInt(document.getElementById('oc-lots')?.value)       || 1;
+  const lotSize = parseInt(document.getElementById('oc-lotsize')?.value)    || 50;
+  const dte     = parseInt(document.getElementById('oc-dte')?.value)        || 0;
+  const type    = document.getElementById('oc-type')?.value || 'CE';
+
+  if (!spot || !strike || !premium) {
+    ['oc-be','oc-maxloss','oc-capital','oc-move'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent='—'; });
+    const tbl = document.getElementById('oc-pnl-table'); if(tbl) tbl.innerHTML='';
+    return;
+  }
+
+  const qty = lots * lotSize;
+  const capital = premium * qty;
+  const breakeven = type === 'CE' ? strike + premium : strike - premium;
+  const moveNeeded = Math.abs((breakeven - spot) / spot * 100);
+
+  const beEl = document.getElementById('oc-be');
+  const mlEl = document.getElementById('oc-maxloss');
+  const capEl = document.getElementById('oc-capital');
+  const mvEl = document.getElementById('oc-move');
+
+  if(beEl) { beEl.textContent = '₹'+f(breakeven); beEl.style.color = type==='CE' ? (spot>breakeven?'var(--grn)':'var(--red)') : (spot<breakeven?'var(--grn)':'var(--red)'); }
+  if(mlEl) mlEl.textContent = '₹'+fI(capital);
+  if(capEl) capEl.textContent = '₹'+fI(capital);
+  if(mvEl) mvEl.textContent = moveNeeded.toFixed(1)+'%';
+
+  // P&L table: spot at ±2%, ±4%, ±6%, ±8%, ±10% from current
+  const moves = [-10,-8,-6,-4,-2,0,2,4,6,8,10];
+  const rows = moves.map(pct => {
+    const testSpot = +(spot * (1 + pct/100)).toFixed(0);
+    let intrinsic;
+    if (type === 'CE') intrinsic = Math.max(0, testSpot - strike);
+    else               intrinsic = Math.max(0, strike - testSpot);
+    // Simple time value decay approximation (linear)
+    const timeVal = dte > 0 ? premium * Math.min(1, dte / 30) * 0.3 : 0;
+    const estPrice = Math.max(0, intrinsic + (intrinsic > 0 ? timeVal : timeVal * 0.3));
+    const pnl = (estPrice - premium) * qty;
+    const pnlPct = (pnl / capital * 100);
+    const col = pnl > 0 ? 'var(--grn)' : pnl < 0 ? 'var(--red)' : 'var(--t4)';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid var(--b2);font-size:11px">
+      <span style="width:44px;color:var(--t4);text-align:right">${pct>=0?'+':''}${pct}%</span>
+      <span style="width:60px;font-weight:600">₹${f(testSpot)}</span>
+      <span style="flex:1;font-weight:700;color:${col};text-align:right">${pnl>=0?'+':''}₹${fI(Math.abs(pnl))}</span>
+      <span style="width:48px;color:${col};text-align:right;font-size:10px">${pnlPct>=0?'+':''}${pnlPct.toFixed(0)}%</span>
+    </div>`;
+  });
+  const tbl = document.getElementById('oc-pnl-table');
+  if(tbl) tbl.innerHTML = rows.join('');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
