@@ -17,7 +17,7 @@
   --bg:#060810;--s1:#0b0d18;--s2:#0f1220;--s3:#141828;--s4:#1a2035;
   --b1:#1e2540;--b2:#252e50;--b3:#2e3a60;
   --ac:#4f8ef7;--ac2:#7c6af7;--ac3:#38d9a9;
-  --grn:#2dd36f;--red:#f05252;--yel:#fbbf24;--orn:#f97316;--cyn:#22d3ee;--pink:#ec4899;
+  --grn:#22c55e;--red:#f05252;--yel:#fbbf24;--orn:#f97316;--cyn:#22d3ee;--pink:#ec4899;
   --t1:#f0f4ff;--t2:#c8d3f0;--t3:#7888b0;--t4:#4a5578;
   --font:'Cabinet Grotesk',sans-serif;
   --mono:'JetBrains Mono',monospace;
@@ -34,7 +34,7 @@
   --bg:#f0f4f9;--s1:#ffffff;--s2:#f7f9fc;--s3:#eef1f8;--s4:#e4e9f4;
   --b1:#dde3ef;--b2:#c8d0e4;--b3:#a0aec0;
   --ac:#2563eb;--ac2:#7c3aed;--ac3:#059669;
-  --grn:#16a34a;--red:#dc2626;--yel:#b45309;--orn:#ea580c;--cyn:#0891b2;--pink:#be185d;
+  --grn:#15803d;--red:#dc2626;--yel:#b45309;--orn:#ea580c;--cyn:#0891b2;--pink:#be185d;
   --t1:#0f172a;--t2:#1e293b;--t3:#475569;--t4:#94a3b8;
   --shadow:0 1px 8px rgba(0,0,0,.08),0 4px 24px rgba(0,0,0,.06);
   --glow-ac:0 0 0 3px rgba(37,99,235,.15);
@@ -228,7 +228,7 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 .ds-ic-val { font-size:22px; font-weight:800; line-height:1.1; font-variant-numeric:tabular-nums; }
 .ds-ic-sub { font-size:11px; color:var(--t4); margin-top:4px; }
 
-/* ── Investment OS Control Tower ─────────────────────────── */
+/* ── Portfolio Overview ─────────────────────────────────── */
 /* Smart LTCG alert */
 #ds-ltcg-alert { background:linear-gradient(135deg,rgba(251,191,36,.08),rgba(34,197,94,.06)); border:1px solid rgba(251,191,36,.35); border-radius:12px; padding:14px 18px; }
 .ltcg-alert-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
@@ -304,6 +304,25 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 #holdThead th { position:sticky; top:90px; background:var(--s1); z-index:10; box-shadow:0 1px 0 var(--b1); }
 [data-theme="light"] #holdThead th { background:var(--s1); }
 
+/* P&L row tinting */
+.row-profit td:first-child { border-left:3px solid rgba(34,197,94,.5); }
+.row-loss   td:first-child { border-left:3px solid rgba(239,68,68,.45); }
+.row-profit { background:rgba(34,197,94,.02); }
+.row-loss   { background:rgba(239,68,68,.02); }
+.row-profit:hover td, .row-loss:hover td { background:rgba(79,142,247,.06) !important; }
+
+/* Mobile sticky first column */
+@media(max-width:768px){
+  #holdThead th:first-child, #holdTbody td:first-child {
+    position:sticky; left:0; z-index:5;
+    background:var(--s1);
+  }
+  #holdTbody .row-profit td:first-child { background:rgba(6,8,16,.98); }
+  #holdTbody .row-loss   td:first-child { background:rgba(6,8,16,.98); }
+  [data-theme="light"] #holdThead th:first-child,
+  [data-theme="light"] #holdTbody td:first-child { background:#fff; }
+}
+
 /* Actions overflow menu */
 .act-more { position:relative; display:inline-flex; }
 .act-more-drop { display:none; position:absolute; right:0; top:calc(100% + 4px); background:var(--s2); border:1px solid var(--b2); border-radius:9px; min-width:176px; z-index:200; box-shadow:var(--shadow); overflow:hidden; }
@@ -372,12 +391,22 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 .snm{font-size:10.5px;color:var(--t4);margin-top:1px;}
 .mn{font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;}
 .up{color:var(--grn);} .dn{color:var(--red);}
-.tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.2px;}
-.t-buy{background:rgba(34,197,94,.15);color:#22c55e;}
-.t-sell{background:rgba(239,68,68,.15);color:#ef4444;}
-.t-hold{background:rgba(234,179,8,.15);color:#eab308;}
-.t-sbuy{background:rgba(34,211,238,.12);color:var(--cyn);border:1px solid rgba(34,211,238,.18);}
-.t-neu{background:rgba(148,163,184,.1);color:var(--t3);}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11.5px;font-weight:700;letter-spacing:.15px;}
+.tag::before{content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+.t-buy{background:rgba(34,197,94,.15);color:#16a34a;border:1px solid rgba(34,197,94,.2);}
+.t-buy::before{background:#16a34a;}
+.t-sell{background:rgba(239,68,68,.14);color:#dc2626;border:1px solid rgba(239,68,68,.2);}
+.t-sell::before{background:#dc2626;}
+.t-hold{background:rgba(234,179,8,.12);color:#a16207;border:1px solid rgba(234,179,8,.2);}
+.t-hold::before{background:#ca8a04;}
+.t-sbuy{background:rgba(34,211,238,.1);color:var(--cyn);border:1px solid rgba(34,211,238,.22);}
+.t-sbuy::before{background:var(--cyn);}
+.t-neu{background:rgba(148,163,184,.08);color:var(--t3);border:1px solid var(--b1);}
+.t-neu::before{background:var(--t4);}
+[data-theme="light"] .t-buy{color:#15803d;}
+[data-theme="light"] .t-buy::before{background:#15803d;}
+[data-theme="light"] .t-hold{color:#92400e;}
+[data-theme="light"] .t-hold::before{background:#b45309;}
 .t-stcg{background:rgba(251,191,36,.12);color:#fbbf24;}
 .t-ltcg{background:rgba(34,211,238,.12);color:#22d3ee;}
 .t-holding{background:rgba(79,142,247,.14);color:var(--ac);}
@@ -1231,7 +1260,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div id="ds-os-wrap">
       <div id="ds-os-head">
         <div>
-          <div class="ds-os-title">Portfolio Health Centre</div>
+          <div class="ds-os-title">Portfolio Overview</div>
           <div class="ds-os-sub">Opportunity discovery · risk controls · tax awareness · decision discipline · why-not-buy</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -7440,7 +7469,8 @@ function renderHoldings() {
         default:return'<td>—</td>';
       }
     }
-    return`<tr data-hid="${h.id}" style="border-left:2px solid ${COLORS[i%COLORS.length]}" class="${h.slBreach?'sl-breached':''}">${cols.map(c=>cell(c.k)).join('')}</tr>`;
+    const _plClass = pl > 0 ? 'row-profit' : pl < 0 ? 'row-loss' : '';
+    return`<tr data-hid="${h.id}" class="${_plClass}${h.slBreach?' sl-breached':''}">${cols.map(c=>cell(c.k)).join('')}</tr>`;
   }).join('');
 }
 
