@@ -170,7 +170,7 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 #tn-pnl:hover { background:var(--s2); }
 .tn-pnl-item { display:flex; flex-direction:column; align-items:center; gap:0; }
 .tn-pnl-lbl { font-size:8.5px; color:var(--t4); text-transform:uppercase; letter-spacing:.5px; font-weight:700; }
-.tn-pnl-val { font-size:12px; font-family:var(--mono); font-weight:800; line-height:1.2; }
+.tn-pnl-val { font-size:12px; font-family:var(--mono); font-weight:800; line-height:1.2; font-variant-numeric:tabular-nums; }
 .tn-pnl-div { width:1px; height:22px; background:var(--b2); }
 @media(max-width:900px) { #tn-pnl { display:none; } }
 
@@ -204,7 +204,7 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 #ds-hero::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,var(--ac),#22d3ee,#2dd36f); }
 .dsh-stat { padding:16px 22px; flex:1; min-width:110px; }
 .dsh-lbl { font-size:10.5px; color:var(--t4); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px; }
-.dsh-val { font-size:20px; font-weight:800; font-family:var(--mono); color:var(--t1); }
+.dsh-val { font-size:26px; font-weight:800; font-family:var(--mono); color:var(--t1); font-variant-numeric:tabular-nums; }
 .dsh-sub { font-size:12px; color:var(--t3); margin-top:2px; font-family:var(--mono); }
 .dsh-div { width:1px; background:var(--b1); align-self:stretch; margin:12px 0; }
 
@@ -225,7 +225,7 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 .ds-ic { background:var(--s1); border:1px solid var(--b1); border-radius:12px; padding:14px 16px; transition:border-color .3s; }
 .ds-ic-lbl { font-size:10px; font-weight:700; color:var(--t4); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
 .ds-ic-name { font-size:13px; font-weight:700; color:var(--t1); margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.ds-ic-val { font-size:22px; font-weight:800; line-height:1.1; }
+.ds-ic-val { font-size:22px; font-weight:800; line-height:1.1; font-variant-numeric:tabular-nums; }
 .ds-ic-sub { font-size:11px; color:var(--t4); margin-top:4px; }
 
 /* ── Investment OS Control Tower ─────────────────────────── */
@@ -300,6 +300,19 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 #pg-titlebar { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
 #pgTitle { font-size:22px; font-weight:800; color:var(--t1); letter-spacing:-.3px; }
 
+/* Sticky holdings table header */
+#holdThead th { position:sticky; top:90px; background:var(--s1); z-index:10; box-shadow:0 1px 0 var(--b1); }
+[data-theme="light"] #holdThead th { background:var(--s1); }
+
+/* Actions overflow menu */
+.act-more { position:relative; display:inline-flex; }
+.act-more-drop { display:none; position:absolute; right:0; top:calc(100% + 4px); background:var(--s2); border:1px solid var(--b2); border-radius:9px; min-width:176px; z-index:200; box-shadow:var(--shadow); overflow:hidden; }
+.act-more:hover .act-more-drop, .act-more:focus-within .act-more-drop { display:block; }
+.act-more-item { padding:8px 14px; font-size:12px; color:var(--t2); cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:9px; transition:background .1s; border-bottom:1px solid var(--b1); }
+.act-more-item:last-child { border-bottom:none; }
+.act-more-item:hover { background:var(--s3); color:var(--t1); }
+.act-more-icon { font-size:13px; width:16px; text-align:center; flex-shrink:0; }
+
 /* Better section padding */
 .sec { padding:16px 20px; }
 @media(max-width:768px) { .sec { padding:12px 12px; } #tn-ticker { display:none; } }
@@ -338,7 +351,7 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 .sc.c4::before{background:linear-gradient(90deg,var(--yel),var(--orn));}
 .sc.c5::before{background:linear-gradient(90deg,var(--ac2),var(--pink));}
 .sc-lbl{font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
-.sc-val{font-family:var(--mono);font-size:19px;font-weight:700;line-height:1;}
+.sc-val{font-family:var(--mono);font-size:19px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;}
 .sc-sub{font-size:11px;margin-top:4px;color:var(--t3);}
 
 /* ── PANEL ─────────────────────────────────── */
@@ -352,11 +365,12 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 .tbl th{text-align:left;font-size:9.5px;color:var(--t4);text-transform:uppercase;letter-spacing:1px;padding:7px 10px;border-bottom:1px solid var(--b1);font-weight:600;white-space:nowrap;cursor:pointer;user-select:none;}
 .tbl th:hover{color:var(--t2);}
 .tbl td{padding:10px 10px;font-size:12px;border-bottom:1px solid rgba(30,37,64,.5);vertical-align:middle;}
-.tbl tbody tr:hover td{background:rgba(15,18,32,.7);}
+.tbl tbody tr:hover td{background:rgba(79,142,247,.06);}
 .tbl tbody tr:last-child td{border-bottom:none;}
+[data-theme="light"] .tbl tbody tr:hover td{background:rgba(37,99,235,.05);}
 .sym{font-size:13px;font-weight:700;color:var(--t1);}
 .snm{font-size:10.5px;color:var(--t4);margin-top:1px;}
-.mn{font-family:var(--mono);font-size:11.5px;}
+.mn{font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;}
 .up{color:var(--grn);} .dn{color:var(--red);}
 .tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.2px;}
 .t-buy{background:rgba(34,197,94,.15);color:#22c55e;}
@@ -7408,7 +7422,21 @@ function renderHoldings() {
             </div>
           </td>`;
         }
-        case 'act':return`<td style="white-space:nowrap"><button class="btn btn-g btn-xs" onclick="openDetail(${h.id})" style="margin-right:4px">Detail</button><button class="btn btn-yel btn-xs" onclick="openSellModal(${h.id})" style="margin-right:4px" title="Log a sell trade">Sell</button><button class="btn btn-p btn-xs" onclick="openAvgDown(${h.id})" style="margin-right:4px" title="Average-Down Calculator">Avg↓</button><button class="btn btn-g btn-xs" onclick="openNoteModal(${h.id})" style="margin-right:4px" title="${h.note?'Edit note: '+h.note.replace(/"/g,'&quot;'):'Add conviction note'}">${h.note?'📝':'📋'}</button><button class="btn btn-g btn-xs" onclick="openTrailSLModal(${h.id})" style="margin-right:4px" title="${h.trailSlPct?'Trailing SL active: '+h.trailSlPct+'% below high':'Set trailing stop loss'}" style="color:${h.trailSlPct?'var(--cyn)':'inherit'}">${h.trailSlPct?'⟳SL':'TSL'}</button><button class="btn btn-g btn-xs" onclick="openSwapModal(${h.id})" style="margin-right:4px" title="Swap Calculator — sell this, buy another">↔</button><button class="btn btn-g btn-xs" onclick="openCaModal(${h.id})" style="margin-right:4px" title="Log corporate action (split/bonus/rights)">CA</button><button class="btn btn-red btn-xs" onclick="rmHolding(${h.id})">✕</button></td>`;
+        case 'act':return`<td style="white-space:nowrap"><div style="display:inline-flex;gap:3px;align-items:center">
+          <button class="btn btn-g btn-xs" onclick="openDetail(${h.id})" title="View detail">Detail</button>
+          <button class="btn btn-yel btn-xs" onclick="openSellModal(${h.id})" title="Log a sell trade">Sell</button>
+          <div class="act-more">
+            <button class="btn btn-g btn-xs" title="More actions" style="letter-spacing:2px;padding:2px 9px">···</button>
+            <div class="act-more-drop">
+              <div class="act-more-item" onclick="openAvgDown(${h.id})"><span class="act-more-icon">↓</span>Average Down</div>
+              <div class="act-more-item" onclick="openNoteModal(${h.id})"><span class="act-more-icon">${h.note?'📝':'📋'}</span>${h.note?'Edit Note':'Add Note'}</div>
+              <div class="act-more-item" onclick="openTrailSLModal(${h.id})" style="color:${h.trailSlPct?'var(--cyn)':'inherit'}"><span class="act-more-icon">${h.trailSlPct?'⟳':'📍'}</span>${h.trailSlPct?'Trailing SL · '+h.trailSlPct+'%':'Set Trailing SL'}</div>
+              <div class="act-more-item" onclick="openSwapModal(${h.id})"><span class="act-more-icon">↔</span>Swap Calculator</div>
+              <div class="act-more-item" onclick="openCaModal(${h.id})"><span class="act-more-icon">📋</span>Corporate Action</div>
+            </div>
+          </div>
+          <button class="btn btn-red btn-xs" onclick="rmHolding(${h.id})" title="Remove holding">✕</button>
+        </div></td>`;
         default:return'<td>—</td>';
       }
     }
