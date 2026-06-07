@@ -1753,7 +1753,7 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="sc c3"><div class="sv">Triggered Today</div><div class="sn" id="alrt-hit-count" style="color:var(--grn)">—</div></div>
     </div>
     <!-- Bulk action bar (appears when alerts selected) -->
-    <div id="alrt-bulk-bar" style="display:none;padding:10px 14px;background:rgba(79,142,247,.08);border:1px solid rgba(79,142,247,.25);border-radius:8px;margin-bottom:10px;display:none;align-items:center;gap:10px;flex-wrap:wrap">
+    <div id="alrt-bulk-bar" style="display:none;padding:10px 14px;background:rgba(79,142,247,.08);border:1px solid rgba(79,142,247,.25);border-radius:8px;margin-bottom:10px;align-items:center;gap:10px;flex-wrap:wrap">
       <span id="alrt-bulk-count" style="font-size:12px;font-weight:700;color:var(--ac)">0 selected</span>
       <button class="btn btn-g btn-xs" onclick="_bulkAlertAction('reset')">↻ Reset Triggered</button>
       <button class="btn btn-g btn-xs" onclick="_bulkAlertAction('once')">Fire Once</button>
@@ -14383,8 +14383,9 @@ function _bulkAlertAction(action) {
     alerts.forEach(a => { if (_selectedAlertIds.has(String(a.id))) { a.mode = 'every'; a.label = a.label.replace(' 🔁','') + ' 🔁'; a.triggered = false; } });
   }
   saveAlerts(alerts);
-  toast(`✓ ${action === 'delete' ? 'Deleted' : action === 'reset' ? 'Reset' : action === 'every' ? 'Set recurring' : 'Set one-time'} ${_selectedAlertIds.size} alert(s)`, 'info');
+  const _nSelected = _selectedAlertIds.size;
   _selectedAlertIds.clear();
+  toast(`✓ ${action === 'delete' ? 'Deleted' : action === 'reset' ? 'Reset' : action === 'every' ? 'Set recurring' : 'Set one-time'} ${_nSelected} alert(s)`, 'info');
   renderAlerts();
 }
 
@@ -15392,8 +15393,10 @@ function _syncEarningsToCalendar() {
       events.push({ id: Date.now() + Math.random(), title: `${h.symbol} Results`, date: dateStr, type: 'res', _yfKey: yfKey });
       changed = true;
       // Notify if within 3 days
-      if (daysTo >= 0 && daysTo <= 3 && !h._earningsNotified) {
-        h._earningsNotified = true;
+      // Key notification to the specific earningsTs so it re-fires for next quarter
+      const _notifKey = `earningsNotified_${h.symbol}_${h.earningsTs}`;
+      if (daysTo >= 0 && daysTo <= 3 && !localStorage.getItem(_notifKey)) {
+        try { localStorage.setItem(_notifKey, '1'); } catch(e) {}
         addNotif('warn', `📅 ${h.symbol} results in ${daysTo === 0 ? 'TODAY' : daysTo + ' day(s)'}`, h.symbol);
       }
     });
@@ -17517,12 +17520,14 @@ async function runScreener() {
         const pe  = fund?.pe   || null;
         const roe = fund?.roe  ? fund.roe * 100 : null;
         // Build a minimal holding-like object for _piotroski()
+        // signal omitted intentionally — screener doesn't have real analyst signals
+        // so the analyst-consensus criterion is skipped (dataPoints stays at 8 max)
         const mockH = {
           eps: fund?.eps || null, roe: fund?.roe || null,
           eg:  fund?.eg  || null, rg:  fund?.rg  || null,
           de:  fund?.de  || null, cr:  fund?.cr   || null,
           pb:  fund?.pb  || null, pe:  fund?.pe   || null,
-          fpe: fund?.fpe || null, signal: 'HOLD'
+          fpe: fund?.fpe || null
         };
         const fs = typeof _piotroski === 'function' ? _piotroski(mockH) : null;
         return { ...s, ltp, h52, l52, pos52, pe, roe, fs };
@@ -24518,43 +24523,54 @@ const _DELTA_KEY = 'ss_portfolio_delta';
 
 function _savePortfolioDelta() {
   try {
-    const snap = {};
+    const prev = JSON.parse(localStorage.getItem(_DELTA_KEY) || 'null');
+    const snap = { _savedAt: Date.now() };
     D.holdings.forEach(h => {
       snap[h.symbol] = {
         signal: h.signal || null,
         ltp: h.ltp || null,
         stopLoss: h.stopLoss || null,
         h52: h.h52 || null,
-        at: Date.now()
+        chgP: h.chgP || null   // snapshot chgP so next diff is a real change
       };
     });
-    localStorage.setItem(_DELTA_KEY, JSON.stringify(snap));
+    // Only overwrite if prev exists (first save seeds silently, no delta shown)
+    if (prev) localStorage.setItem(_DELTA_KEY, JSON.stringify(snap));
+    else localStorage.setItem(_DELTA_KEY, JSON.stringify(snap)); // seed
   } catch(e) {}
 }
 
 function _getPortfolioDelta() {
   try {
-    const prev = JSON.parse(localStorage.getItem(_DELTA_KEY) || '{}');
+    const raw = localStorage.getItem(_DELTA_KEY);
+    if (!raw) return []; // No previous snapshot yet — nothing to diff
+    const prev = JSON.parse(raw);
+    if (!prev._savedAt) return []; // Malformed snapshot
     const changes = [];
+    // Only show delta if snapshot is at least 60s old (avoids same-refresh noise)
+    const snapAge = Date.now() - prev._savedAt;
+    if (snapAge < 60000) return [];
     D.holdings.forEach(h => {
       const p = prev[h.symbol];
-      if (!p) { changes.push({ sym: h.symbol, type: 'new', msg: 'New position' }); return; }
+      if (!p) return; // New position — silently ignore, avoids flood on first run
       // Signal flip
       if (p.signal && h.signal && p.signal !== h.signal) {
         const isBad = h.signal.includes('SELL') || h.signal === 'REDUCE' || h.signal === 'EXIT';
         changes.push({ sym: h.symbol, type: isBad ? 'bad' : 'good', msg: `Signal: ${p.signal} → ${h.signal}` });
       }
-      // SL breach
-      if (h.ltp && h.stopLoss && h.ltp <= h.stopLoss && (!p.ltp || p.ltp > (p.stopLoss || 0))) {
+      // SL breach (LTP crossed below SL since last snapshot)
+      if (h.ltp && h.stopLoss && h.ltp <= h.stopLoss && p.ltp && p.ltp > (p.stopLoss || 0)) {
         changes.push({ sym: h.symbol, type: 'bad', msg: `SL breached ₹${f(h.stopLoss)}` });
       }
-      // 52W high
-      if (h.ltp && h.h52 && h.ltp >= h.h52 * 0.995 && (!p.ltp || p.ltp < (p.h52 || 0) * 0.99)) {
+      // 52W high (newly at high)
+      if (h.ltp && h.h52 && h.ltp >= h.h52 * 0.995 && p.ltp && p.ltp < (p.h52 || 0) * 0.99) {
         changes.push({ sym: h.symbol, type: 'good', msg: `At 52W high ₹${f(h.h52)} 🚀` });
       }
-      // Big intraday move (>4%)
-      if (h.chgP && Math.abs(h.chgP) >= 4) {
-        changes.push({ sym: h.symbol, type: h.chgP > 0 ? 'good' : 'bad', msg: `Day move ${h.chgP > 0 ? '+' : ''}${h.chgP.toFixed(1)}%` });
+      // Big move vs previous snapshot chgP (real diff, not raw value)
+      const prevChgP = p.chgP || 0;
+      const curChgP  = h.chgP || 0;
+      if (Math.abs(curChgP - prevChgP) >= 3 && Math.abs(curChgP) >= 3) {
+        changes.push({ sym: h.symbol, type: curChgP > 0 ? 'good' : 'bad', msg: `Day move ${curChgP > 0 ? '+' : ''}${curChgP.toFixed(1)}%` });
       }
     });
     return changes;
