@@ -2725,7 +2725,7 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="pn"><div class="pn-h"><div class="pn-t">📊 Quick Stats</div></div><div class="pn-b" id="scr-stats" style="color:var(--t4);font-size:12px">Run screener to see results.</div></div>
     </div>
     <div class="pn"><div class="pn-h"><div class="pn-t" id="scr-result-title">🔍 Screener Results</div><div id="scr-loading" style="font-size:11px;color:var(--t4);display:none">⏳ Fetching live data…</div></div>
-      <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Symbol</th><th>Sector</th><th>Cap</th><th>LTP</th><th>PE</th><th>ROE</th><th>52W Pos</th><th>Signal</th><th>Add</th></tr></thead><tbody id="scr-tbody"><tr><td colspan="9" style="text-align:center;padding:30px;color:var(--t4)">Apply filters and click Screen Now</td></tr></tbody></table></div>
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Symbol</th><th>Sector</th><th>Cap</th><th>LTP</th><th>PE</th><th>ROE</th><th>52W Pos</th><th>F-Score</th><th>Signal</th><th>Add</th></tr></thead><tbody id="scr-tbody"><tr><td colspan="10" style="text-align:center;padding:30px;color:var(--t4)">Apply filters and click Screen Now</td></tr></tbody></table></div>
     </div>
     <div class="pn" style="margin-top:14px"><div class="pn-h"><div class="pn-t">🤖 AI Stock Picks</div></div><div class="pn-b"><div id="scr-ai-txt" style="color:var(--t4);font-size:12px">Click "AI Pick" after screening for AI-recommended buys from results.</div></div></div>
   </div>
@@ -6318,6 +6318,7 @@ async function refreshAll() {
   if(typeof checkCustomAlerts==='function') checkCustomAlerts();
   if(typeof _syncEarningsToCalendar==='function') _syncEarningsToCalendar();
   if(typeof _savePortfolioDelta==='function') _savePortfolioDelta();
+  if(typeof _batchComputeRSI==='function') _batchComputeRSI(); // non-blocking background
   checkTargetHits();
   check52WAlerts();
   checkWatchlistTriggers();
@@ -7235,7 +7236,16 @@ function renderHoldings() {
             : '';
           return`<td>${tagSig(h.signal)}${prevSigBadge}${staleChip}</td>`;
         }
-        case 'rsi':return`<td class="mn ${rsic}">${rsi}</td>`;
+        case 'rsi': {
+          const rsiReal = h.rsi != null;
+          const rsiVal  = rsiReal ? h.rsi : null;
+          if (!rsiReal) return `<td class="mn" style="color:var(--t4)" title="RSI not computed yet — open stock chart or wait for background compute">—</td>`;
+          const rsiCol  = rsiVal >= 70 ? 'var(--red)' : rsiVal <= 30 ? 'var(--grn)' : 'var(--t2)';
+          const rsiLbl  = rsiVal >= 70 ? 'OB' : rsiVal <= 30 ? 'OS' : '';
+          const rsiAge  = h.rsiAt ? Math.floor((Date.now()-new Date(h.rsiAt))/864e5) : null;
+          const ageTip  = rsiAge !== null ? ` · ${rsiAge}d old` : '';
+          return `<td class="mn" title="RSI(14) = ${rsiVal}${ageTip}"><span style="font-weight:700;color:${rsiCol}">${rsiVal}</span>${rsiLbl?`<span style="font-size:9px;color:${rsiCol};margin-left:2px">${rsiLbl}</span>`:''}</td>`;
+        }
         case '52h': {
           const pct52=h.h52&&h.l52&&h.h52>h.l52?((ltp-h.l52)/(h.h52-h.l52)*100):null;
           if(pct52==null) return`<td class="mn" style="color:var(--t4)">—</td>`;
@@ -10873,6 +10883,11 @@ function _renderActiveIndicators(series) {
   if (_sdActiveIndicators.has('rsi')) {
     const rsi = _calcRSI(closes, 14);
     const last = rsi.filter(v => v != null).slice(-1)[0];
+    // ── Save real RSI to holding so table column shows actual value ──
+    if (last != null && _sdHid) {
+      const _rsiH = D.holdings.find(x => x.id == _sdHid);
+      if (_rsiH) { _rsiH.rsi = +last.toFixed(1); _rsiH.rsiAt = new Date().toISOString(); save('holdings'); renderHoldings(); }
+    }
     const rsiValEl = document.getElementById('sd-rsi-val');
     if (rsiValEl && last != null) {
       rsiValEl.textContent = last.toFixed(1);
@@ -17481,7 +17496,7 @@ async function runScreener() {
   const tbody = document.getElementById('scr-tbody');
   const loading = document.getElementById('scr-loading');
   const title   = document.getElementById('scr-result-title');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t4)">⏳ Fetching live data for ' + candidates.length + ' stocks…</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--t4)">⏳ Fetching live data for ' + candidates.length + ' stocks…</td></tr>';
   if (loading) loading.style.display = '';
   if (title) title.textContent = '🔍 Screening ' + candidates.length + ' stocks…';
 
@@ -17499,9 +17514,18 @@ async function runScreener() {
         const l52  = price.l52;
         const pos52 = h52 && l52 && ltp ? Math.round((ltp - l52) / (h52 - l52) * 100) : null;
         const fund = await fetchFund(s.sym, 'NSE').catch(()=>null);
-        const pe  = fund?.pe || null;
-        const roe = fund?.roe ? fund.roe * 100 : null;
-        return { ...s, ltp, h52, l52, pos52, pe, roe };
+        const pe  = fund?.pe   || null;
+        const roe = fund?.roe  ? fund.roe * 100 : null;
+        // Build a minimal holding-like object for _piotroski()
+        const mockH = {
+          eps: fund?.eps || null, roe: fund?.roe || null,
+          eg:  fund?.eg  || null, rg:  fund?.rg  || null,
+          de:  fund?.de  || null, cr:  fund?.cr   || null,
+          pb:  fund?.pb  || null, pe:  fund?.pe   || null,
+          fpe: fund?.fpe || null, signal: 'HOLD'
+        };
+        const fs = typeof _piotroski === 'function' ? _piotroski(mockH) : null;
+        return { ...s, ltp, h52, l52, pos52, pe, roe, fs };
       } catch(e) { return null; }
     }));
     fetched.filter(Boolean).forEach(x => results.push(x));
@@ -17538,7 +17562,7 @@ async function runScreener() {
   }
 
   if (!_scrResults.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--t4)">No stocks matched the filters. Try relaxing the criteria.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--t4)">No stocks matched the filters. Try relaxing the criteria.</td></tr>';
     return;
   }
 
@@ -17555,6 +17579,12 @@ async function runScreener() {
       <td style="text-align:center;padding:6px 8px">${s.pe ? s.pe.toFixed(0)+'x' : '—'}</td>
       <td style="text-align:center;padding:6px 8px;color:${s.roe&&s.roe>=15?'var(--grn)':s.roe?'var(--yel)':'var(--t4)'}">${s.roe ? s.roe.toFixed(0)+'%' : '—'}</td>
       <td style="text-align:center;padding:6px 8px;color:${pos52Col}">${s.pos52 !== null ? s.pos52+'%' : '—'}</td>
+      <td style="text-align:center;padding:6px 8px">${(() => {
+        if (!s.fs || !s.fs.dataPoints) return '<span style="color:var(--t4)">—</span>';
+        const col = s.fs.score >= 7 ? 'var(--grn)' : s.fs.score >= 4 ? 'var(--yel)' : 'var(--red)';
+        const tip = s.fs.signals.map(sg => (sg.pass ? '✓' : '✗') + ' ' + sg.name).join('\n');
+        return `<span title="${tip}" style="font-weight:700;color:${col};cursor:default">${s.fs.score}/${s.fs.dataPoints}</span>`;
+      })()}</td>
       <td style="text-align:center;padding:6px 8px;font-weight:600;color:${sigCol}">${sig}</td>
       <td style="text-align:center;padding:6px 8px"><button class="btn btn-g btn-sm" onclick="scrAddToWatchlist('${s.sym}','${s.name}','${s.sector}')">+ Watch</button></td>
     </tr>`;
@@ -24442,6 +24472,41 @@ function _piotroski(h) {
 
   const passed = signals.filter(s => s.pass).length;
   return { score: passed, dataPoints: signals.length, signals };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██  BACKGROUND RSI BATCH COMPUTE
+// After price refresh, lazily compute real RSI for holdings missing it.
+// Runs max 6 at a time, staggered 600ms, non-blocking.
+// ═══════════════════════════════════════════════════════════════════════════
+async function _batchComputeRSI() {
+  const staleMs = 18 * 60 * 60 * 1000; // 18h — re-compute once per day
+  const todo = D.holdings.filter(h => {
+    if (!h.rsi) return true;
+    if (!h.rsiAt) return true;
+    return (Date.now() - new Date(h.rsiAt).getTime()) > staleMs;
+  }).slice(0, 6); // max 6 per session to avoid hammering the proxy
+
+  if (!todo.length) return;
+
+  let changed = false;
+  for (const h of todo) {
+    try {
+      const yfSym = h.yfTicker || _symMapLookup(h.symbol) || (h.exchange === 'BSE' ? h.symbol + '.BO' : h.symbol + '.NS');
+      const series = await fetchYFSeries(yfSym, '3mo', '1d').catch(() => null);
+      if (!series || series.length < 16) continue;
+      const closes = series.map(p => p.c);
+      const rsiArr = _calcRSI(closes, 14);
+      const last = rsiArr.filter(v => v != null).slice(-1)[0];
+      if (last != null) {
+        h.rsi = +last.toFixed(1);
+        h.rsiAt = new Date().toISOString();
+        changed = true;
+      }
+    } catch(e) {}
+    await new Promise(r => setTimeout(r, 600)); // stagger requests
+  }
+  if (changed) { save('holdings'); renderHoldings(); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
