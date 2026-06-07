@@ -7189,8 +7189,6 @@ function renderHoldings() {
     const ltp=h.ltp||h.avgPrice;
     const inv=h.qty*h.avgPrice,cv=h.qty*ltp,pl=cv-inv,plp=(pl/inv*100);
     const days=hDays(h.buyDate)||0;
-    const rsi=h.rsi||Math.round(45+Math.random()*30);
-    const rsic=rsi>70?'dn':rsi<30?'up':'';
     function cell(k){
       switch(k){
         case 'stock':{
