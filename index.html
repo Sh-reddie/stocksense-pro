@@ -2871,6 +2871,8 @@ textarea.fi{resize:vertical;min-height:70px;}
         </div>
         <button class="btn btn-p" onclick="refreshDailyBrief()">🔄 Refresh Brief</button>
       </div>
+      <!-- Delta: what changed since last refresh -->
+      <div id="brief-delta"></div>
       <!-- Pre-market watchlist panel -->
       <div id="brief-premarket" style="margin-bottom:14px"></div>
 
@@ -6315,6 +6317,7 @@ async function refreshAll() {
   checkAlerts();
   if(typeof checkCustomAlerts==='function') checkCustomAlerts();
   if(typeof _syncEarningsToCalendar==='function') _syncEarningsToCalendar();
+  if(typeof _savePortfolioDelta==='function') _savePortfolioDelta();
   checkTargetHits();
   check52WAlerts();
   checkWatchlistTriggers();
@@ -6914,7 +6917,8 @@ async function confirmAddWatch() {
     note, catalyst,
     entryScore: null,   // filled by AI
     wlDecision: null,   // filled by AI
-    addedAt: new Date().toISOString()
+    addedAt: new Date().toISOString(),
+    ltpAtAdd: p?.ltp || null   // opportunity cost tracking
   };
 
   D.watchlist.push(w);
@@ -7225,7 +7229,11 @@ function renderHoldings() {
               : staleDays > 7
                 ? `<div style="font-size:9px;color:var(--yel);margin-top:3px">${staleDays}d old</div>`
                 : `<div style="font-size:9px;color:var(--t4);margin-top:3px">${staleDays}d old</div>`;
-          return`<td>${tagSig(h.signal)}${staleChip}</td>`;
+          const prevSigAge = h.prevSignalAt ? Math.floor((Date.now()-new Date(h.prevSignalAt))/864e5) : null;
+          const prevSigBadge = h.prevSignal && prevSigAge !== null && prevSigAge <= 7
+            ? `<div style="font-size:9px;color:var(--t4);margin-top:2px" title="Signal changed ${prevSigAge}d ago">was ${h.prevSignal} <span style="color:var(--ac)">→</span></div>`
+            : '';
+          return`<td>${tagSig(h.signal)}${prevSigBadge}${staleChip}</td>`;
         }
         case 'rsi':return`<td class="mn ${rsic}">${rsi}</td>`;
         case '52h': {
@@ -8164,7 +8172,7 @@ Reply ONLY compact JSON:
     }
     const j=extractJSON(r);
     if(!j) { h.aiError = 'AI returned unparseable response'; (window.D && D._aiErrors) && D._aiErrors.push(h.symbol+': unparseable model response'); h.lastAnalysed=new Date().toISOString(); return; }
-    if(j.signal){const rawSig=j.signal;h.signal=(rawSig.split(/[|,\/]/)[0]).trim();}if(j.stopLoss)h.stopLoss=+j.stopLoss.toFixed(2);if(j.target1)h.target1=+j.target1.toFixed(2);if(j.target2)h.target2=+j.target2.toFixed(2);
+    if(j.signal){const rawSig=j.signal;const newSig=(rawSig.split(/[|,\/]/)[0]).trim();if(h.signal && h.signal!==newSig){h.prevSignal=h.signal;h.prevSignalAt=new Date().toISOString();const _isBad=newSig.includes('SELL')||newSig==='REDUCE'||newSig==='EXIT';const _isGood=newSig.includes('BUY');try{addNotif(_isBad?'warn':_isGood?'ok':'info',`🔄 ${h.symbol} signal: ${h.signal} → ${newSig}`,h.symbol);toast(`🔄 ${h.symbol}: ${h.signal} → ${newSig}`,_isBad?'warn':_isGood?'ok':'info');}catch(e){}}h.signal=newSig;}if(j.stopLoss)h.stopLoss=+j.stopLoss.toFixed(2);if(j.target1)h.target1=+j.target1.toFixed(2);if(j.target2)h.target2=+j.target2.toFixed(2);
     if(j.stopLossPct)h.stopLossPct=+j.stopLossPct.toFixed(1);if(j.target1Pct)h.target1Pct=+j.target1Pct.toFixed(1);if(j.target2Pct)h.target2Pct=+j.target2Pct.toFixed(1);
     if(j.target1Timeline)h.t1Timeline=j.target1Timeline;if(j.target2Timeline)h.t2Timeline=j.target2Timeline;
     if(j.confidence)h.confidence=j.confidence;if(j.bullCase)h.bullCase=j.bullCase;if(j.bearCase)h.bearCase=j.bearCase;
@@ -8767,6 +8775,19 @@ function renderWatchlist() {
           <button class="btn btn-p" onclick="_wlAnalyseSingle(${w.id})">🤖 Analyse ${w.symbol}</button>
         </div>`}
       </div>
+
+      <!-- ── OPPORTUNITY COST ──────────────────────────── -->
+      ${(() => {
+        if (!w.ltpAtAdd || !ltp) return '';
+        const missed = ((ltp - w.ltpAtAdd) / w.ltpAtAdd * 100);
+        const daysWatched = w.addedAt ? Math.floor((Date.now() - new Date(w.addedAt)) / 864e5) : null;
+        const col = missed >= 0 ? 'var(--grn)' : 'var(--red)';
+        const arrow = missed >= 0 ? '↑' : '↓';
+        return `<div style="border-top:1px solid var(--b1);padding:7px 14px;display:flex;align-items:center;gap:12px;font-size:11px;background:rgba(${missed>=0?'45,211,111':'240,82,82'},.04)">
+          <span style="color:var(--t4)">Since watching${daysWatched?` (${daysWatched}d)`:''}: ₹${f(w.ltpAtAdd)} → ₹${f(ltp)}</span>
+          <span style="font-weight:700;color:${col};margin-left:auto">${arrow} ${Math.abs(missed).toFixed(1)}% ${missed>=0?'gained':'lost'}</span>
+        </div>`;
+      })()}
 
       <!-- ── INLINE ADD TO HOLDINGS ────────────────────── -->
       <div class="wl-inline-form" id="wlf-${w.id}">
@@ -18383,6 +18404,8 @@ function _renderBriefPreMarket() {
 }
 
 async function renderDailyBrief() {
+  // Render delta (what changed since last refresh)
+  _renderBriefDelta();
   // Render pre-market watchlist immediately (live data, no API)
   _renderBriefPreMarket();
   // Render holdings score table immediately (no API needed)
@@ -24419,6 +24442,78 @@ function _piotroski(h) {
 
   const passed = signals.filter(s => s.pass).length;
   return { score: passed, dataPoints: signals.length, signals };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██  PORTFOLIO DELTA VIEW
+// Snapshots {signal, ltp, stopLoss, h52At52H} per holding after each refresh.
+// Diffs vs previous snapshot → "What changed?" panel in Daily Brief.
+// ═══════════════════════════════════════════════════════════════════════════
+const _DELTA_KEY = 'ss_portfolio_delta';
+
+function _savePortfolioDelta() {
+  try {
+    const snap = {};
+    D.holdings.forEach(h => {
+      snap[h.symbol] = {
+        signal: h.signal || null,
+        ltp: h.ltp || null,
+        stopLoss: h.stopLoss || null,
+        h52: h.h52 || null,
+        at: Date.now()
+      };
+    });
+    localStorage.setItem(_DELTA_KEY, JSON.stringify(snap));
+  } catch(e) {}
+}
+
+function _getPortfolioDelta() {
+  try {
+    const prev = JSON.parse(localStorage.getItem(_DELTA_KEY) || '{}');
+    const changes = [];
+    D.holdings.forEach(h => {
+      const p = prev[h.symbol];
+      if (!p) { changes.push({ sym: h.symbol, type: 'new', msg: 'New position' }); return; }
+      // Signal flip
+      if (p.signal && h.signal && p.signal !== h.signal) {
+        const isBad = h.signal.includes('SELL') || h.signal === 'REDUCE' || h.signal === 'EXIT';
+        changes.push({ sym: h.symbol, type: isBad ? 'bad' : 'good', msg: `Signal: ${p.signal} → ${h.signal}` });
+      }
+      // SL breach
+      if (h.ltp && h.stopLoss && h.ltp <= h.stopLoss && (!p.ltp || p.ltp > (p.stopLoss || 0))) {
+        changes.push({ sym: h.symbol, type: 'bad', msg: `SL breached ₹${f(h.stopLoss)}` });
+      }
+      // 52W high
+      if (h.ltp && h.h52 && h.ltp >= h.h52 * 0.995 && (!p.ltp || p.ltp < (p.h52 || 0) * 0.99)) {
+        changes.push({ sym: h.symbol, type: 'good', msg: `At 52W high ₹${f(h.h52)} 🚀` });
+      }
+      // Big intraday move (>4%)
+      if (h.chgP && Math.abs(h.chgP) >= 4) {
+        changes.push({ sym: h.symbol, type: h.chgP > 0 ? 'good' : 'bad', msg: `Day move ${h.chgP > 0 ? '+' : ''}${h.chgP.toFixed(1)}%` });
+      }
+    });
+    return changes;
+  } catch(e) { return []; }
+}
+
+function _renderBriefDelta() {
+  const el = document.getElementById('brief-delta');
+  if (!el) return;
+  const changes = _getPortfolioDelta();
+  if (!changes.length) { el.innerHTML = ''; return; }
+  const rows = changes.map(c => {
+    const col = c.type === 'good' ? 'var(--grn)' : c.type === 'bad' ? 'var(--red)' : 'var(--ac)';
+    const icon = c.type === 'good' ? '📈' : c.type === 'bad' ? '⚠' : '✦';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--b2)">
+      <span style="font-size:13px">${icon}</span>
+      <span class="sym" style="font-size:12px;min-width:80px">${c.sym}</span>
+      <span style="font-size:12px;color:${col};font-weight:600">${c.msg}</span>
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="pn" style="margin-bottom:14px">
+    <div class="pn-h"><div class="pn-t">🔄 Changes Since Last Refresh</div></div>
+    <div class="pn-b" style="max-height:200px;overflow-y:auto">${rows}</div>
+  </div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
