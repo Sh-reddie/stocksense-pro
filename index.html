@@ -7231,8 +7231,9 @@ function renderHoldings() {
                 ? `<div style="font-size:9px;color:var(--yel);margin-top:3px">${staleDays}d old</div>`
                 : `<div style="font-size:9px;color:var(--t4);margin-top:3px">${staleDays}d old</div>`;
           const prevSigAge = h.prevSignalAt ? Math.floor((Date.now()-new Date(h.prevSignalAt))/864e5) : null;
+          const _prevAgeStr = prevSigAge === 0 ? 'today' : `${prevSigAge}d ago`;
           const prevSigBadge = h.prevSignal && prevSigAge !== null && prevSigAge <= 7
-            ? `<div style="font-size:9px;color:var(--t4);margin-top:2px" title="Signal changed ${prevSigAge}d ago">was ${h.prevSignal} <span style="color:var(--ac)">→</span></div>`
+            ? `<div style="font-size:9px;color:var(--t4);margin-top:2px" title="Signal changed ${_prevAgeStr}">was ${h.prevSignal} <span style="color:var(--ac)">→</span></div>`
             : '';
           return`<td>${tagSig(h.signal)}${prevSigBadge}${staleChip}</td>`;
         }
@@ -15384,16 +15385,19 @@ function _syncEarningsToCalendar() {
       // Remove old YF-sourced entry for this symbol
       const oldIdx = events.findIndex(e => e._yfKey === yfKey);
       if (oldIdx >= 0) {
-        if (events[oldIdx].date === dateStr) return; // already correct
-        events.splice(oldIdx, 1);
+        if (events[oldIdx].date !== dateStr) {
+          events.splice(oldIdx, 1); // date changed — remove old entry, re-add below
+        }
+        // If date already correct, don't re-add but still fall through to notification check
       }
-      // Also remove old guessed entries for this symbol
-      const guessIdx = events.findIndex(e => !e._yfKey && e.type === 'res' && e.title === `${h.symbol} Q Results`);
-      if (guessIdx >= 0) events.splice(guessIdx, 1);
-      events.push({ id: Date.now() + Math.random(), title: `${h.symbol} Results`, date: dateStr, type: 'res', _yfKey: yfKey });
-      changed = true;
-      // Notify if within 3 days
-      // Key notification to the specific earningsTs so it re-fires for next quarter
+      if (!events.find(e => e._yfKey === yfKey)) {
+        // Also remove old guessed entries for this symbol
+        const guessIdx = events.findIndex(e => !e._yfKey && e.type === 'res' && e.title === `${h.symbol} Q Results`);
+        if (guessIdx >= 0) events.splice(guessIdx, 1);
+        events.push({ id: Date.now() + Math.random(), title: `${h.symbol} Results`, date: dateStr, type: 'res', _yfKey: yfKey });
+        changed = true;
+      }
+      // Notify if within 3 days — keyed to earningsTs so it re-fires each quarter
       const _notifKey = `earningsNotified_${h.symbol}_${h.earningsTs}`;
       if (daysTo >= 0 && daysTo <= 3 && !localStorage.getItem(_notifKey)) {
         try { localStorage.setItem(_notifKey, '1'); } catch(e) {}
@@ -24472,8 +24476,11 @@ function _piotroski(h) {
     signals.push({ name: 'Earnings Accel (FPE<PE)', pass: h.fpe < h.pe });
 
   // Analyst consensus as proxy for market quality signal
-  const badSig = ['SELL','STRONG SELL','REDUCE'];
-  signals.push({ name: 'Analyst Consensus', pass: !badSig.includes((h.signal||'').toUpperCase()) });
+  // Only add analyst consensus if signal is explicitly set (avoids false pass on empty/undefined)
+  if (h.signal) {
+    const badSig = ['SELL','STRONG SELL','REDUCE'];
+    signals.push({ name: 'Analyst Consensus', pass: !badSig.includes(h.signal.toUpperCase()) });
+  }
 
   const passed = signals.filter(s => s.pass).length;
   return { score: passed, dataPoints: signals.length, signals };
