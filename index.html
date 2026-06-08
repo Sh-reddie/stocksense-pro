@@ -395,6 +395,10 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 
 /* ── TABLES ─────────────────────────────────── */
 .tbl{width:100%;border-collapse:collapse;}
+@keyframes flash-up{0%,100%{background:transparent}25%{background:rgba(34,197,94,.28)}}
+@keyframes flash-down{0%,100%{background:transparent}25%{background:rgba(240,82,82,.28)}}
+.flash-up{animation:flash-up .9s ease-out;}
+.flash-down{animation:flash-down .9s ease-out;}
 .tbl th{text-align:left;font-size:9.5px;color:var(--t4);text-transform:uppercase;letter-spacing:1px;padding:7px 10px;border-bottom:1px solid var(--b1);font-weight:600;white-space:nowrap;cursor:pointer;user-select:none;}
 .tbl th:hover{color:var(--t2);}
 .tbl td{padding:10px 10px;font-size:12px;border-bottom:1px solid rgba(30,37,64,.5);vertical-align:middle;}
@@ -7339,7 +7343,7 @@ const COL_DEFS = {
   extra:  [{k:'note',l:'Notes'},{k:'score',l:'Quality'}],
   tech:   [{k:'rsi',l:'RSI'},{k:'macd',l:'MACD'},{k:'52h',l:'52W Range'},{k:'atr',l:'ATR'},{k:'vol',l:'Volume'}],
   fund:   [{k:'pe',l:'P/E'},{k:'pb',l:'P/B'},{k:'roe',l:'ROE%'},{k:'de',l:'D/E'},{k:'eps',l:'EPS'},{k:'fscore',l:'F-Score'}],
-  risk:   [{k:'sl',l:'Stop Loss'},{k:'t1',l:'Target 1'},{k:'t2',l:'Target 2'},{k:'days',l:'Days'},{k:'tax',l:'Tax Type'},{k:'earnings',l:'Earnings'}],
+  risk:   [{k:'ev',l:'EV%'},{k:'sl',l:'Stop Loss'},{k:'t1',l:'Target 1'},{k:'t2',l:'Target 2'},{k:'days',l:'Days'},{k:'tax',l:'Tax Type'},{k:'earnings',l:'Earnings'}],
 };
 function togCols(grp, btn) {
   if(grp==='basic') return; // always on
@@ -7438,7 +7442,7 @@ function renderHoldings() {
             const _col = _ageMin > 30 ? 'var(--yel)' : 'var(--t4)';
             ageStr = `<div style="font-size:9px;color:${_col};line-height:1.2;margin-top:1px">${_ageStr} ago</div>`;
           }
-          return`<td class="mn">₹${f(ltp)}${staleInd}${ageStr}</td>`;
+          return`<td class="mn ltp-cell">₹${f(ltp)}${staleInd}${ageStr}</td>`;
         }
         case 'cv':return`<td class="mn" style="font-weight:600">₹${fI(cv)}</td>`;
         case 'chg':return`<td class="mn ${cls(h.chgP||0)}">${fP(h.chgP||0)}</td>`;
@@ -7493,6 +7497,16 @@ function renderHoldings() {
         case 'de':return`<td class="mn">${f(h.de)}</td>`;
         case 'eps':return`<td class="mn">${h.eps?'₹'+f(h.eps):'—'}</td>`;
         case 'fscore': { const fs=_piotroski(h); if(!fs.dataPoints) return`<td class="mn" style="color:var(--t4)">—</td>`; const col=fs.score>=7?'var(--grn)':fs.score>=4?'var(--yel)':'var(--red)'; return`<td class="mn"><span title="${fs.signals.map(s=>(s.pass?'✓':'✗')+' '+s.name).join('\n')}" style="cursor:default;font-weight:700;color:${col}">${fs.score}/${fs.dataPoints}</span></td>`; }
+        case 'ev':{
+          const _ev_ok = h.confidence && h.target1 && h.stopLoss && h.ltp;
+          if (!_ev_ok) return `<td class="mn" style="color:var(--t4)" title="Run AI analysis to compute EV">—</td>`;
+          const _p = h.confidence / 10;
+          const _up = (h.target1 - ltp) / ltp * 100;
+          const _dn = (ltp - h.stopLoss) / ltp * 100;
+          const _ev = _p * _up - (1 - _p) * _dn;
+          const _col = _ev > 5 ? 'var(--grn)' : _ev > 0 ? 'var(--yel)' : 'var(--red)';
+          return `<td class="mn" style="color:${_col};font-weight:600" title="EV = ${_p.toFixed(1)}×${f(_up,1)}% − ${(1-_p).toFixed(1)}×${f(_dn,1)}% | Conf ${h.confidence}/10">${_ev>=0?'+':''}${f(_ev,1)}%</td>`;
+        }
         case 'sl':return`<td class="mn dn" onclick="_inlineEdit(event,${h.id},'stopLoss')" title="Click to edit stop loss" style="cursor:text">${h.stopLoss?'₹'+f(h.stopLoss):'— set SL'}</td>`;
         case 't1':return`<td class="mn" style="color:var(--cyn);cursor:text" onclick="_inlineEdit(event,${h.id},'target1')" title="Click to edit Target 1">${h.target1?'₹'+f(h.target1):'— set T1'}</td>`;
         case 't2':return`<td class="mn" style="color:var(--ac2);cursor:text" onclick="_inlineEdit(event,${h.id},'target2')" title="Click to edit Target 2">${h.target2?'₹'+f(h.target2):'— set T2'}</td>`;
@@ -23786,6 +23800,32 @@ function _removeTrailSL(hid) {
     let changed = false;
     D.holdings.forEach(h => { if (h.ltp && _applyTrailingSL(h, h.ltp)) changed = true; });
     if (changed) { save('holdings'); }
+    return result;
+  };
+})();
+
+// ── Price flash animation on live refresh ───────────────────────────────────
+(function() {
+  const _orig = window.refreshAll;
+  if (typeof _orig !== 'function') return;
+  window.refreshAll = async function() {
+    // Snapshot prices before refresh
+    const snap = {};
+    (window.D?.holdings || []).forEach(h => { if (h.ltp) snap[h.id] = h.ltp; });
+    const result = await _orig.apply(this, arguments);
+    // After refresh + next render frame, flash cells where price changed
+    requestAnimationFrame(() => {
+      (window.D?.holdings || []).forEach(h => {
+        const old = snap[h.id];
+        if (!old || !h.ltp || old === h.ltp) return;
+        const row = document.querySelector(`#holdTbody tr[data-hid="${h.id}"]`);
+        const cell = row?.querySelector('.ltp-cell');
+        if (!cell) return;
+        cell.classList.remove('flash-up', 'flash-down');
+        void cell.offsetWidth; // force reflow to restart animation
+        cell.classList.add(h.ltp > old ? 'flash-up' : 'flash-down');
+      });
+    });
     return result;
   };
 })();
