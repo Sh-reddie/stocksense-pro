@@ -1473,11 +1473,16 @@ textarea.fi{resize:vertical;min-height:70px;}
           <option value="days-desc">⏳ Held Longest First</option>
           <option value="days-asc">⏳ Held Shortest First</option>
           <option value="signal">🚦 Signal (Buy → Sell)</option>
+          <option value="fscore-desc">🏆 F-Score (Best First)</option>
+          <option value="rsi-low">📉 RSI (Most Oversold)</option>
+          <option value="rsi-high">📈 RSI (Most Overbought)</option>
+          <option value="macd-bull">📈 MACD (Bullish First)</option>
         </select>
         <button class="btn btn-g" onclick="refreshAll()">↻ Refresh</button>
         <button class="btn btn-g btn-sm" id="sent-run-all-btn" onclick="runSentimentAll()" title="AI-score news sentiment for all holdings">🗞 Sentiment</button>
         <button class="btn btn-g btn-sm" onclick="optimizeAllAtrStops()" title="Set all stop-losses to volatility-adjusted ATR levels (1.5× 14-day ATR)">⚡ ATR Stops</button>
         <button class="btn btn-yel btn-sm" id="reanalyse-stale-btn" onclick="reanalyseStale()" title="Re-analyse holdings whose AI signal is >7 days old">🔄 Refresh Stale</button>
+        <button class="btn btn-g btn-sm" onclick="_batchAIThesis()" title="Generate one-line AI investment thesis for holdings without notes">✨ AI Notes</button>
         <button class="btn btn-g" onclick="go('import')">⬆ Import CSV</button>
         <button class="btn btn-red btn-sm" onclick="clearSection('holdings')">🗑 Clear</button>
         <button class="btn btn-p" onclick="openSpotlight('holdings')">+ Add Stock</button>
@@ -1500,6 +1505,7 @@ textarea.fi{resize:vertical;min-height:70px;}
       <button class="btn btn-g btn-xs col-tog" data-grp="tech" onclick="togCols('tech',this)">📈 Technical</button>
       <button class="btn btn-g btn-xs col-tog" data-grp="fund" onclick="togCols('fund',this)">🏢 Fundamental</button>
       <button class="btn btn-g btn-xs col-tog" data-grp="risk" onclick="togCols('risk',this)">⚠ Risk</button>
+      <button class="btn btn-g btn-xs col-tog" data-grp="extra" onclick="togCols('extra',this)">📝 Extra</button>
     </div>
     <div class="pn" style="overflow-x:auto">
       <table class="tbl" style="min-width:900px" id="holdTbl">
@@ -6532,6 +6538,7 @@ async function refreshAll() {
   if(typeof _batchComputeMACD==='function') _batchComputeMACD(); // non-blocking background
   if(typeof _checkLtcgMilestones==='function') _checkLtcgMilestones();
   if(typeof _checkSectorConcentration==='function') _checkSectorConcentration();
+  if(typeof _checkUpcomingDividends==='function') _checkUpcomingDividends();
   checkTargetHits();
   check52WAlerts();
   checkWatchlistTriggers();
@@ -7326,7 +7333,8 @@ async function confirmWlAdd(wid, sym, exch, sector, name) {
 // COLUMN GROUPS
 // ═══════════════════════════════════════════════════
 const COL_DEFS = {
-  basic:  [{k:'stock',l:'Stock'},{k:'qty',l:'Qty'},{k:'avg',l:'Avg Cost'},{k:'ltp',l:'LTP'},{k:'cv',l:'Curr Value'},{k:'chg',l:'Day Chg%'},{k:'pl',l:'P&L'},{k:'plp',l:'P&L%'},{k:'xirr',l:'XIRR'},{k:'cagr',l:'CAGR vs N50'},{k:'sig',l:'Signal'},{k:'forecast',l:'Forecast'},{k:'sent',l:'Sentiment'},{k:'note',l:'Notes'}],
+  basic:  [{k:'stock',l:'Stock'},{k:'qty',l:'Qty'},{k:'avg',l:'Avg Cost'},{k:'ltp',l:'LTP'},{k:'cv',l:'Curr Value'},{k:'chg',l:'Day Chg%'},{k:'pl',l:'P&L'},{k:'plp',l:'P&L%'},{k:'xirr',l:'XIRR'},{k:'cagr',l:'CAGR vs N50'},{k:'sig',l:'Signal'},{k:'forecast',l:'Forecast'},{k:'sent',l:'Sentiment'}],
+  extra:  [{k:'note',l:'Notes'},{k:'score',l:'Quality'}],
   tech:   [{k:'rsi',l:'RSI'},{k:'macd',l:'MACD'},{k:'52h',l:'52W Range'},{k:'atr',l:'ATR'},{k:'vol',l:'Volume'}],
   fund:   [{k:'pe',l:'P/E'},{k:'pb',l:'P/B'},{k:'roe',l:'ROE%'},{k:'de',l:'D/E'},{k:'eps',l:'EPS'},{k:'fscore',l:'F-Score'}],
   risk:   [{k:'sl',l:'Stop Loss'},{k:'t1',l:'Target 1'},{k:'t2',l:'Target 2'},{k:'days',l:'Days'},{k:'tax',l:'Tax Type'},{k:'earnings',l:'Earnings'}],
@@ -7339,7 +7347,7 @@ function togCols(grp, btn) {
 }
 function renderHoldHeaders() {
   const cols=[];
-  for(const grp of ['basic','tech','fund','risk']){if(activeColGroups.has(grp))cols.push(...COL_DEFS[grp]);}
+  for(const grp of ['basic','tech','fund','risk','extra']){if(activeColGroups.has(grp))cols.push(...COL_DEFS[grp]);}
   cols.push({k:'act',l:'Actions'});
   document.getElementById('holdThead').innerHTML='<tr>'+cols.map(c=>`<th>${c.l}</th>`).join('')+'</tr>';
   return cols;
@@ -17702,7 +17710,7 @@ const NIFTY500_LIST = [
 
 let _scrResults = [];
 
-function renderScreener() { /* open with default filters visible */ }
+function renderScreener() { _populateSavedSel(); }
 
 // Refresh portfolio prices first, then run screener — ensures live signals
 async function runScreenerWithRefresh() {
@@ -24090,6 +24098,22 @@ function _sortHoldings(rows, sort, SIG_ORDER) {
         const sb = SIG_ORDER[b.signal?.split(/[|,\/]/)[0]?.trim()] ?? 2;
         return sa - sb;
       }
+      case 'fscore-desc': {
+        const fa = typeof _piotroski === 'function' ? _piotroski(a) : {score:0,dataPoints:1};
+        const fb = typeof _piotroski === 'function' ? _piotroski(b) : {score:0,dataPoints:1};
+        const sa = fa.dataPoints ? fa.score / fa.dataPoints : 0;
+        const sb = fb.dataPoints ? fb.score / fb.dataPoints : 0;
+        return sb - sa;
+      }
+      case 'rsi-low':  return (a.rsi ?? 50) - (b.rsi ?? 50); // most oversold first
+      case 'rsi-high': return (b.rsi ?? 50) - (a.rsi ?? 50); // most overbought first
+      case 'macd-bull': {
+        // Bullish first (positive histogram), then sort by magnitude
+        const ma = a.macd ?? -999, mb = b.macd ?? -999;
+        if (ma > 0 && mb <= 0) return -1;
+        if (ma <= 0 && mb > 0) return 1;
+        return mb - ma;
+      }
       default: return 0;
     }
   });
@@ -24910,6 +24934,160 @@ async function _batchComputeRSI() {
     await new Promise(r => setTimeout(r, 600)); // stagger requests
   }
   if (changed) { save('holdings'); renderHoldings(); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██  COMPOSITE HOLDING QUALITY SCORE  (0–10)
+// Aggregates: Signal, Piotroski F-Score, RSI, MACD, SL proximity, P&L trend
+// 8-10 = Strong conviction hold  |  4-7 = Watch  |  0-3 = Review needed
+// ═══════════════════════════════════════════════════════════════════════════
+function _holdingScore(h) {
+  let score = 0, max = 0;
+  const ltp = h.ltp || h.avgPrice;
+  const pnlPct = h.avgPrice ? (ltp - h.avgPrice)/h.avgPrice*100 : 0;
+
+  // Signal (0-3 pts)
+  max += 3;
+  if (h.signal?.includes('STRONG BUY')) score += 3;
+  else if (h.signal?.includes('BUY'))   score += 2;
+  else if (h.signal === 'HOLD')         score += 1;
+  else if (h.signal === 'REDUCE' || h.signal?.includes('SELL')) score += 0;
+
+  // Piotroski F-Score (0-2 pts)
+  const fs = _piotroski(h);
+  max += 2;
+  if (fs.dataPoints > 0) {
+    const fpct = fs.score / fs.dataPoints;
+    if (fpct >= 0.75) score += 2;
+    else if (fpct >= 0.5) score += 1;
+  } else score += 1; // no data → neutral
+
+  // RSI (0-2 pts): best when 35-65, penalise overbought >75 or oversold <25
+  max += 2;
+  if (h.rsi != null) {
+    if (h.rsi >= 35 && h.rsi <= 65) score += 2;
+    else if (h.rsi > 65 && h.rsi <= 75) score += 1;
+    else if (h.rsi < 35 && h.rsi >= 25) score += 1;
+    // <25 or >75 = 0 pts (extreme)
+  } else score += 1; // unknown → neutral
+
+  // MACD (0-1 pt)
+  max += 1;
+  if (h.macd != null) { if (h.macd > 0) score += 1; }
+  else score += 1; // unknown → neutral
+
+  // SL distance (0-1 pt): good if >5% above SL
+  max += 1;
+  if (h.stopLoss && ltp > h.stopLoss) {
+    const slDist = (ltp - h.stopLoss)/ltp*100;
+    if (slDist >= 5) score += 1;
+  } else if (!h.stopLoss) score += 1; // no SL → neutral
+
+  // P&L trend (0-1 pt): green is good
+  max += 1;
+  if (pnlPct > 5) score += 1;
+  else if (pnlPct >= 0) score += 0.5;
+
+  const total = Math.round((score / max) * 10);
+  return Math.max(0, Math.min(10, total));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██  BATCH AI THESIS GENERATOR
+// Generates a one-sentence investment thesis for all holdings without notes.
+// Uses claudeJSON with a tightly-scoped prompt. Runs in batches of 3.
+// ═══════════════════════════════════════════════════════════════════════════
+async function _batchAIThesis() {
+  const todo = D.holdings.filter(h => !h.note && !h.thesis);
+  if (!todo.length) { toast('✅ All holdings already have notes', 'ok'); return; }
+  if (!localStorage.getItem('orKey') && !localStorage.getItem('apiKey')) {
+    toast('Set AI key in Settings first', 'error'); return;
+  }
+  if (!confirm(`Generate AI investment thesis notes for ${todo.length} holding${todo.length!==1?'s':''} with no notes?\n\nThis will use your AI credits (1 call per stock).`)) return;
+
+  const btn = document.querySelector('button[onclick="_batchAIThesis()"]');
+  if (btn) { btn.disabled = true; btn.textContent = `⏳ 0/${todo.length}`; }
+  let done = 0, saved = 0;
+
+  for (let i = 0; i < todo.length; i += 3) {
+    window._claudeJSONFastFailed = false;
+    await Promise.all(todo.slice(i, i + 3).map(async h => {
+      try {
+        const ltp = h.ltp || h.avgPrice;
+        const pnlPct = h.avgPrice ? ((ltp - h.avgPrice) / h.avgPrice * 100).toFixed(1) : null;
+        const prompt = `You are a concise Indian equity analyst. Write a single sentence (max 20 words) investment thesis for why an investor holds ${h.symbol} (${h.sector || 'NSE'}${h.pe ? ', PE ' + h.pe.toFixed(1) : ''}${h.roe ? ', ROE ' + (h.roe * 100).toFixed(0) + '%' : ''}${pnlPct ? ', P&L ' + pnlPct + '%' : ''}). Be specific — mention one key strength or catalyst. Reply ONLY with the sentence, no preamble.`;
+        const raw = await claudeJSON(prompt);
+        const thesis = (typeof raw === 'string' ? raw : (raw?.text || '')).replace(/<think>[\s\S]*?<\/think>/gi, '').trim().replace(/^["']|["']$/g, '');
+        if (thesis && thesis.length > 10 && thesis.length < 200) {
+          h.note = thesis;
+          saved++;
+        }
+      } catch(e) {}
+      done++;
+      if (btn) btn.textContent = `⏳ ${done}/${todo.length}`;
+    }));
+    if (i + 3 < todo.length) await new Promise(r => setTimeout(r, 3000));
+  }
+
+  if (saved) { save('holdings'); renderHoldings(); }
+  if (btn) { btn.disabled = false; btn.textContent = '✨ AI Notes'; }
+  toast(saved > 0 ? `✅ Generated ${saved} thesis note${saved!==1?'s':''}` : '⚠ Could not generate notes — check AI settings', saved > 0 ? 'ok' : 'warn');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██  DIVIDEND EX-DATE NOTIFICATION
+// Fires once per symbol+month when ex-date is within 7 days.
+// Checks both user-logged dividends (real dates) and estimated DB.
+// ═══════════════════════════════════════════════════════════════════════════
+function _checkUpcomingDividends() {
+  if (!D.holdings.length) return;
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+  const alertedKey = `ss_div_alerted_${todayStr}`;
+  let alerted;
+  try { alerted = new Set(JSON.parse(localStorage.getItem(alertedKey) || '[]')); } catch(e) { alerted = new Set(); }
+  let changed = false;
+
+  // 1. Check user-logged dividends with real ex-dates
+  D.dividends.forEach(d => {
+    if (!d.exDate || !d.symbol) return;
+    const exDate = new Date(d.exDate);
+    const daysAway = Math.round((exDate - today) / 864e5);
+    if (daysAway >= 0 && daysAway <= 7) {
+      const key = `logged_${d.symbol}_${d.exDate}`;
+      if (!alerted.has(key)) {
+        alerted.add(key); changed = true;
+        const income = d.total ? ` — est. income ₹${fI(d.total)}` : d.amtPerShare ? ` (₹${d.amtPerShare}/share)` : '';
+        addNotif('info', `💰 ${d.symbol} ex-dividend in ${daysAway === 0 ? 'TODAY' : daysAway + ' day(s)'} (${d.exDate})${income}`, d.symbol);
+        if (daysAway <= 3) toast(`💰 ${d.symbol} ex-dividend ${daysAway === 0 ? 'TODAY' : 'in ' + daysAway + 'd'}`, 'info');
+      }
+    }
+  });
+
+  // 2. Check estimated dividends from DIV_CALENDAR_DB
+  if (typeof DIV_CALENDAR_DB !== 'undefined') {
+    const curMonth = today.getMonth() + 1, curYear = today.getFullYear();
+    D.holdings.forEach(h => {
+      const db = DIV_CALENDAR_DB[h.symbol];
+      if (!db) return;
+      db.months.forEach(m => {
+        let year = curYear;
+        if (m < curMonth || (m === curMonth && today.getDate() > 20)) year = curYear + 1;
+        const exDate = new Date(year, m - 1, 15);
+        const daysAway = Math.round((exDate - today) / 864e5);
+        if (daysAway >= 0 && daysAway <= 7) {
+          const key = `est_${h.symbol}_${year}_${m}`;
+          if (!alerted.has(key)) {
+            alerted.add(key); changed = true;
+            const income = db.perShare && h.qty ? ` — est. ₹${fI(+(db.perShare * h.qty).toFixed(0))}` : '';
+            addNotif('info', `💰 ${h.symbol} estimated ex-dividend in ${daysAway} day(s)${income} (₹${db.perShare}/share)`, h.symbol);
+          }
+        }
+      });
+    });
+  }
+
+  if (changed) { try { localStorage.setItem(alertedKey, JSON.stringify([...alerted])); } catch(e) {} }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
