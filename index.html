@@ -307,7 +307,7 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 #pgTitle { font-size:22px; font-weight:800; color:var(--t1); letter-spacing:-.3px; }
 
 /* Sticky holdings table header */
-#holdThead th { position:sticky; top:90px; background:var(--s1); z-index:10; box-shadow:0 1px 0 var(--b1); }
+#holdThead th { position:sticky; top:0; background:var(--s1); z-index:10; box-shadow:0 1px 0 var(--b1); }
 [data-theme="light"] #holdThead th { background:var(--s1); }
 
 /* P&L row tinting */
@@ -1507,11 +1507,13 @@ textarea.fi{resize:vertical;min-height:70px;}
       <button class="btn btn-g btn-xs col-tog" data-grp="risk" onclick="togCols('risk',this)">⚠ Risk</button>
       <button class="btn btn-g btn-xs col-tog" data-grp="extra" onclick="togCols('extra',this)">📝 Extra</button>
     </div>
-    <div class="pn" style="overflow-x:auto">
+    <div class="pn" style="overflow:visible">
+      <div id="hold-tbl-wrap" style="overflow:auto;max-height:calc(100vh - 330px);min-height:300px;border-radius:11px">
       <table class="tbl" style="min-width:900px" id="holdTbl">
         <thead id="holdThead"></thead>
         <tbody id="holdTbody"><tr><td colspan="20" style="text-align:center;padding:40px;color:var(--t4)">No holdings.</td></tr></tbody>
       </table>
+      </div>
     </div>
   </div>
 
