@@ -23073,15 +23073,40 @@ function _chatGetPortfolioContext() {
   const totalPnlPct   = totalInvested > 0 ? (totalPnl/totalInvested*100) : 0;
 
   const holdingLines = D.holdings.map(h => {
-    const ltp   = h.ltp || h.avgPrice;
-    const pnl   = (ltp - h.avgPrice) * h.qty;
+    const ltp    = h.ltp || h.avgPrice;
+    const pnl    = (ltp - h.avgPrice) * h.qty;
     const pnlPct = h.avgPrice > 0 ? (ltp - h.avgPrice)/h.avgPrice*100 : 0;
-    const val   = ltp * h.qty;
-    const wt    = totalCurrent > 0 ? (val/totalCurrent*100) : 0;
-    const sl    = h.stopLoss ? ` SL:${h.stopLoss}` : '';
-    const tgt   = h.target   ? ` TGT:${h.target}`  : '';
-    const pos   = h.positionType ? ` [${h.positionType}]` : '';
-    return `  • ${h.symbol}${pos}: LTP ₹${f(ltp,2)}, Avg ₹${f(h.avgPrice,2)}, Qty ${h.qty}, Value ₹${f(val,0)}, Weight ${f(wt,1)}%, P&L ₹${f(pnl,0)} (${pnlPct>=0?'+':''}${f(pnlPct,1)}%)${sl}${tgt}`;
+    const val    = ltp * h.qty;
+    const wt     = totalCurrent > 0 ? (val/totalCurrent*100) : 0;
+    const days   = hDays(h.buyDate) || 0;
+    const fs     = typeof _piotroski === 'function' ? _piotroski(h) : null;
+    // Core position data
+    const parts = [
+      `LTP ₹${f(ltp,2)}`, `Avg ₹${f(h.avgPrice,2)}`, `Qty ${h.qty}`,
+      `Value ₹${f(val,0)}`, `Wt ${f(wt,1)}%`,
+      `P&L ₹${f(pnl,0)} (${pnlPct>=0?'+':''}${f(pnlPct,1)}%)`,
+      `Held ${days}d`, `Tax ${days>=365?'LTCG':'STCG'}`
+    ];
+    // Signal & quality
+    if (h.signal)    parts.push(`Signal:${h.signal}`);
+    if (h.sector)    parts.push(`Sector:${h.sector}`);
+    if (fs?.dataPoints) parts.push(`F-Score:${fs.score}/${fs.dataPoints}`);
+    if (h.rsi)       parts.push(`RSI:${h.rsi}`);
+    if (h.macd != null) parts.push(`MACD:${h.macd>0?'Bull':'Bear'}`);
+    // Fundamentals
+    if (h.pe)        parts.push(`PE:${h.pe.toFixed(1)}`);
+    if (h.roe)       parts.push(`ROE:${(h.roe*100).toFixed(0)}%`);
+    if (h.de != null) parts.push(`D/E:${h.de.toFixed(1)}`);
+    // Risk levels
+    if (h.stopLoss)  parts.push(`SL:₹${h.stopLoss}`);
+    if (h.target1)   parts.push(`T1:₹${h.target1}`);
+    if (h.target2)   parts.push(`T2:₹${h.target2}`);
+    if (h.insiderPct != null) parts.push(`Insider:${h.insiderPct}%`);
+    if (h.earningsTs) {
+      const daysToEarnings = Math.round((h.earningsTs*1000 - Date.now())/864e5);
+      if (daysToEarnings >= -7 && daysToEarnings <= 30) parts.push(`EarningsIn:${daysToEarnings}d`);
+    }
+    return `  • ${h.symbol}: ${parts.join(', ')}`;
   }).join('\n');
 
   const winners = D.holdings.filter(h=>h.ltp>h.avgPrice).length;
@@ -23124,6 +23149,7 @@ const _CHAT_QUICK_PROMPTS = {
   risk_analysis:    'Analyze the risks in my portfolio. Identify: overconcentrated positions, high-beta stocks, stocks near stop-loss, and any macro risks I should be aware of. What should I hedge or cut?',
   rebalance:        'Suggest a rebalancing plan for my portfolio. Which positions are too large and should be trimmed? Where should I add more? Target a well-balanced portfolio for long-term wealth creation.',
   top_picks:        'Looking at my existing holdings, which 2-3 stocks have the best upside potential right now? Also suggest 1-2 new stocks I should consider adding to complement my current portfolio.',
+  watchlist_rank:   'Rank all stocks on my watchlist from best to worst buy opportunity right now. Use a table with columns: Rank, Stock, Sector, Signal, F-Score, RSI, PE, ROE, D/E, and your Buy/Wait/Avoid verdict with one-line reasoning. Include the single strongest risk for each top pick.',
 };
 
 async function _chatQuick(key) {
@@ -23265,7 +23291,7 @@ async function _chatCallAI(sysPrompt, messages) {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true' },
-      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1024, system:sysPrompt, messages }),
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:3000, system:sysPrompt, messages }),
       signal: AbortSignal.timeout(30000)
     });
     const d = await r.json();
@@ -23310,7 +23336,7 @@ async function _chatCallAI(sysPrompt, messages) {
       r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro' },
-        body: JSON.stringify({ model: m, max_tokens: 1024, temperature: 0.7, stream: false, messages: fullMsgs }),
+        body: JSON.stringify({ model: m, max_tokens: 3000, temperature: 0.7, stream: false, messages: fullMsgs }),
         signal: controller.signal
       });
     } catch(e) {
@@ -24599,6 +24625,7 @@ function _applyHarvestSort() {
     <button class="chat-qbtn" onclick="_chatQuick('risk_analysis')">⚠️ Risk Analysis</button>
     <button class="chat-qbtn" onclick="_chatQuick('rebalance')">🔄 Rebalance</button>
     <button class="chat-qbtn" onclick="_chatQuick('top_picks')">🚀 Top Picks</button>
+    <button class="chat-qbtn" onclick="_chatQuick('watchlist_rank')">👁 Rank Watchlist</button>
   </div>
   <!-- Messages -->
   <div class="chat-msgs" id="chat-msgs">
