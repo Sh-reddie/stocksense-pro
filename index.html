@@ -1446,6 +1446,10 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="sec-head">
       <div class="sec-title">Holdings</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div style="position:relative;display:inline-flex;align-items:center">
+          <span style="position:absolute;left:9px;font-size:13px;color:var(--t4);pointer-events:none">🔍</span>
+          <input type="text" class="fi" id="h-search" placeholder="Search holdings…" oninput="renderHoldings()" style="padding-left:28px;width:160px;font-size:12px">
+        </div>
         <select class="fi" id="h-filter-sector" style="width:140px" onchange="renderHoldings()"><option value="">All Sectors</option></select>
         <select class="fi" id="h-filter-tag" style="width:120px" onchange="renderHoldings()">
           <option value="">All Tags</option>
@@ -2906,7 +2910,7 @@ textarea.fi{resize:vertical;min-height:70px;}
       </div></div>
       <div class="pn"><div class="pn-h"><div class="pn-t">📊 Quick Stats</div></div><div class="pn-b" id="scr-stats" style="color:var(--t4);font-size:12px">Run screener to see results.</div></div>
     </div>
-    <div class="pn"><div class="pn-h"><div class="pn-t" id="scr-result-title">🔍 Screener Results</div><div id="scr-loading" style="font-size:11px;color:var(--t4);display:none">⏳ Fetching live data…</div></div>
+    <div class="pn"><div class="pn-h"><div class="pn-t" id="scr-result-title">🔍 Screener Results</div><div style="display:flex;align-items:center;gap:8px"><div id="scr-loading" style="font-size:11px;color:var(--t4);display:none">⏳ Fetching live data…</div><button class="btn btn-g btn-sm" id="scr-watch-all-btn" onclick="scrWatchAll()" style="display:none" title="Add all screener results to watchlist">+ Watch All</button></div></div>
       <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Symbol</th><th>Sector</th><th>Cap</th><th>LTP</th><th>PE</th><th>ROE</th><th>52W Pos</th><th>F-Score</th><th>Signal</th><th>Add</th></tr></thead><tbody id="scr-tbody"><tr><td colspan="10" style="text-align:center;padding:30px;color:var(--t4)">Apply filters and click Screen Now</td></tr></tbody></table></div>
     </div>
     <div class="pn" style="margin-top:14px"><div class="pn-h"><div class="pn-t">🤖 AI Stock Picks</div></div><div class="pn-b"><div id="scr-ai-txt" style="color:var(--t4);font-size:12px">Click "AI Pick" after screening for AI-recommended buys from results.</div></div></div>
@@ -7366,6 +7370,7 @@ function renderHoldings() {
   const fs=document.getElementById('h-filter-sector')?.value||'';
   const fsig=document.getElementById('h-filter-sig')?.value||'';
   const ftag=document.getElementById('h-filter-tag')?.value||'';
+  const fq=(document.getElementById('h-search')?.value||'').trim().toLowerCase();
   // Populate sector filter
   const secs=[...new Set(D.holdings.map(h=>h.sector))].filter(Boolean);
   const se=document.getElementById('h-filter-sector');
@@ -7376,6 +7381,7 @@ function renderHoldings() {
     if(fsig && h.signal!==fsig) return false;
     if(ftag==='untagged' && h.tag) return false;
     if(ftag && ftag!=='untagged' && h.tag!==ftag) return false;
+    if(fq && !h.symbol.toLowerCase().includes(fq) && !(h.name||'').toLowerCase().includes(fq)) return false;
     return true;
   });
   const tbody=document.getElementById('holdTbody');
@@ -17827,6 +17833,8 @@ async function runScreener() {
 
   if (loading) loading.style.display = 'none';
   if (title) title.textContent = '🔍 Screener Results (' + _scrResults.length + ' matches)';
+  const watchAllBtn = document.getElementById('scr-watch-all-btn');
+  if (watchAllBtn) watchAllBtn.style.display = _scrResults.length ? '' : 'none';
 
   // Stats
   const statsEl = document.getElementById('scr-stats');
@@ -25328,6 +25336,34 @@ function _inlineEdit(e, hid, field) {
   td.appendChild(inp);
   inp.focus();
   inp.select();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██  SCREENER WATCH ALL
+// ═══════════════════════════════════════════════════════════════════════════
+function scrWatchAll() {
+  if (!_scrResults.length) { toast('No screener results to add', 'warn'); return; }
+  const existing = new Set(D.watchlist.map(w => w.symbol));
+  const toAdd = _scrResults.filter(s => !existing.has(s.sym));
+  if (!toAdd.length) { toast(`All ${_scrResults.length} stocks already on watchlist`, 'info'); return; }
+  if (!confirm(`Add ${toAdd.length} stock${toAdd.length!==1?'s':''} to watchlist?\n\n${toAdd.map(s=>s.sym).join(', ')}`)) return;
+  toAdd.forEach(s => {
+    D.watchlist.push({
+      id: Date.now() + Math.random(),
+      symbol: s.sym, name: s.name || s.sym,
+      exchange: 'NSE', sector: s.sector || '',
+      mcap: s.mcap || '', ltp: s.ltp || null,
+      h52: s.h52 || null, l52: s.l52 || null,
+      pe: s.pe || null, roe: s.roe ? s.roe/100 : null,
+      signal: 'HOLD', entryScore: null, wlDecision: null,
+      addedAt: new Date().toISOString(),
+      ltpAtAdd: s.ltp || null,
+      fs: s.fs || null
+    });
+  });
+  save('watchlist');
+  toast(`✅ Added ${toAdd.length} stock${toAdd.length!==1?'s':''} to watchlist`, 'ok');
+  addNotif('ok', `📋 ${toAdd.length} screener results added to watchlist: ${toAdd.slice(0,5).map(s=>s.sym).join(', ')}${toAdd.length>5?' +more':''}`);
 }
 
 // ── PWA Service Worker Registration ──────────────────
