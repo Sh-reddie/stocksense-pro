@@ -1236,6 +1236,12 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="dsh-val" id="ds-health">—</div>
         <div class="dsh-sub" id="ds-health-lbl">—</div>
       </div>
+      <div class="dsh-div"></div>
+      <div class="dsh-stat" title="Portfolio all-time high — the highest value your portfolio has ever reached">
+        <div class="dsh-lbl">Portfolio ATH</div>
+        <div class="dsh-val" id="ds-ath" style="font-size:18px">—</div>
+        <div class="dsh-sub" id="ds-ath-lbl">—</div>
+      </div>
     </div>
 
     <!-- ── AI Morning Brief ───────────────────────────────── -->
@@ -6507,6 +6513,7 @@ async function refreshAll() {
   if(typeof _savePortfolioDelta==='function') _savePortfolioDelta();
   if(typeof _batchComputeRSI==='function') _batchComputeRSI(); // non-blocking background
   if(typeof _batchComputeMACD==='function') _batchComputeMACD(); // non-blocking background
+  if(typeof _checkLtcgMilestones==='function') _checkLtcgMilestones();
   checkTargetHits();
   check52WAlerts();
   checkWatchlistTriggers();
@@ -7456,9 +7463,9 @@ function renderHoldings() {
         case 'de':return`<td class="mn">${f(h.de)}</td>`;
         case 'eps':return`<td class="mn">${h.eps?'₹'+f(h.eps):'—'}</td>`;
         case 'fscore': { const fs=_piotroski(h); if(!fs.dataPoints) return`<td class="mn" style="color:var(--t4)">—</td>`; const col=fs.score>=7?'var(--grn)':fs.score>=4?'var(--yel)':'var(--red)'; return`<td class="mn"><span title="${fs.signals.map(s=>(s.pass?'✓':'✗')+' '+s.name).join('\n')}" style="cursor:default;font-weight:700;color:${col}">${fs.score}/${fs.dataPoints}</span></td>`; }
-        case 'sl':return`<td class="mn dn">₹${f(h.stopLoss)}</td>`;
-        case 't1':return`<td class="mn" style="color:var(--cyn)">₹${f(h.target1)}</td>`;
-        case 't2':return`<td class="mn" style="color:var(--ac2)">₹${f(h.target2)}</td>`;
+        case 'sl':return`<td class="mn dn" onclick="_inlineEdit(event,${h.id},'stopLoss')" title="Click to edit stop loss" style="cursor:text">${h.stopLoss?'₹'+f(h.stopLoss):'— set SL'}</td>`;
+        case 't1':return`<td class="mn" style="color:var(--cyn);cursor:text" onclick="_inlineEdit(event,${h.id},'target1')" title="Click to edit Target 1">${h.target1?'₹'+f(h.target1):'— set T1'}</td>`;
+        case 't2':return`<td class="mn" style="color:var(--ac2);cursor:text" onclick="_inlineEdit(event,${h.id},'target2')" title="Click to edit Target 2">${h.target2?'₹'+f(h.target2):'— set T2'}</td>`;
         case 'days':return`<td class="mn">${days}d</td>`;
         case 'tax':return`<td><span class="tag ${taxT(days)==='LTCG'?'t-ltcg':'t-stcg'}">${taxT(days)}</span></td>`;
         case 'earnings': {
@@ -7810,6 +7817,33 @@ function renderSummary() {
 
   set('ds-cv', '₹' + fI(cv));
   set('ds-inv', '₹' + fI(inv));
+  // ── Portfolio ATH tracking ──────────────────────────────────────
+  if (cv > 0) {
+    const _ATH_KEY = 'ss_portfolio_ath';
+    const _storedATH = parseFloat(localStorage.getItem(_ATH_KEY) || '0');
+    if (cv > _storedATH) {
+      const _isNewATH = _storedATH > 0;
+      try { localStorage.setItem(_ATH_KEY, cv.toFixed(2)); } catch(e) {}
+      if (_isNewATH) {
+        addNotif('ok', `🎉 New portfolio ATH! ₹${fI(Math.round(cv))} — up ₹${fI(Math.round(cv-_storedATH))} from previous high`);
+        toast(`🎉 New Portfolio ATH: ₹${fI(Math.round(cv))}`, 'ok');
+      }
+      const athEl = document.getElementById('ds-ath');
+      if (athEl) { athEl.textContent = '₹'+fI(Math.round(cv)); athEl.className = 'dsh-val up'; }
+      const athLbl = document.getElementById('ds-ath-lbl');
+      if (athLbl) { athLbl.textContent = _isNewATH ? '🎉 New all-time high!' : 'First record'; athLbl.className = 'dsh-sub up'; }
+    } else {
+      const _curATH = parseFloat(localStorage.getItem(_ATH_KEY) || '0');
+      const athEl = document.getElementById('ds-ath');
+      if (athEl) { athEl.textContent = '₹'+fI(Math.round(_curATH||cv)); athEl.className = 'dsh-val'; }
+      const athLbl = document.getElementById('ds-ath-lbl');
+      if (athLbl && _curATH > cv) {
+        const _pctBelow = ((_curATH - cv) / _curATH * 100).toFixed(1);
+        athLbl.textContent = `${_pctBelow}% below ATH`;
+        athLbl.className = 'dsh-sub dn';
+      } else if (athLbl) { athLbl.textContent = 'At ATH'; athLbl.className = 'dsh-sub up'; }
+    }
+  }
   set('ds-pl', (pl>=0?'+':'')+'₹' + fI(Math.abs(pl)));
   setClass('ds-pl', 'dsh-val ' + (pl>=0?'up':'dn'));
   set('ds-plp', fP(plp));
@@ -24803,6 +24837,43 @@ async function _batchComputeRSI() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ██  LTCG MILESTONE ALERTS
+// Fires once per holding per milestone: 30-day warning + 1-year crossed.
+// Keys stored in localStorage to survive page reloads.
+// ═══════════════════════════════════════════════════════════════════════════
+function _checkLtcgMilestones() {
+  if (!D.holdings.length) return;
+  D.holdings.forEach(h => {
+    if (!h.buyDate) return;
+    const days  = hDays(h.buyDate) || 0;
+    const ltp   = h.ltp || h.avgPrice;
+    const profit = (ltp - h.avgPrice) * h.qty;
+    // Tax saving: STCG (20%+cess≈20.8%) → LTCG (12.5%), on taxable portion
+    const taxSaving = profit > 0 ? +(profit * (0.208 - 0.125)).toFixed(0) : 0;
+
+    // 1. Crossed 12 months today (days 365-366)
+    const crossKey = `ltcg_cross_${h.symbol}_${h.buyDate}`;
+    if (days >= 365 && days <= 366 && !localStorage.getItem(crossKey)) {
+      try { localStorage.setItem(crossKey, '1'); } catch(e) {}
+      const msg = taxSaving > 0
+        ? `🎉 ${h.symbol} is now LTCG-eligible! Selling now saves ₹${fI(taxSaving)} vs STCG rate`
+        : `🎉 ${h.symbol} crossed 1 year — LTCG rate (12.5%) now applies`;
+      addNotif('ok', msg, h.symbol);
+      toast(`🎉 ${h.symbol} → LTCG! ${taxSaving>0?'Tax saving: ₹'+fI(taxSaving):''}`, 'ok');
+    }
+
+    // 2. 30-day warning (days 335-336)
+    const warnKey = `ltcg_warn30_${h.symbol}_${h.buyDate}`;
+    if (days >= 335 && days < 365 && days <= 336 && !localStorage.getItem(warnKey) && taxSaving > 500) {
+      try { localStorage.setItem(warnKey, '1'); } catch(e) {}
+      const daysLeft = 365 - days;
+      addNotif('warn', `⏰ ${h.symbol}: ${daysLeft} days to LTCG — waiting saves ₹${fI(taxSaving)} in tax`, h.symbol);
+      toast(`⏰ ${h.symbol}: ${daysLeft}d to LTCG threshold`, 'warn');
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // ██  BACKGROUND MACD BATCH COMPUTE
 // Mirrors _batchComputeRSI pattern. Needs 6mo data (26-day slow EMA).
 // Stores h.macd (histogram), h.macdLine, h.macdCross ('bull'/'bear'/null).
@@ -25205,6 +25276,55 @@ function calcSwap() {
   vEl.style.background = vColor;
   vEl.style.color = 'var(--t1)';
   vEl.textContent = verdict;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██  INLINE EDIT — SL / T1 / T2 cells in holdings table
+// Click a cell → input appears → Enter/Tab saves → Escape cancels
+// ═══════════════════════════════════════════════════════════════════════════
+function _inlineEdit(e, hid, field) {
+  e.stopPropagation();
+  const td = e.currentTarget;
+  if (td.querySelector('input')) return; // already editing
+
+  const h = D.holdings.find(x => x.id == hid);
+  if (!h) return;
+
+  const currentVal = h[field] || '';
+  const lbl = field === 'stopLoss' ? 'SL' : field === 'target1' ? 'T1' : 'T2';
+
+  const inp = document.createElement('input');
+  inp.type = 'number';
+  inp.value = currentVal;
+  inp.step = '0.05';
+  inp.min = '0';
+  inp.style.cssText = 'width:72px;font-family:var(--mono);font-size:11px;background:var(--s3);border:1px solid var(--ac);border-radius:4px;padding:3px 6px;color:var(--t1);outline:none;';
+  inp.placeholder = '₹';
+
+  let _saved = false;
+  const _commit = () => {
+    if (_saved) return;
+    _saved = true;
+    const val = parseFloat(inp.value);
+    if (!isNaN(val) && val > 0 && val !== currentVal) {
+      h[field] = +val.toFixed(2);
+      save('holdings');
+      toast(`✓ ${h.symbol} ${lbl} → ₹${f(val)}`, 'ok');
+    }
+    renderHoldings();
+  };
+  const _cancel = () => { _saved = true; renderHoldings(); };
+
+  inp.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter' || ev.key === 'Tab') { ev.preventDefault(); _commit(); }
+    if (ev.key === 'Escape') _cancel();
+  });
+  inp.addEventListener('blur', _commit);
+
+  td.innerHTML = '';
+  td.appendChild(inp);
+  inp.focus();
+  inp.select();
 }
 
 // ── PWA Service Worker Registration ──────────────────
