@@ -7818,7 +7818,10 @@ function renderSummary() {
   set('ds-cv', '₹' + fI(cv));
   set('ds-inv', '₹' + fI(inv));
   // ── Portfolio ATH tracking ──────────────────────────────────────
-  if (cv > 0) {
+  // Only track when we have real live prices (not just avg fallback values)
+  const _hasLivePrices = D.holdings.some(h => h.ltp && h.ltpUpdatedAt &&
+    (Date.now() - new Date(h.ltpUpdatedAt).getTime()) < 4 * 3600000); // within 4h
+  if (cv > 0 && _hasLivePrices) {
     const _ATH_KEY = 'ss_portfolio_ath';
     const _storedATH = parseFloat(localStorage.getItem(_ATH_KEY) || '0');
     if (cv > _storedATH) {
