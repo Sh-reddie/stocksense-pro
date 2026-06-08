@@ -1727,9 +1727,22 @@ textarea.fi{resize:vertical;min-height:70px;}
       <button class="btn btn-g" onclick="go('import')">⬆ Import CSV</button><button class="btn btn-red btn-sm" onclick="clearSection('realised')">🗑 Clear</button><button class="btn btn-p" onclick="openM('addtrade')">+ Add Trade</button></div></div>
     <div class="sg sg-4 gap">
       <div class="sc c1"><div class="sc-lbl">Total Realised</div><div class="sc-val" id="rpl-tot">₹0</div><div class="sc-sub" id="rpl-ct">0 trades</div></div>
-      <div class="sc c3"><div class="sc-lbl">Wins</div><div class="sc-val up" id="rpl-wins">0</div><div class="sc-sub" id="rpl-wr">Win rate 0%</div></div>
-      <div class="sc c4"><div class="sc-lbl">Losses</div><div class="sc-val dn" id="rpl-loss">0</div><div class="sc-sub" id="rpl-ah">Avg hold 0d</div></div>
+      <div class="sc c3"><div class="sc-lbl">Win Rate</div><div class="sc-val up" id="rpl-wins">0%</div><div class="sc-sub" id="rpl-wr">0 wins · 0 losses</div></div>
+      <div class="sc c4"><div class="sc-lbl">Avg Hold</div><div class="sc-val" id="rpl-loss">—</div><div class="sc-sub" id="rpl-ah">winners vs losers</div></div>
       <div class="sc c5"><div class="sc-lbl">Best Trade</div><div class="sc-val up" id="rpl-best">—</div><div class="sc-sub" id="rpl-bs">—</div></div>
+    </div>
+    <!-- Trade analytics panel -->
+    <div class="pn" style="margin-bottom:14px" id="rpl-analytics" style="display:none">
+      <div class="pn-h"><div class="pn-t">📊 Trade Analytics</div></div>
+      <div class="pn-b" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px" id="rpl-analytics-body">
+        <div><div style="font-size:10px;color:var(--t4);margin-bottom:3px">Avg Win</div><div style="font-weight:700;color:var(--grn);font-family:var(--mono)" id="rpl-avgwin">—</div></div>
+        <div><div style="font-size:10px;color:var(--t4);margin-bottom:3px">Avg Loss</div><div style="font-weight:700;color:var(--red);font-family:var(--mono)" id="rpl-avgloss">—</div></div>
+        <div><div style="font-size:10px;color:var(--t4);margin-bottom:3px">Win/Loss Ratio</div><div style="font-weight:700;font-family:var(--mono)" id="rpl-wlratio">—</div></div>
+        <div><div style="font-size:10px;color:var(--t4);margin-bottom:3px">Avg Hold — Winners</div><div style="font-weight:700;font-family:var(--mono)" id="rpl-holdw">—</div></div>
+        <div><div style="font-size:10px;color:var(--t4);margin-bottom:3px">Avg Hold — Losers</div><div style="font-weight:700;font-family:var(--mono)" id="rpl-holdl">—</div></div>
+        <div><div style="font-size:10px;color:var(--t4);margin-bottom:3px">Worst Trade</div><div style="font-weight:700;color:var(--red);font-family:var(--mono)" id="rpl-worst">—</div><div style="font-size:10px;color:var(--t4)" id="rpl-worstsym">—</div></div>
+        <div style="grid-column:1/-1"><div style="font-size:10px;color:var(--t4);margin-bottom:6px">P&L by Sector</div><div id="rpl-sector-bars" style="display:flex;flex-direction:column;gap:4px"></div></div>
+      </div>
     </div>
     <div class="pn"><div style="overflow-x:auto"><table class="tbl" style="min-width:900px"><thead><tr><th>Stock</th><th>Exch</th><th>Qty</th><th>Buy ₹</th><th>Sell ₹</th><th>Buy Date</th><th>Sell Date</th><th>Days</th><th>P&L</th><th>P&L%</th><th>Tax</th><th>✕</th></tr></thead><tbody id="rpl-tbody"><tr><td colspan="12" style="text-align:center;padding:40px;color:var(--t4)">No closed trades.</td></tr></tbody></table></div></div>
   </div>
@@ -6518,6 +6531,7 @@ async function refreshAll() {
   if(typeof _batchComputeRSI==='function') _batchComputeRSI(); // non-blocking background
   if(typeof _batchComputeMACD==='function') _batchComputeMACD(); // non-blocking background
   if(typeof _checkLtcgMilestones==='function') _checkLtcgMilestones();
+  if(typeof _checkSectorConcentration==='function') _checkSectorConcentration();
   checkTargetHits();
   check52WAlerts();
   checkWatchlistTriggers();
@@ -7312,7 +7326,7 @@ async function confirmWlAdd(wid, sym, exch, sector, name) {
 // COLUMN GROUPS
 // ═══════════════════════════════════════════════════
 const COL_DEFS = {
-  basic:  [{k:'stock',l:'Stock'},{k:'qty',l:'Qty'},{k:'avg',l:'Avg Cost'},{k:'ltp',l:'LTP'},{k:'cv',l:'Curr Value'},{k:'chg',l:'Day Chg%'},{k:'pl',l:'P&L'},{k:'plp',l:'P&L%'},{k:'xirr',l:'XIRR'},{k:'cagr',l:'CAGR vs N50'},{k:'sig',l:'Signal'},{k:'forecast',l:'Forecast'},{k:'sent',l:'Sentiment'}],
+  basic:  [{k:'stock',l:'Stock'},{k:'qty',l:'Qty'},{k:'avg',l:'Avg Cost'},{k:'ltp',l:'LTP'},{k:'cv',l:'Curr Value'},{k:'chg',l:'Day Chg%'},{k:'pl',l:'P&L'},{k:'plp',l:'P&L%'},{k:'xirr',l:'XIRR'},{k:'cagr',l:'CAGR vs N50'},{k:'sig',l:'Signal'},{k:'forecast',l:'Forecast'},{k:'sent',l:'Sentiment'},{k:'note',l:'Notes'}],
   tech:   [{k:'rsi',l:'RSI'},{k:'macd',l:'MACD'},{k:'52h',l:'52W Range'},{k:'atr',l:'ATR'},{k:'vol',l:'Volume'}],
   fund:   [{k:'pe',l:'P/E'},{k:'pb',l:'P/B'},{k:'roe',l:'ROE%'},{k:'de',l:'D/E'},{k:'eps',l:'EPS'},{k:'fscore',l:'F-Score'}],
   risk:   [{k:'sl',l:'Stop Loss'},{k:'t1',l:'Target 1'},{k:'t2',l:'Target 2'},{k:'days',l:'Days'},{k:'tax',l:'Tax Type'},{k:'earnings',l:'Earnings'}],
@@ -7521,6 +7535,14 @@ function renderHoldings() {
               <span style="font-size:10px;font-weight:700;color:${sc};background:${sc}18;border:1px solid ${sc}44;border-radius:10px;padding:1px 7px;white-space:nowrap">${ic} ${st.sentiment}</span>
               <span style="font-size:9px;color:var(--t4)">${ageStr}</span>
             </div>
+          </td>`;
+        }
+        case 'note': {
+          const noteText = h.note || h.thesis || '';
+          if (!noteText) return `<td style="color:var(--t4);font-size:11px;cursor:pointer" onclick="openNoteModal(${h.id})" title="Add note">— add</td>`;
+          const preview = noteText.length > 28 ? noteText.slice(0, 28) + '…' : noteText;
+          return `<td style="max-width:140px;cursor:pointer" onclick="openNoteModal(${h.id})" title="${noteText.replace(/"/g,'&quot;')}">
+            <span style="font-size:11px;color:var(--t2);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${preview}</span>
           </td>`;
         }
         case 'act':return`<td style="white-space:nowrap"><div style="display:inline-flex;gap:3px;align-items:center">
@@ -9142,17 +9164,59 @@ function renderRealised() {
   const tbody=document.getElementById('rpl-tbody');
   if(!D.realised.length){tbody.innerHTML='<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--t4)">No closed trades.</td></tr>';return;}
   tbody.innerHTML=D.realised.map(r=>`<tr><td><div class="sym">${r.symbol}</div></td><td style="font-size:10px;color:var(--t4)">${r.exchange||'NSE'}</td><td class="mn">${r.qty}</td><td class="mn">₹${f(r.buyPrice)}</td><td class="mn">₹${f(r.sellPrice)}</td><td style="font-size:11px">${r.buyDate||'—'}</td><td style="font-size:11px">${r.sellDate||'—'}</td><td class="mn">${r.holdDays||'—'}d</td><td class="mn ${cls(r.pl)}">${r.pl>=0?'+':''}₹${fI(Math.abs(r.pl))}</td><td class="mn ${cls(r.plPct)}">${fP(r.plPct)}</td><td><span class="tag ${r.taxType==='LTCG'?'t-ltcg':'t-stcg'}">${r.taxType}</span></td><td><button class="btn btn-red btn-xs" onclick="rmTrade(${r.id})">✕</button></td></tr>`).join('');
-  const wins=D.realised.filter(r=>r.pl>0).length;
-  const best=D.realised.reduce((b,r)=>r.plPct>b.plPct?r:b,{plPct:-Infinity,symbol:'—'});
-  const avgH=D.realised.length?Math.round(D.realised.reduce((s,r)=>s+(r.holdDays||0),0)/D.realised.length):0;
-  document.getElementById('rpl-tot').textContent=(D.realised.reduce((s,r)=>s+r.pl,0)>=0?'+':'')+'₹'+fI(Math.abs(D.realised.reduce((s,r)=>s+r.pl,0)));
-  document.getElementById('rpl-ct').textContent=D.realised.length+' trades';
-  document.getElementById('rpl-wins').textContent=wins;
-  document.getElementById('rpl-wr').textContent='Win rate '+Math.round(wins/(D.realised.length||1)*100)+'%';
-  document.getElementById('rpl-loss').textContent=D.realised.length-wins;
-  document.getElementById('rpl-ah').textContent='Avg hold '+avgH+'d';
-  document.getElementById('rpl-best').textContent=best.symbol!=='—'?fP(best.plPct):'—';
-  document.getElementById('rpl-bs').textContent=best.symbol;
+  const totalPl = D.realised.reduce((s,r)=>s+r.pl,0);
+  const winners = D.realised.filter(r=>r.pl>0);
+  const losers  = D.realised.filter(r=>r.pl<=0);
+  const winCt   = winners.length;
+  const lossCt  = losers.length;
+  const winRate = Math.round(winCt/(D.realised.length||1)*100);
+  const best  = D.realised.reduce((b,r)=>r.plPct>b.plPct?r:b,{plPct:-Infinity,symbol:'—'});
+  const worst = D.realised.reduce((b,r)=>r.plPct<b.plPct?r:b,{plPct:Infinity,symbol:'—'});
+  const avgWinPct  = winCt  ? winners.reduce((s,r)=>s+r.plPct,0)/winCt  : null;
+  const avgLossPct = lossCt ? losers.reduce((s,r) =>s+r.plPct,0)/lossCt : null;
+  const avgHoldW = winCt  ? Math.round(winners.reduce((s,r)=>s+(r.holdDays||0),0)/winCt)  : null;
+  const avgHoldL = lossCt ? Math.round(losers.reduce((s,r) =>s+(r.holdDays||0),0)/lossCt) : null;
+  // Sector P&L
+  const sectorMap = {};
+  D.realised.forEach(r => {
+    const sec = (D.holdings.find(h=>h.symbol===r.symbol)||D.realised.find(x=>x.symbol===r.symbol))?.sector || 'Others';
+    sectorMap[sec] = (sectorMap[sec]||0) + r.pl;
+  });
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  set('rpl-tot',(totalPl>=0?'+':'')+'₹'+fI(Math.abs(totalPl)));
+  set('rpl-ct', D.realised.length+' trades');
+  set('rpl-wins', winRate+'%');
+  set('rpl-wr', `${winCt} win${winCt!==1?'s':''} · ${lossCt} loss${lossCt!==1?'es':''}`);
+  set('rpl-loss', avgHoldW!==null&&avgHoldL!==null ? `W:${avgHoldW}d / L:${avgHoldL}d` : '—');
+  set('rpl-ah', 'winners vs losers');
+  set('rpl-best', best.symbol!=='—'?fP(best.plPct):'—');
+  set('rpl-bs', best.symbol!=='—'?best.symbol:'—');
+  // Analytics panel
+  const ap = document.getElementById('rpl-analytics');
+  if (ap && D.realised.length >= 2) {
+    ap.style.display = '';
+    set('rpl-avgwin',  avgWinPct!=null  ? '+'+f(avgWinPct,1)+'%'  : '—');
+    set('rpl-avgloss', avgLossPct!=null ? f(avgLossPct,1)+'%'     : '—');
+    const wlRatio = avgLossPct && avgLossPct !== 0 ? (Math.abs(avgWinPct||0)/Math.abs(avgLossPct)).toFixed(2) : '—';
+    set('rpl-wlratio', typeof wlRatio==='string'&&wlRatio!=='—' ? wlRatio+'×' : wlRatio);
+    set('rpl-holdw', avgHoldW!=null ? avgHoldW+'d' : '—');
+    set('rpl-holdl', avgHoldL!=null ? avgHoldL+'d' : '—');
+    set('rpl-worst', worst.symbol!=='—'?fP(worst.plPct):'—');
+    set('rpl-worstsym', worst.symbol!=='—'?worst.symbol:'—');
+    const secBars = document.getElementById('rpl-sector-bars');
+    if (secBars && Object.keys(sectorMap).length) {
+      const maxAbs = Math.max(...Object.values(sectorMap).map(Math.abs));
+      secBars.innerHTML = Object.entries(sectorMap).sort((a,b)=>b[1]-a[1]).map(([sec,pl])=>{
+        const w = maxAbs>0 ? Math.round(Math.abs(pl)/maxAbs*100) : 0;
+        const col = pl>=0?'var(--grn)':'var(--red)';
+        return `<div style="display:flex;align-items:center;gap:8px;font-size:11px">
+          <span style="min-width:80px;color:var(--t3)">${sec}</span>
+          <div style="flex:1;height:6px;background:var(--s3);border-radius:3px;overflow:hidden"><div style="width:${w}%;height:100%;background:${col};border-radius:3px"></div></div>
+          <span style="min-width:70px;text-align:right;font-family:var(--mono);color:${col}">${pl>=0?'+':''}₹${fI(Math.abs(pl))}</span>
+        </div>`;
+      }).join('');
+    }
+  } else if (ap) { ap.style.display = 'none'; }
 }
 function rmTrade(id){D.realised=D.realised.filter(r=>r.id!==id);save('realised');renderRealised();renderSummary();}
 
@@ -24845,6 +24909,41 @@ async function _batchComputeRSI() {
     await new Promise(r => setTimeout(r, 600)); // stagger requests
   }
   if (changed) { save('holdings'); renderHoldings(); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██  SECTOR CONCENTRATION ALERT
+// Fires once per day per sector when it exceeds maxSectorPct of portfolio.
+// Default threshold: 30%. User can override via D.cfg.maxSectorPct.
+// ═══════════════════════════════════════════════════════════════════════════
+function _checkSectorConcentration() {
+  if (!D.holdings.length) return;
+  const threshold = (D.cfg?.maxSectorPct || 30); // %
+  const todayStr  = new Date().toISOString().split('T')[0];
+  const alertKey  = `ss_sector_conc_${todayStr}`;
+  let alerted;
+  try { alerted = new Set(JSON.parse(localStorage.getItem(alertKey) || '[]')); } catch(e) { alerted = new Set(); }
+
+  const total = D.holdings.reduce((s,h) => s + h.qty*(h.ltp||h.avgPrice), 0);
+  if (!total) return;
+
+  const sectorMap = {};
+  D.holdings.forEach(h => {
+    const sec = h.sector || 'Others';
+    sectorMap[sec] = (sectorMap[sec]||0) + h.qty*(h.ltp||h.avgPrice);
+  });
+
+  let changed = false;
+  Object.entries(sectorMap).forEach(([sec, val]) => {
+    const pct = (val / total * 100);
+    if (pct >= threshold && !alerted.has(sec)) {
+      alerted.add(sec);
+      changed = true;
+      addNotif('warn', `⚠ ${sec} is ${pct.toFixed(1)}% of your portfolio — above ${threshold}% concentration limit. Consider diversifying.`);
+      toast(`⚠ ${sec} concentration: ${pct.toFixed(1)}%`, 'warn');
+    }
+  });
+  if (changed) { try { localStorage.setItem(alertKey, JSON.stringify([...alerted])); } catch(e) {} }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
