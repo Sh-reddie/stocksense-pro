@@ -1285,6 +1285,16 @@ textarea.fi{resize:vertical;min-height:70px;}
       </div>
     </div>
 
+    <!-- ── Market Regime Badge ───────────────────────────── -->
+    <div id="ds-regime-wrap" style="display:none;margin-bottom:12px;padding:10px 16px;border-radius:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="font-size:13px;font-weight:700" id="ds-regime-label">—</span>
+      <span style="font-size:11px;color:var(--t3)" id="ds-regime-detail"></span>
+      <button class="btn btn-g btn-xs" onclick="_detectMarketRegime(true)" title="Refresh regime detection">↻ Update</button>
+    </div>
+    <!-- ── Allocation Guard ───────────────────────────────── -->
+    <div id="ds-alloc-guard" style="display:none;margin-bottom:12px"></div>
+    <!-- ── Pre-Earnings Alert ────────────────────────────── -->
+    <div id="ds-earnings-alert" style="display:none;margin-bottom:12px"></div>
     <!-- ── Smart LTCG Alert ───────────────────────────────── -->
     <div id="ds-ltcg-alert" style="display:none;margin-bottom:14px"></div>
     <!-- ── Portfolio Tag Exposure ─────────────────────────────── -->
@@ -3113,6 +3123,8 @@ textarea.fi{resize:vertical;min-height:70px;}
       </div>
       <!-- Delta: what changed since last refresh -->
       <div id="brief-delta"></div>
+      <!-- Pre-Earnings AI Brief panel -->
+      <div id="brief-earnings-ai" style="margin-bottom:14px"></div>
       <!-- Pre-market watchlist panel -->
       <div id="brief-premarket" style="margin-bottom:14px"></div>
 
@@ -4094,6 +4106,34 @@ textarea.fi{resize:vertical;min-height:70px;}
           <div class="fr gap"><div class="fg" style="margin-bottom:0"><label class="fl">Profit Target %</label><input type="number" class="fi" id="cfg-pt" value="20"></div><div class="fg" style="margin-bottom:0"><label class="fl">Stop Loss %</label><input type="number" class="fi" id="cfg-sl" value="12"></div></div>
           <button class="btn btn-p" onclick="saveSettings()">Save</button>
         </div></div>
+
+        <!-- ── Allocation Guard Settings ── -->
+        <div class="pn"><div class="pn-h"><div class="pn-t">🛡 Allocation Guard</div></div><div class="pn-b">
+          <div style="font-size:11px;color:var(--t3);margin-bottom:10px">Set limits to prevent over-concentration. Dashboard flags breaches automatically.</div>
+          <div class="fr gap">
+            <div class="fg" style="margin-bottom:0"><label class="fl">Max Single Stock %</label><input type="number" class="fi" id="cfg-max-stock-pct" value="15" min="5" max="50" step="1"></div>
+            <div class="fg" style="margin-bottom:0"><label class="fl">Max Sector %</label><input type="number" class="fi" id="cfg-max-sector-pct" value="25" min="10" max="60" step="1"></div>
+          </div>
+          <div style="margin-top:8px;font-size:10px;color:var(--t4)">Holdings above these limits show a red ⚠ on the dashboard and holdings table.</div>
+          <button class="btn btn-p" style="margin-top:10px" onclick="saveSettings()">Save</button>
+        </div></div>
+
+        <!-- ── Telegram Alerts Settings ── -->
+        <div class="pn"><div class="pn-h"><div class="pn-t">📬 Telegram Alerts</div></div><div class="pn-b">
+          <div style="font-size:11px;color:var(--t3);margin-bottom:10px">Get SL breaches, RSI alerts, and entry zone hits sent to your Telegram — even when the app is closed.</div>
+          <div style="background:rgba(79,142,247,.06);border:1px solid rgba(79,142,247,.2);border-radius:8px;padding:10px;font-size:11px;color:var(--t2);margin-bottom:10px;line-height:1.6">
+            1. Message <strong>@BotFather</strong> on Telegram → <code>/newbot</code> → copy your bot token<br>
+            2. Start a chat with your bot, then open: <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code><br>
+            3. Copy your <code>chat_id</code> from the response and paste below
+          </div>
+          <div class="fg"><label class="fl">Bot Token</label><input type="text" class="fi" id="cfg-tg-token" placeholder="123456789:ABCDEFabcdef..."></div>
+          <div class="fg"><label class="fl">Chat ID</label><input type="text" class="fi" id="cfg-tg-chatid" placeholder="123456789"></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+            <button class="btn btn-p btn-sm" onclick="saveSettings();_testTelegramAlert()">Save &amp; Test</button>
+            <span id="tg-test-result" style="font-size:11px;color:var(--t3)"></span>
+          </div>
+          <div style="margin-top:8px;font-size:10px;color:var(--t4)">Alerts sent for: SL breach · RSI overbought/oversold cross · Entry zone hit · Earnings in 2 days</div>
+        </div></div>
       </div>
       <div class="pn"><div class="pn-h"><div class="pn-t">ℹ Data Sources</div></div><div class="pn-b" style="font-size:12px;line-height:2;color:var(--t2)">
         <strong style="color:var(--t1)">Prices</strong> · Yahoo Finance via allorigins.win proxy · 15-min delayed<br>
@@ -4340,6 +4380,7 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="sd-tab" id="sdt-ai" onclick="sdTab('ai',this);_sdAutoRunAI()">🤖 AI Analysis</div>
       <div class="sd-tab" id="sdt-edit" onclick="sdTab('edit',this);_sdEditContent(D.holdings.find(x=>x.id==_sdHid))">✏ Edit</div>
       <div class="sd-tab" id="sdt-sent" onclick="sdTab('sent',this);_sdSentimentContent(D.holdings.find(x=>x.id==_sdHid))">🗞 Sentiment</div>
+      <div class="sd-tab" id="sdt-peers" onclick="sdTab('peers',this);_sdPeersContent(_sdHid)">🏢 Peers</div>
     </div>
     <!-- Scrollable body -->
     <div class="sd-body">
@@ -4513,6 +4554,12 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="sd-tp" id="sd-tab-sent">
         <div id="sd-sent-content" style="padding:16px 20px">
           <div style="color:var(--t4);font-size:12px">Click the Sentiment tab to score news sentiment for this stock.</div>
+        </div>
+      </div>
+      <!-- PEERS TAB -->
+      <div class="sd-tp" id="sd-tab-peers">
+        <div id="sd-peers-content" style="padding:16px 20px">
+          <div style="color:var(--t4);font-size:12px">Click the Peers tab to compare with sector peers.</div>
         </div>
       </div>
     </div>
@@ -26030,6 +26077,541 @@ async function _wlAnalyseSelected() {
   toast(`✅ Done — ${done}/${stocks.length} watchlist stocks updated`, 'ok');
   _batchComputeWlRSI(stocks).catch(()=>{});
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: MARKET REGIME DETECTION
+// Uses Nifty 50 DMA crossovers + FII flow direction → Bull/Neutral/Bear/Defensive
+// ═══════════════════════════════════════════════════════════════════════════════
+let _marketRegime = null; // { label, color, bg, detail, nifty50dma, nifty200dma, lastRun }
+
+async function _detectMarketRegime(force = false) {
+  const STALE_MS = 4 * 60 * 60 * 1000; // re-detect every 4h
+  if (!force && _marketRegime && (Date.now() - (_marketRegime.lastRun||0)) < STALE_MS) {
+    _renderRegimeBadge(); return;
+  }
+  try {
+    // Fetch Nifty 50 3-month daily series
+    const series = await fetchYFSeries('^NSEI', '6mo', '1d').catch(() => null);
+    if (!series || series.length < 50) { _renderRegimeBadge(); return; }
+    const closes = series.map(p => p.c);
+    const avg = (arr, n) => arr.slice(-n).reduce((s,v)=>s+v,0)/Math.min(n,arr.length);
+    const dma50  = avg(closes, 50);
+    const dma200 = avg(closes, 200);
+    const last   = closes[closes.length-1];
+    const prev5  = closes.slice(-6,-1);
+    const momentum = (last - prev5[0]) / prev5[0] * 100;
+
+    // Get FII flow direction from D._fiiData if available
+    let fiiPositive = null;
+    if (window.D?._fiiData?.length) {
+      const recent = D._fiiData.slice(-5);
+      const fiiNet = recent.reduce((s,r) => s + (r.fiiNet||0), 0);
+      fiiPositive = fiiNet > 0;
+    }
+
+    // Regime rules
+    let label, color, bg, detail;
+    if (last > dma50 && last > dma200 && momentum > 0) {
+      label = '🟢 BULL MARKET'; color = 'var(--grn)'; bg = 'rgba(34,197,94,.08)';
+      detail = `Nifty above 50DMA (${Math.round(dma50)}) & 200DMA (${Math.round(dma200)}) · +${momentum.toFixed(1)}% 5d momentum${fiiPositive===true?' · FII buying':''}`;
+    } else if (last < dma50 && last < dma200 && momentum < 0) {
+      label = '🔴 BEAR MARKET'; color = 'var(--red)'; bg = 'rgba(240,82,82,.08)';
+      detail = `Nifty below 50DMA (${Math.round(dma50)}) & 200DMA (${Math.round(dma200)}) · ${momentum.toFixed(1)}% 5d momentum${fiiPositive===false?' · FII selling':''}. Prefer HOLD/REDUCE signals.`;
+    } else if (last > dma200 && last < dma50) {
+      label = '🟡 CAUTIOUS'; color = 'var(--yel)'; bg = 'rgba(251,191,36,.08)';
+      detail = `Nifty below 50DMA (${Math.round(dma50)}) but above 200DMA (${Math.round(dma200)}). Correction in uptrend — selective buying only.`;
+    } else if (last < dma200) {
+      label = '🔴 DEFENSIVE'; color = 'var(--orn)'; bg = 'rgba(240,82,82,.06)';
+      detail = `Nifty below 200DMA (${Math.round(dma200)}). Avoid adding new positions — protect capital.`;
+    } else {
+      label = '⚪ NEUTRAL'; color = 'var(--t2)'; bg = 'rgba(79,142,247,.04)';
+      detail = `Nifty near 50DMA (${Math.round(dma50)}). No clear trend — stock-specific picks only.`;
+    }
+    _marketRegime = { label, color, bg, detail, nifty50dma: dma50, nifty200dma: dma200, lastRun: Date.now() };
+    // Inject into market context so AI prompts are regime-aware
+    if (window.D) D._marketRegime = _marketRegime;
+  } catch(e) {}
+  _renderRegimeBadge();
+}
+
+function _renderRegimeBadge() {
+  const wrap = document.getElementById('ds-regime-wrap');
+  if (!wrap || !_marketRegime) return;
+  const r = _marketRegime;
+  wrap.style.display = 'flex';
+  wrap.style.background = r.bg;
+  wrap.style.border = `1px solid ${r.color.replace('var(--','rgba(').replace(')',', .3)')}`;
+  document.getElementById('ds-regime-label').style.color = r.color;
+  document.getElementById('ds-regime-label').textContent = r.label + ' · Market Regime';
+  document.getElementById('ds-regime-detail').textContent = r.detail;
+  // Also show on dashboard stat strip
+  let regimeStat = document.getElementById('ds-regime-stat');
+  if (!regimeStat) {
+    // inject mini stat into conviction area
+    regimeStat = document.createElement('span');
+    regimeStat.id = 'ds-regime-stat';
+    regimeStat.style.cssText = 'font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px';
+    document.getElementById('ds-conviction')?.parentElement?.appendChild(regimeStat);
+  }
+  regimeStat.textContent = r.label.split(' ')[0]; // just the emoji
+  regimeStat.style.background = r.bg;
+  regimeStat.title = r.detail;
+}
+
+// Inject regime into getMarketContext so all AI prompts are regime-aware
+const _origGetMarketContext = window.getMarketContext;
+if (typeof _origGetMarketContext === 'function') {
+  window.getMarketContext = async function() {
+    const ctx = await _origGetMarketContext.apply(this, arguments);
+    if (_marketRegime) {
+      ctx.regimeLabel = _marketRegime.label;
+      ctx.regimeDetail = _marketRegime.detail;
+      ctx.sentimentLabel = (_marketRegime.label.includes('BULL') ? 'Bullish' :
+        _marketRegime.label.includes('BEAR') || _marketRegime.label.includes('DEFENSIVE') ? 'Bearish' :
+        ctx.sentimentLabel || 'Neutral');
+    }
+    return ctx;
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: TARGET ALLOCATION GUARD
+// Flags stocks and sectors that exceed user-defined concentration limits
+// ═══════════════════════════════════════════════════════════════════════════════
+function _renderAllocationGuard() {
+  const el = document.getElementById('ds-alloc-guard');
+  if (!el || !D.holdings.length) return;
+
+  const maxStock  = +(D.cfg.maxStockPct  || 15);
+  const maxSector = +(D.cfg.maxSectorPct || 25);
+  const totalVal  = D.holdings.reduce((s,h) => s + (h.ltp||h.avgPrice)*h.qty, 0);
+  if (!totalVal) return;
+
+  // Stock-level breaches
+  const stockBreaches = D.holdings
+    .map(h => ({ sym:h.symbol, pct: (h.ltp||h.avgPrice)*h.qty/totalVal*100, val:(h.ltp||h.avgPrice)*h.qty }))
+    .filter(s => s.pct > maxStock)
+    .sort((a,b) => b.pct - a.pct);
+
+  // Sector-level breaches
+  const sectorMap = {};
+  D.holdings.forEach(h => {
+    const sec = h.sector || 'Others';
+    sectorMap[sec] = (sectorMap[sec]||0) + (h.ltp||h.avgPrice)*h.qty;
+  });
+  const sectorBreaches = Object.entries(sectorMap)
+    .map(([sec,val]) => ({ sec, pct: val/totalVal*100 }))
+    .filter(s => s.pct > maxSector)
+    .sort((a,b) => b.pct - a.pct);
+
+  if (!stockBreaches.length && !sectorBreaches.length) { el.style.display = 'none'; return; }
+
+  el.style.display = 'block';
+  const rows = [
+    ...stockBreaches.map(s => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--b2)">
+      <span><span class="sym" style="font-size:12px">${s.sym}</span><span style="font-size:10px;color:var(--t4);margin-left:6px">Stock limit: ${maxStock}%</span></span>
+      <span style="font-family:var(--mono);font-weight:700;color:var(--red)">${s.pct.toFixed(1)}% <span style="font-size:9px;color:var(--orn)">↑${(s.pct-maxStock).toFixed(1)}%</span></span>
+    </div>`),
+    ...sectorBreaches.map(s => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--b2)">
+      <span><span style="font-weight:600;font-size:12px">${s.sec}</span><span style="font-size:10px;color:var(--t4);margin-left:6px">Sector limit: ${maxSector}%</span></span>
+      <span style="font-family:var(--mono);font-weight:700;color:var(--yel)">${s.pct.toFixed(1)}% <span style="font-size:9px;color:var(--orn)">↑${(s.pct-maxSector).toFixed(1)}%</span></span>
+    </div>`)
+  ];
+  el.innerHTML = `<div style="background:rgba(240,82,82,.06);border:1px solid rgba(240,82,82,.25);border-radius:10px;padding:12px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-weight:700;color:var(--red);font-size:13px">🛡 Allocation Guard — ${stockBreaches.length+sectorBreaches.length} breach${stockBreaches.length+sectorBreaches.length>1?'es':''}</span>
+      <span style="font-size:10px;color:var(--t4)">Limits: ${maxStock}% stock · ${maxSector}% sector · <button class="btn btn-g btn-xs" onclick="go('settings')" style="font-size:9px">Edit</button></span>
+    </div>
+    ${rows.join('')}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: PRE-EARNINGS AI BRIEF
+// Auto-generates AI analysis 2 days before each holding's earnings date
+// ═══════════════════════════════════════════════════════════════════════════════
+async function _renderPreEarningsAI() {
+  const earningsEl = document.getElementById('ds-earnings-alert');
+  const briefEl    = document.getElementById('brief-earnings-ai');
+  if (!D.holdings.length) return;
+
+  const now = Date.now();
+  const upcoming = D.holdings.filter(h => {
+    if (!h.earningsTs) return false;
+    const daysTo = (h.earningsTs*1000 - now) / 864e5;
+    return daysTo >= -1 && daysTo <= 5; // within 5 days
+  }).sort((a,b) => a.earningsTs - b.earningsTs);
+
+  if (!upcoming.length) {
+    if (earningsEl) earningsEl.style.display = 'none';
+    if (briefEl) briefEl.innerHTML = '';
+    return;
+  }
+
+  // Dashboard alert card
+  if (earningsEl) {
+    earningsEl.style.display = 'block';
+    earningsEl.innerHTML = `<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:10px;padding:12px 16px">
+      <div style="font-weight:700;color:var(--yel);margin-bottom:6px">📅 Earnings Alert — ${upcoming.length} stock${upcoming.length>1?'s':''} reporting soon</div>
+      ${upcoming.map(h=>{
+        const d = Math.round((h.earningsTs*1000-now)/864e5);
+        const label = d<0?`${Math.abs(d)}d ago`:d===0?'TODAY':d===1?'Tomorrow':`in ${d}d`;
+        const col = d<=1?'var(--red)':d<=3?'var(--orn)':'var(--yel)';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0">
+          <span><span class="sym" style="font-size:12px;cursor:pointer" onclick="openDetail(${h.id})">${h.symbol}</span><span style="font-size:10px;color:var(--t4);margin-left:8px">${h.name}</span></span>
+          <span style="font-weight:700;color:${col};font-size:12px">📅 ${label}</span>
+        </div>`;
+      }).join('')}
+      <button class="btn btn-p btn-sm" style="margin-top:8px" onclick="go('daily-brief')">📋 View AI Earnings Brief →</button>
+    </div>`;
+  }
+
+  // Daily brief panel — generate AI preview for each stock
+  if (!briefEl) return;
+  const key = (h) => `ss_earn_brief_${h.id}_${Math.floor(h.earningsTs/2592000)}`; // per-quarter key
+  const pending = upcoming.filter(h => !localStorage.getItem(key(h)));
+
+  if (!pending.length && upcoming.length) {
+    // All already generated — render cached
+    briefEl.innerHTML = `<div class="pn"><div class="pn-h"><div class="pn-t" style="color:var(--yel)">📅 Pre-Earnings AI Brief</div></div><div class="pn-b">
+      ${upcoming.map(h => {
+        const cached = localStorage.getItem(key(h));
+        const d = Math.round((h.earningsTs*1000-now)/864e5);
+        const label = d<0?`Results ${Math.abs(d)}d ago`:d===0?'Today!':d===1?'Tomorrow':`in ${d}d`;
+        return `<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--b2)">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span class="sym">${h.symbol}</span><span style="font-size:11px;color:var(--yel);font-weight:700">📅 ${label}</span></div>
+          <div style="font-size:12px;color:var(--t2);line-height:1.7">${cached||'—'}</div>
+        </div>`;
+      }).join('')}
+    </div></div>`;
+    return;
+  }
+
+  // Generate for pending stocks
+  briefEl.innerHTML = `<div class="pn"><div class="pn-h"><div class="pn-t" style="color:var(--yel)">📅 Pre-Earnings AI Brief</div><div class="ai-ld"><div class="spin"></div> Generating…</div></div><div class="pn-b" id="earn-brief-body"><div style="color:var(--t4);font-size:12px">Analysing upcoming earnings…</div></div></div>`;
+
+  const orKey = localStorage.getItem('orKey');
+  if (!orKey) { document.getElementById('earn-brief-body').innerHTML = '<div style="color:var(--t4);font-size:12px">Add OpenRouter key in Settings to generate earnings previews.</div>'; return; }
+
+  const ctx = D._marketCtx || {};
+  for (const h of pending.slice(0,3)) {
+    const ltp = h.ltp || h.avgPrice;
+    const pnlPct = ((ltp-h.avgPrice)/h.avgPrice*100).toFixed(1);
+    const daysTo = Math.round((h.earningsTs*1000-now)/864e5);
+    const prompt = `Pre-earnings brief for ${h.symbol} (${h.sector||'?'} sector). Earnings in ${daysTo} days.
+Position: LTP ₹${f(ltp)} · Cost ₹${f(h.avgPrice)} · P&L ${pnlPct}% · PE ${h.pe||'?'} · ROE ${h.roe?(h.roe*100).toFixed(0)+'%':'?'} · Signal: ${h.signal||'HOLD'}
+Market regime: ${ctx.regimeLabel||'Neutral'}
+Write a 3-sentence earnings preview covering: (1) what analysts expect (EPS/revenue), (2) key risk to watch, (3) whether to HOLD or REDUCE before results. Be specific with numbers. No generic advice.`;
+    try {
+      const r = await claudeJSON(prompt);
+      const text = typeof r === 'string' ? r.replace(/^⚠.*$/,'').trim() : (r?.text||r?.summary||JSON.stringify(r));
+      if (text && text.length > 20) localStorage.setItem(key(h), text);
+    } catch(e) {}
+  }
+  _renderPreEarningsAI(); // re-render with cached results
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: TELEGRAM ALERTS
+// Sends real-time alerts to user's Telegram when SL breach, RSI cross, entry zone
+// ═══════════════════════════════════════════════════════════════════════════════
+async function _sendTelegramAlert(msg) {
+  const token = localStorage.getItem('tgToken');
+  const chatId = localStorage.getItem('tgChatId');
+  if (!token || !chatId) return;
+  try {
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: `📊 StockSense Pro\n\n${msg}`, parse_mode: 'HTML' }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const d = await res.json();
+    return d.ok;
+  } catch(e) { return false; }
+}
+
+async function _testTelegramAlert() {
+  const res = document.getElementById('tg-test-result');
+  if (res) res.textContent = '⏳ Sending test…';
+  const ok = await _sendTelegramAlert('✅ Test alert from StockSense Pro — Telegram alerts are working!');
+  if (res) res.textContent = ok ? '✅ Test sent! Check Telegram.' : '❌ Failed — check token and chat ID.';
+  if (res) res.style.color = ok ? 'var(--grn)' : 'var(--red)';
+}
+
+function saveTelegramSettings() {
+  const token = document.getElementById('cfg-tg-token')?.value.trim();
+  const chatId = document.getElementById('cfg-tg-chatid')?.value.trim();
+  if (token) localStorage.setItem('tgToken', token);
+  if (chatId) localStorage.setItem('tgChatId', chatId);
+}
+
+// Hook Telegram into SL breach detection (runs after every price refresh)
+const _origCheckCustomAlerts = window.checkCustomAlerts;
+window._tgCheckSLBreaches = function() {
+  const token = localStorage.getItem('tgToken');
+  const chatId = localStorage.getItem('tgChatId');
+  if (!token || !chatId) return;
+  D.holdings.forEach(h => {
+    if (!h.stopLoss || !h.ltp || h.ltp > h.stopLoss) return;
+    const alertKey = 'ss_tg_sl_' + h.id;
+    if (Date.now() - parseInt(localStorage.getItem(alertKey)||'0') < 3600000) return; // 1h cooldown
+    localStorage.setItem(alertKey, Date.now());
+    _sendTelegramAlert(`🚨 <b>STOP LOSS BREACHED</b>\n\n<b>${h.symbol}</b> · ₹${h.ltp} ≤ SL ₹${h.stopLoss}\nP&L: ${(((h.ltp-h.avgPrice)/h.avgPrice)*100).toFixed(1)}%\nSignal: ${h.signal||'HOLD'}`);
+  });
+};
+
+// Hook Telegram into RSI crossing (called from _checkRsiCrossing)
+const _origCheckRsiCrossing = window._checkRsiCrossing;
+if (typeof _origCheckRsiCrossing === 'function') {
+  window._checkRsiCrossing = function(h, prevRsi) {
+    _origCheckRsiCrossing.apply(this, arguments);
+    const token = localStorage.getItem('tgToken');
+    if (!token || h?.rsi == null || prevRsi == null) return;
+    const crossedOB = prevRsi < 70 && h.rsi >= 70;
+    const crossedOS = prevRsi > 30 && h.rsi <= 30;
+    if (!crossedOB && !crossedOS) return;
+    const msg = crossedOB
+      ? `⚠️ <b>RSI OVERBOUGHT</b>\n\n<b>${h.symbol}</b> RSI hit ${h.rsi} (was ${prevRsi})\nConsider reducing position.`
+      : `🟢 <b>RSI OVERSOLD</b>\n\n<b>${h.symbol}</b> RSI dropped to ${h.rsi} (was ${prevRsi})\nPotential entry/add opportunity.`;
+    _sendTelegramAlert(msg);
+  };
+}
+
+// Patch refreshAll to also run SL breach Telegram check after each refresh
+const _origRefreshAll_tg = window.refreshAll;
+if (typeof _origRefreshAll_tg === 'function') {
+  window.refreshAll = async function() {
+    const result = await _origRefreshAll_tg.apply(this, arguments);
+    try { _tgCheckSLBreaches(); } catch(e) {}
+    // Also check earnings approaching
+    try { _checkEarningsApproaching(); } catch(e) {}
+    return result;
+  };
+}
+
+// Earnings approaching Telegram alert (2 days before)
+function _checkEarningsApproaching() {
+  const token = localStorage.getItem('tgToken');
+  if (!token) return;
+  const now = Date.now();
+  D.holdings.forEach(h => {
+    if (!h.earningsTs) return;
+    const daysTo = (h.earningsTs*1000 - now) / 864e5;
+    if (daysTo < 1.5 || daysTo > 2.5) return; // ~2 days window
+    const alertKey = 'ss_tg_earn_' + h.id + '_' + Math.floor(h.earningsTs/86400);
+    if (localStorage.getItem(alertKey)) return;
+    localStorage.setItem(alertKey, '1');
+    _sendTelegramAlert(`📅 <b>EARNINGS IN 2 DAYS</b>\n\n<b>${h.symbol}</b> reports results in ~2 days.\nCurrent P&L: ${(((h.ltp||h.avgPrice)-h.avgPrice)/h.avgPrice*100).toFixed(1)}%\nSignal: ${h.signal||'HOLD'}\n\nReview position before results.`);
+  });
+}
+
+// Watchlist entry zone Telegram alert
+function _checkWlEntryZoneTelegram() {
+  const token = localStorage.getItem('tgToken');
+  if (!token) return;
+  D.watchlist.forEach(w => {
+    if (!w.wlEntryLow || !w.ltp) return;
+    const inZone = w.ltp >= w.wlEntryLow * 0.98 && w.ltp <= w.wlEntryHigh * 1.02;
+    if (!inZone) return;
+    const alertKey = 'ss_tg_wlzone_' + w.id;
+    if (Date.now() - parseInt(localStorage.getItem(alertKey)||'0') < 86400000) return; // 24h cooldown
+    localStorage.setItem(alertKey, Date.now());
+    _sendTelegramAlert(`🎯 <b>ENTRY ZONE HIT</b>\n\n<b>${w.symbol}</b> is in your AI entry zone!\nLTP: ₹${w.ltp} · Zone: ₹${w.wlEntryLow}–₹${w.wlEntryHigh}\nDecision: ${w.wlDecision||'WAIT'} · Score: ${w.entryScore||'?'}/10`);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: PEER COMPARISON WIDGET
+// Side-by-side comparison of holding vs sector peers in stock detail modal
+// ═══════════════════════════════════════════════════════════════════════════════
+const _SECTOR_PEERS = {
+  'Energy':      ['NTPC','POWERGRID','NHPC','TATAPOWER','ADANIGREEN','TORNTPOWER','CESC','SJVN'],
+  'Banking':     ['HDFCBANK','ICICIBANK','SBIN','KOTAKBANK','AXISBANK','INDUSINDBK','BANDHANBNK','FEDERALBNK'],
+  'IT':          ['TCS','INFY','WIPRO','HCLTECH','TECHM','MPHASIS','LTIM','PERSISTENT'],
+  'FMCG':        ['HINDUNILVR','ITC','NESTLEIND','BRITANNIA','DABUR','MARICO','COLPAL','EMAMILTD'],
+  'Auto':        ['MARUTI','TATAMOTORS','M&M','BAJAJ-AUTO','EICHERMOT','HEROMOTOCO','TIINDIA','BALKRISIND'],
+  'Pharma':      ['SUNPHARMA','CIPLA','DRREDDY','DIVISLAB','LUPIN','AUROPHARMA','ALKEM','TORNTPHARM'],
+  'Defence':     ['HAL','BDL','BEL','MTAR','PARAS','COCHINSHIP','MIDHANI','GRSE'],
+  'Infrastructure':['LT','NTPC','POWERGRID','IRCON','RVNL','HGINFRA','KNR','PNCINFRA'],
+  'Chemicals':   ['SRF','PIDILITIND','AAVAS','DEEPAKNTR','GNFC','ATUL','NAVINFLUOR','FINEORG'],
+  'Finance':     ['BAJFINANCE','BAJAJFINSV','MUTHOOTFIN','CHOLAFIN','M&MFIN','LICHOUSFIN','CANFINHOME','IIFL'],
+  'Metals':      ['TATASTEEL','JSWSTEEL','HINDALCO','VEDL','COALINDIA','NMDC','MOIL','NATIONALUM'],
+  'Telecom':     ['BHARTIARTL','RELIANCE','IDEA','TTML','HFCL','STLTECH','TEJASNET','RAILTEL'],
+  'Others':      ['RELIANCE','ADANIENT','LT','SIEMENS','ABB','CUMMINSIND','HAVELLS','VOLTAS']
+};
+
+async function _sdPeersContent(hid) {
+  const h = D.holdings.find(x => x.id === hid);
+  const el = document.getElementById('sd-peers-content');
+  if (!el || !h) return;
+
+  el.innerHTML = `<div style="padding:20px;text-align:center"><div class="spin"></div><div style="color:var(--t4);font-size:12px;margin-top:8px">Loading sector peers…</div></div>`;
+
+  const sector = h.sector || 'Others';
+  const peers = (_SECTOR_PEERS[sector] || _SECTOR_PEERS['Others']).filter(s => s !== h.symbol).slice(0, 5);
+  const allSyms = [h.symbol, ...peers];
+
+  // Fetch quotes for all peers
+  const results = await Promise.allSettled(allSyms.map(sym =>
+    fetchPrice(sym, 'NSE').then(p => ({ sym, ...p })).catch(() => ({ sym }))
+  ));
+  const quotes = results.map((r,i) => r.status==='fulfilled' ? r.value : { sym: allSyms[i] });
+
+  // Fetch fundamentals for all
+  const funds = await Promise.allSettled(allSyms.map(sym =>
+    fetchFund(sym, 'NSE').catch(() => null)
+  ));
+  const fnData = funds.map(r => r.status==='fulfilled' ? r.value : null);
+
+  // Merge holding's own data (already fetched)
+  if (quotes[0]) {
+    quotes[0] = { ...quotes[0], ltp: h.ltp||h.avgPrice, chgP: h.chgP||0, h52: h.h52, l52: h.l52 };
+    fnData[0] = { pe: h.pe, pb: h.pb, roe: h.roe, de: h.de, mcap: h.mcap };
+  }
+
+  const pct52 = (ltp, l52, h52) => (h52&&l52&&h52>l52) ? Math.round((ltp-l52)/(h52-l52)*100) : null;
+  const best = (vals, isLow=false) => {
+    const clean = vals.filter(v=>v!=null&&isFinite(v));
+    if (!clean.length) return null;
+    return isLow ? Math.min(...clean) : Math.max(...clean);
+  };
+
+  const pes = allSyms.map((_,i) => fnData[i]?.pe || null);
+  const roes = allSyms.map((_,i) => fnData[i]?.roe ? fnData[i].roe*100 : null);
+  const des  = allSyms.map((_,i) => fnData[i]?.de || null);
+  const chgs = allSyms.map((_,i) => quotes[i]?.chgP || 0);
+  const pos52s = allSyms.map((_,i) => pct52(quotes[i]?.ltp||0, quotes[i]?.l52||0, quotes[i]?.h52||0));
+
+  const bestROE = best(roes); const bestPE = best(pes, true); const bestDE = best(des, true);
+
+  const rows = allSyms.map((sym,i) => {
+    const q = quotes[i] || {}; const fn = fnData[i] || {};
+    const isMe = i === 0;
+    const pe = fn.pe; const roe = fn.roe ? fn.roe*100 : null; const de = fn.de;
+    const p52 = pos52s[i]; const chg = chgs[i];
+    const highlight = isMe ? 'background:rgba(79,142,247,.07);font-weight:700;' : '';
+    const col = (v, bestV, isLow=false) => {
+      if (v==null||bestV==null) return 'color:var(--t3)';
+      return v===bestV ? 'color:var(--grn);font-weight:700' : 'color:var(--t2)';
+    };
+    return `<tr style="${highlight}">
+      <td style="padding:8px 10px;font-weight:${isMe?700:500};color:${isMe?'var(--ac)':'var(--t1)'}">${sym}${isMe?'<span style="font-size:9px;color:var(--ac);margin-left:4px">YOU</span>':''}</td>
+      <td class="mn" style="padding:8px 6px">₹${f(q.ltp||0)}</td>
+      <td class="mn ${cls(chg)}" style="padding:8px 6px">${fP(chg)}</td>
+      <td class="mn" style="padding:8px 6px;${col(pe,bestPE,true)}">${pe?f(pe,1):'—'}</td>
+      <td class="mn" style="padding:8px 6px;${col(roe,bestROE)}">${roe?roe.toFixed(1)+'%':'—'}</td>
+      <td class="mn" style="padding:8px 6px;${col(de,bestDE,true)}">${de?f(de,1):'—'}</td>
+      <td class="mn" style="padding:8px 6px">${p52!=null?p52+'%':'—'}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `<div style="padding:14px 18px">
+    <div style="font-size:11px;color:var(--t4);margin-bottom:10px">Sector: <strong style="color:var(--t2)">${sector}</strong> · Best values highlighted in green</div>
+    <div style="overflow-x:auto">
+    <table class="tbl" style="width:100%;min-width:420px">
+      <thead><tr>
+        <th style="text-align:left;padding:6px 10px">Stock</th>
+        <th class="mn">LTP</th><th class="mn">Day%</th>
+        <th class="mn" title="Lower PE = cheaper valuation">PE</th>
+        <th class="mn" title="Higher ROE = better returns">ROE</th>
+        <th class="mn" title="Lower D/E = less debt">D/E</th>
+        <th class="mn" title="Position in 52W range">52W</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    </div>
+    <div style="font-size:10px;color:var(--t4);margin-top:8px">Data from Yahoo Finance · 15-min delayed</div>
+  </div>`;
+}
+
+// ── Wire everything into app init + renderDashboard ────────────────────────────
+const _origRenderDashboard = window.renderDashboard;
+if (typeof _origRenderDashboard === 'function') {
+  window.renderDashboard = function() {
+    _origRenderDashboard.apply(this, arguments);
+    try { _renderAllocationGuard(); } catch(e) {}
+    try { _renderRegimeBadge(); } catch(e) {}
+    try {
+      const earningsNear = D.holdings.filter(h => {
+        if (!h.earningsTs) return false;
+        const d = (h.earningsTs*1000 - Date.now()) / 864e5;
+        return d >= -1 && d <= 5;
+      });
+      if (earningsNear.length) _renderPreEarningsAICard();
+    } catch(e) {}
+  };
+}
+
+function _renderPreEarningsAICard() {
+  const earningsEl = document.getElementById('ds-earnings-alert');
+  if (!earningsEl || !D.holdings.length) return;
+  const now = Date.now();
+  const upcoming = D.holdings.filter(h => {
+    if (!h.earningsTs) return false;
+    const d = (h.earningsTs*1000 - now) / 864e5;
+    return d >= -1 && d <= 5;
+  }).sort((a,b) => a.earningsTs - b.earningsTs);
+  if (!upcoming.length) { earningsEl.style.display='none'; return; }
+  earningsEl.style.display = 'block';
+  earningsEl.innerHTML = `<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:10px;padding:12px 16px">
+    <div style="font-weight:700;color:var(--yel);margin-bottom:6px">📅 Earnings Alert — ${upcoming.length} stock${upcoming.length>1?'s':''} reporting soon</div>
+    ${upcoming.map(h=>{
+      const d = Math.round((h.earningsTs*1000-now)/864e5);
+      const label = d<0?`${Math.abs(d)}d ago`:d===0?'TODAY':d===1?'Tomorrow':`in ${d}d`;
+      const col = d<=1?'var(--red)':d<=3?'var(--orn)':'var(--yel)';
+      return `<div style="display:flex;justify-content:space-between;padding:4px 0">
+        <span class="sym" style="font-size:12px;cursor:pointer" onclick="openDetail(${h.id})">${h.symbol}</span>
+        <span style="font-weight:700;color:${col};font-size:11px">📅 ${label} · ${h.signal||'HOLD'} · ${h.confidence?h.confidence+'/10 conf':''}</span>
+      </div>`;
+    }).join('')}
+    <button class="btn btn-p btn-sm" style="margin-top:8px" onclick="go('daily-brief')">📋 Earnings Brief →</button>
+  </div>`;
+}
+
+// Extend saveSettings to also save allocation + telegram settings
+const _origSaveSettings = window.saveSettings;
+if (typeof _origSaveSettings === 'function') {
+  window.saveSettings = function() {
+    _origSaveSettings.apply(this, arguments);
+    // Allocation guard
+    const msp = parseFloat(document.getElementById('cfg-max-stock-pct')?.value) || 15;
+    const mxp = parseFloat(document.getElementById('cfg-max-sector-pct')?.value) || 25;
+    D.cfg.maxStockPct = msp; D.cfg.maxSectorPct = mxp;
+    save('cfg');
+    // Telegram
+    const tok = document.getElementById('cfg-tg-token')?.value.trim();
+    const cid = document.getElementById('cfg-tg-chatid')?.value.trim();
+    if (tok) localStorage.setItem('tgToken', tok);
+    if (cid) localStorage.setItem('tgChatId', cid);
+    _renderAllocationGuard();
+  };
+}
+
+// Extend renderDailyBrief to include pre-earnings AI
+const _origRenderDailyBrief = window.renderDailyBrief;
+if (typeof _origRenderDailyBrief === 'function') {
+  window.renderDailyBrief = async function() {
+    await _origRenderDailyBrief.apply(this, arguments);
+    try { _renderPreEarningsAI(); } catch(e) {}
+    try { _checkWlEntryZoneTelegram(); } catch(e) {}
+  };
+}
+
+// Restore saved settings on load
+(function _restoreNewSettings() {
+  const tok = localStorage.getItem('tgToken');
+  const cid = localStorage.getItem('tgChatId');
+  if (tok) { const el=document.getElementById('cfg-tg-token'); if(el) el.value=tok; }
+  if (cid) { const el=document.getElementById('cfg-tg-chatid'); if(el) el.value=cid; }
+  if (D?.cfg?.maxStockPct) { const el=document.getElementById('cfg-max-stock-pct'); if(el) el.value=D.cfg.maxStockPct; }
+  if (D?.cfg?.maxSectorPct) { const el=document.getElementById('cfg-max-sector-pct'); if(el) el.value=D.cfg.maxSectorPct; }
+  // Run regime detection on load (non-blocking)
+  setTimeout(() => _detectMarketRegime().catch(()=>{}), 3000);
+  // Run allocation guard on load
+  setTimeout(() => { _renderAllocationGuard(); _renderPreEarningsAICard(); }, 1500);
+})();
 
 // ── Batch RSI computation for watchlist stocks ─────────────────────────────────
 // Fetches historical data for up to 6 watchlist stocks missing RSI — non-blocking.
