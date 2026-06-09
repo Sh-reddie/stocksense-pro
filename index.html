@@ -13272,7 +13272,7 @@ async function claude(prompt, sys) {
 async function claudeJSON(prompt, sys) {
   const key = localStorage.getItem('orKey') || '';
   if (!key) return claude(prompt, sys);
-  const sysMsg = sys || "You are an expert Indian equity market analyst. Reply ONLY with valid compact JSON matching the exact schema requested. No markdown, no explanation, no extra keys.";
+  const sysMsg = sys || `You are an expert Indian equity market analyst. Reply ONLY with valid compact JSON matching the exact schema in the user's prompt. No markdown fences, no explanation text, no extra keys, no trailing commas. Output must be parseable by JSON.parse() directly. Example of correct output format: {"signal":"BUY","confidence":7,"action":"Buy at support"}`;
   const _ref = (location.protocol === 'http:' || location.protocol === 'https:') ? location.href : 'https://stocksense.local';
   // Session-level cache: if all fast models failed recently, skip cascade and go straight to claude()
   const _cacheKey = '_claudeJSONFastFailed';
@@ -23249,7 +23249,8 @@ function _chatGetPortfolioContext() {
       `Held ${days}d`, `Tax ${days>=365?'LTCG':'STCG'}`
     ];
     // Signal & quality
-    if (h.signal)    parts.push(`Signal:${h.signal}`);
+    if (h.signal)    parts.push(`Signal:${h.signal}${h.urgency?' ('+h.urgency+')':''}`);
+    if (h.confidence) parts.push(`Conf:${h.confidence}/10`);
     if (h.sector)    parts.push(`Sector:${h.sector}`);
     if (fs?.dataPoints) parts.push(`F-Score:${fs.score}/${fs.dataPoints}`);
     if (h.rsi)       parts.push(`RSI:${h.rsi}`);
@@ -23260,9 +23261,15 @@ function _chatGetPortfolioContext() {
     if (h.de != null) parts.push(`D/E:${h.de.toFixed(1)}`);
     // Risk levels
     if (h.stopLoss)  parts.push(`SL:₹${h.stopLoss}`);
-    if (h.target1)   parts.push(`T1:₹${h.target1}`);
+    if (h.target1)   parts.push(`T1:₹${h.target1}${h.t1Timeline?' ('+h.t1Timeline+')':''}`);
     if (h.target2)   parts.push(`T2:₹${h.target2}`);
     if (h.insiderPct != null) parts.push(`Insider:${h.insiderPct}%`);
+    // AI analysis narrative — makes chat answers far more specific
+    if (h.aiAction)   parts.push(`AIAction:"${h.aiAction}"`);
+    if (h.aiReasoning) parts.push(`Reasoning:"${h.aiReasoning}"`);
+    if (h.bullCase)   parts.push(`Bull:"${h.bullCase}"`);
+    if (h.bearCase)   parts.push(`Bear:"${h.bearCase}"`);
+    if (h.redFlags?.length) parts.push(`RedFlags:${h.redFlags.join('; ')}`);
     if (h.earningsTs) {
       const daysToEarnings = Math.round((h.earningsTs*1000 - Date.now())/864e5);
       if (daysToEarnings >= -7 && daysToEarnings <= 30) parts.push(`EarningsIn:${daysToEarnings}d`);
