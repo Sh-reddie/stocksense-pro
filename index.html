@@ -11591,14 +11591,30 @@ function _sdFundContent(h) {
 async function _renderEarningsSurprise(h, containerEl) {
   if (!h || !containerEl) return;
   const yfSym = h.yfTicker || _symMapLookup(h.symbol) || (h.exchange==='BSE' ? h.symbol+'.BO' : h.symbol+'.NS');
+  let history = [];
   try {
-    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yfSym)}?modules=earningsHistory,earningsTrend`;
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
-    const raw = await res.json();
-    const data = JSON.parse(raw.contents || '{}');
-    const history = data?.quoteSummary?.result?.[0]?.earningsHistory?.history || [];
-    if (!history.length) return;
+    // Try Cloudflare proxy first (same as fetchFund — most reliable)
+    const cfUrl = `/api/fundamentals?sym=${encodeURIComponent(yfSym)}&modules=earningsHistory`;
+    const cfRes = await fetch(cfUrl, { signal: AbortSignal.timeout(8000) });
+    if (cfRes.ok) {
+      const cfData = await cfRes.json();
+      history = cfData?.earningsHistory?.history || cfData?.quoteSummary?.result?.[0]?.earningsHistory?.history || [];
+    }
+    // Fallback: try allorigins with v11
+    if (!history.length) {
+      const url = `https://query1.finance.yahoo.com/v11/finance/quoteSummary/${encodeURIComponent(yfSym)}?modules=earningsHistory`;
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+      const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+      const raw = await res.json();
+      const data = JSON.parse(raw.contents || '{}');
+      history = data?.quoteSummary?.result?.[0]?.earningsHistory?.history || [];
+    }
+  } catch(e) {}
+
+  const block = document.createElement('div');
+  block.className = 'sd-fund-section';
+
+  if (history.length) {
     const rows = history.slice(-4).reverse().map(q => {
       const period = q.period || '—';
       const est = q.epsEstimate?.raw;
@@ -11614,17 +11630,28 @@ async function _renderEarningsSurprise(h, containerEl) {
         <td class="mn" style="padding:5px 8px;font-size:11px;color:${col};font-weight:700">${surprise!=null?(surprise>0?'+':'')+surprise.toFixed(1)+'%':icon} ${icon}</td>
       </tr>`;
     }).join('');
-    if (!rows) return;
-    const block = document.createElement('div');
-    block.className = 'sd-fund-section';
     block.innerHTML = `<h4>📅 Earnings Surprise History (Last 4Q)</h4>
       <table class="tbl" style="width:100%">
         <thead><tr><th>Quarter</th><th class="mn">EPS Est.</th><th class="mn">EPS Actual</th><th class="mn">Surprise</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       <div style="font-size:10px;color:var(--t4);margin-top:6px">✅ Beat · ❌ Miss · Source: Yahoo Finance</div>`;
-    containerEl.appendChild(block);
-  } catch(e) {}
+  } else {
+    // Fallback: show compact earnings profile from stored data
+    const hasData = h.eps || h.eg || h.fpe || h.pe;
+    if (!hasData) return;
+    const egPct = h.eg ? (h.eg*100).toFixed(1)+'%' : '—';
+    const rgPct = h.rg ? (h.rg*100).toFixed(1)+'%' : '—';
+    const peg = h.pe && h.eg && h.eg>0 ? (h.pe/(h.eg*100)).toFixed(2) : '—';
+    block.innerHTML = `<h4>📅 Earnings Profile</h4>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:6px">
+        ${[[' Trailing EPS','₹'+(h.eps?h.eps.toFixed(2):'—')],['Forward PE',h.fpe?h.fpe.toFixed(1)+'×':'—'],
+           ['EPS Growth (YoY)',egPct],['Revenue Growth',rgPct],['PEG Ratio',peg],['Current PE',h.pe?h.pe.toFixed(1)+'×':'—']]
+          .map(([k,v])=>`<div style="padding:6px 8px;background:var(--s2);border-radius:6px"><div style="font-size:10px;color:var(--t4)">${k}</div><div style="font-size:13px;font-weight:700;color:var(--t1);margin-top:2px">${v}</div></div>`).join('')}
+      </div>
+      <div style="font-size:10px;color:var(--t4);margin-top:6px">Historical EPS surprise unavailable — showing stored fundamentals</div>`;
+  }
+  if (block.innerHTML) containerEl.appendChild(block);
 }
 
 async function _sdFetchFund() {
@@ -26304,26 +26331,35 @@ async function _fetchIPOs(force = false) {
   el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t4)"><div class="spin" style="margin:0 auto 12px"></div>Fetching IPO data from NSE…</div>';
 
   try {
-    // Try NSE IPO API via proxy
-    const url = 'https://www.nseindia.com/api/ipo-current-allotment-detail';
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
-    const raw = await res.json();
-    const data = JSON.parse(raw.contents || '[]');
-    if (Array.isArray(data) && data.length) {
-      _ipoData = data.slice(0, 20).map(d => ({
-        name: d.companyName || d.name || '—',
-        sym: d.symbol || '—',
-        openDate: d.openDate || d.ipoOpenDate || '—',
-        closeDate: d.closeDate || d.ipoCloseDate || '—',
-        price: d.issuePrice || d.price || '—',
-        lotSize: d.lotSize || '—',
-        gmp: null, // GMP not available from NSE API
-        status: d.listingDate ? (new Date(d.listingDate) < new Date() ? 'Listed' : 'Upcoming') : 'Open',
-        listDate: d.listingDate || '—',
-        subscription: d.totalSubscription || null,
-        source: 'NSE'
-      }));
+    // Try multiple IPO endpoints via proxy
+    const _ipoEndpoints = [
+      'https://www.nseindia.com/api/ipo-current-allotment-detail',
+      'https://www.nseindia.com/api/ipo',
+    ];
+    for (const endpoint of _ipoEndpoints) {
+      try {
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(endpoint)}`;
+        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+        const raw = await res.json();
+        let data; try { data = JSON.parse(raw.contents || 'null'); } catch(e2) { continue; }
+        const arr = Array.isArray(data) ? data : (data?.data || data?.result || []);
+        if (arr.length) {
+          _ipoData = arr.slice(0, 20).map(d => ({
+            name: d.companyName || d.name || '—',
+            sym: (d.symbol || (d.companyName||'').split(' ')[0] || '—').toUpperCase(),
+            openDate: d.openDate || d.ipoOpenDate || '—',
+            closeDate: d.closeDate || d.ipoCloseDate || '—',
+            price: d.issuePrice || d.price || '—',
+            lotSize: d.lotSize || '—',
+            gmp: d.gmp || null,
+            status: d.listingDate ? (new Date(d.listingDate) < new Date() ? 'Listed' : 'Upcoming') : 'Open',
+            listDate: d.listingDate || '—',
+            subscription: d.totalSubscription || d.subscriptionTimes || null,
+            source: 'Live'
+          }));
+          break;
+        }
+      } catch(e2) { continue; }
     }
   } catch(e) {}
 
