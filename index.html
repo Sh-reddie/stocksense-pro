@@ -1253,6 +1253,12 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="dsh-val" id="ds-ath" style="font-size:18px">—</div>
         <div class="dsh-sub" id="ds-ath-lbl">—</div>
       </div>
+      <div class="dsh-div"></div>
+      <div class="dsh-stat" title="Weighted AI conviction — average confidence score across analysed holdings, weighted by position size. Run AI Analyze All to update." onclick="go('holdings')" style="cursor:pointer">
+        <div class="dsh-lbl">Conviction</div>
+        <div class="dsh-val" id="ds-conviction">—</div>
+        <div class="dsh-sub" id="ds-conviction-lbl">—</div>
+      </div>
     </div>
 
     <!-- ── AI Morning Brief ───────────────────────────────── -->
@@ -8012,6 +8018,26 @@ function renderSummary() {
   if(el_h) { el_h.textContent = healthScore+'/100'; el_h.style.color = healthScore>=70?'var(--grn)':healthScore>=50?'var(--yel)':'var(--red)'; }
   if(el_hl) el_hl.textContent = healthScore>=70?'Healthy':healthScore>=50?'Fair':'Needs Work';
 
+  // ── Portfolio Conviction Score — value-weighted average AI confidence ──────
+  const _convH = D.holdings.filter(h => h.confidence && h.ltp);
+  const _convEl = document.getElementById('ds-conviction');
+  const _convLbl = document.getElementById('ds-conviction-lbl');
+  if (_convEl) {
+    if (!_convH.length) {
+      _convEl.textContent = '—';
+      if (_convLbl) { _convLbl.textContent = 'Run AI Analyze'; _convLbl.style.color = 'var(--t4)'; }
+    } else {
+      const _totalVal = _convH.reduce((s,h) => s + h.qty*(h.ltp||h.avgPrice), 0);
+      const _wtConv = _convH.reduce((s,h) => s + h.confidence * (h.qty*(h.ltp||h.avgPrice)), 0) / _totalVal;
+      const _convScore = +_wtConv.toFixed(1);
+      const _convCol = _convScore >= 7 ? 'var(--grn)' : _convScore >= 5 ? 'var(--yel)' : 'var(--red)';
+      const _convTag = _convScore >= 7 ? 'High' : _convScore >= 5 ? 'Medium' : 'Low';
+      _convEl.textContent = _convScore + '/10';
+      _convEl.style.color = _convCol;
+      if (_convLbl) { _convLbl.textContent = _convTag + ' · ' + _convH.length + ' stocks'; _convLbl.style.color = _convCol; }
+    }
+  }
+
   // Holdings strip compat IDs
   const rpl=D.realised.reduce((s,r)=>s+r.pl,0);
   const upl=pl, uplp=plp;
@@ -12140,14 +12166,27 @@ function updateAutoRefreshIndicator() {
 
 function setupRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
-  let countdownTimer = null;
+
+  let _prevMarketOpen = isMarketOpen(); // track market open transitions
 
   const tick = () => {
+    const _nowOpen = isMarketOpen();
+    // Market just opened (closed → open transition) — auto Morning Brief once per day
+    if (_nowOpen && !_prevMarketOpen) {
+      const _today = new Date().toISOString().slice(0, 10);
+      if (localStorage.getItem('ss_brief_date') !== _today) {
+        localStorage.setItem('ss_brief_date', _today);
+        toast('☀ Market open — generating Morning Brief…', 'info');
+        setTimeout(() => { try { genMorningBrief(); } catch(e) {} }, 6000); // 6s delay for prices to settle
+      }
+    }
+    _prevMarketOpen = _nowOpen;
+
     if (_autoRefreshCountdown > 0) {
       _autoRefreshCountdown--;
       updateAutoRefreshIndicator();
     } else {
-      if (isMarketOpen()) {
+      if (_nowOpen) {
         refreshAll();
         _autoRefreshCountdown = AUTO_REFRESH_INTERVAL_MS / 1000;
       } else {
