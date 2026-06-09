@@ -404,6 +404,13 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 .tbl td{padding:10px 10px;font-size:12px;border-bottom:1px solid rgba(30,37,64,.5);vertical-align:middle;}
 .tbl tbody tr:hover td{background:rgba(79,142,247,.06);}
 .tbl tbody tr:last-child td{border-bottom:none;}
+/* Row density toggle */
+#holdTbl.density-comfortable td{padding:16px 10px !important;}
+#holdTbl.density-comfortable .sym{font-size:14px;}
+#holdTbl.density-comfortable .snm{font-size:12px;margin-top:3px;}
+/* RSI alert badge */
+.rsi-ob{color:var(--red);font-size:9px;font-weight:700;background:rgba(240,82,82,.12);border-radius:4px;padding:1px 5px;}
+.rsi-os{color:var(--grn);font-size:9px;font-weight:700;background:rgba(34,197,94,.12);border-radius:4px;padding:1px 5px;}
 [data-theme="light"] .tbl tbody tr:hover td{background:rgba(37,99,235,.05);}
 .sym{font-size:13px;font-weight:700;color:var(--t1);}
 .snm{font-size:10.5px;color:var(--t4);margin-top:1px;}
@@ -1510,6 +1517,7 @@ textarea.fi{resize:vertical;min-height:70px;}
       <button class="btn btn-g btn-xs col-tog" data-grp="fund" onclick="togCols('fund',this)">🏢 Fundamental</button>
       <button class="btn btn-g btn-xs col-tog" data-grp="risk" onclick="togCols('risk',this)">⚠ Risk</button>
       <button class="btn btn-g btn-xs col-tog" data-grp="extra" onclick="togCols('extra',this)">📝 Extra</button>
+      <button id="density-btn" class="btn btn-g btn-xs" onclick="_toggleDensity()" title="Toggle row height" style="margin-left:8px;border-left:1px solid var(--b2);padding-left:10px">⇕ Comfortable</button>
     </div>
     <div class="pn" style="overflow:visible">
       <div id="hold-tbl-wrap" style="overflow:auto;max-height:calc(100vh - 330px);min-height:300px;border-radius:11px">
@@ -7340,7 +7348,7 @@ async function confirmWlAdd(wid, sym, exch, sector, name) {
 // ═══════════════════════════════════════════════════
 const COL_DEFS = {
   basic:  [{k:'stock',l:'Stock'},{k:'qty',l:'Qty'},{k:'avg',l:'Avg Cost'},{k:'ltp',l:'LTP'},{k:'cv',l:'Curr Value'},{k:'chg',l:'Day Chg%'},{k:'pl',l:'P&L'},{k:'plp',l:'P&L%'},{k:'xirr',l:'XIRR'},{k:'cagr',l:'CAGR vs N50'},{k:'sig',l:'Signal'},{k:'forecast',l:'Forecast'},{k:'sent',l:'Sentiment'}],
-  extra:  [{k:'note',l:'Notes'},{k:'score',l:'Quality'}],
+  extra:  [{k:'note',l:'Notes'},{k:'score',l:'Quality'},{k:'eq',l:'Entry Zone'}],
   tech:   [{k:'rsi',l:'RSI'},{k:'macd',l:'MACD'},{k:'52h',l:'52W Range'},{k:'atr',l:'ATR'},{k:'vol',l:'Volume'}],
   fund:   [{k:'pe',l:'P/E'},{k:'pb',l:'P/B'},{k:'roe',l:'ROE%'},{k:'de',l:'D/E'},{k:'eps',l:'EPS'},{k:'fscore',l:'F-Score'}],
   risk:   [{k:'ev',l:'EV%'},{k:'sl',l:'Stop Loss'},{k:'t1',l:'Target 1'},{k:'t2',l:'Target 2'},{k:'days',l:'Days'},{k:'tax',l:'Tax Type'},{k:'earnings',l:'Earnings'}],
@@ -7450,6 +7458,11 @@ function renderHoldings() {
         case 'plp':return`<td class="mn ${cls(plp)}">${fP(plp)}</td>`;
         case 'xirr':{const xr=calcHoldingXIRR(h);return`<td class="mn" style="color:${xr!==null&&xr>=0?'var(--grn)':xr!==null?'var(--red)':'var(--t4)'};font-family:var(--mono)">${xr!==null&&isFinite(xr)?(xr>=0?'+':'')+f(xr*100,1)+'%':'—'}</td>`;}
         case 'sig':{
+          // Friendly AI error state — show retry button instead of raw error string
+          if (h.aiError && !h.signal) {
+            const _errShort = typeof h.aiError==='string' ? h.aiError.replace(/^[⚠⛔]/,'').trim().slice(0,40) : 'AI error';
+            return `<td><span style="font-size:10px;color:var(--red);display:block">⚠ AI failed</span><span style="font-size:9px;color:var(--t4);display:block;margin-top:1px">${_errShort}</span><button onclick="event.stopPropagation();_retryHoldingAI(${h.id})" style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:4px;background:rgba(79,142,247,.12);border:1px solid var(--ac);color:var(--ac);cursor:pointer">↻ Retry</button></td>`;
+          }
           const staleDays = h.lastAnalysed ? Math.floor((Date.now()-new Date(h.lastAnalysed))/(864e5)) : null;
           const staleChip = staleDays === null
             ? `<div style="font-size:9px;color:var(--t4);margin-top:3px;cursor:pointer" onclick="event.stopPropagation();openDetail(${h.id});sdTab('ai',document.getElementById('sdt-ai'))">No AI yet</div>`
@@ -7463,7 +7476,11 @@ function renderHoldings() {
           const prevSigBadge = h.prevSignal && prevSigAge !== null && prevSigAge <= 7
             ? `<div style="font-size:9px;color:var(--t4);margin-top:2px" title="Signal changed ${_prevAgeStr}">was ${h.prevSignal} <span style="color:var(--ac)">→</span></div>`
             : '';
-          return`<td>${tagSig(h.signal)}${prevSigBadge}${staleChip}</td>`;
+          // RSI alert badges inline in signal cell
+          const rsiAlert = h.rsi != null
+            ? (h.rsi >= 70 ? `<span class="rsi-ob" title="Overbought — RSI ${h.rsi}">OB ${h.rsi}</span> ` : h.rsi <= 30 ? `<span class="rsi-os" title="Oversold — RSI ${h.rsi}">OS ${h.rsi}</span> ` : '')
+            : '';
+          return`<td>${rsiAlert}${tagSig(h.signal)}${prevSigBadge}${staleChip}</td>`;
         }
         case 'macd': {
           if (h.macd == null) return `<td class="mn" style="color:var(--t4)" title="MACD not yet computed — will update after price refresh">—</td>`;
@@ -7506,6 +7523,14 @@ function renderHoldings() {
           const _ev = _p * _up - (1 - _p) * _dn;
           const _col = _ev > 5 ? 'var(--grn)' : _ev > 0 ? 'var(--yel)' : 'var(--red)';
           return `<td class="mn" style="color:${_col};font-weight:600" title="EV = ${_p.toFixed(1)}×${f(_up,1)}% − ${(1-_p).toFixed(1)}×${f(_dn,1)}% | Conf ${h.confidence}/10">${_ev>=0?'+':''}${f(_ev,1)}%</td>`;
+        }
+        case 'eq':{
+          if(!h.h52||!h.l52||h.h52===h.l52) return`<td class="mn" style="color:var(--t4)">—</td>`;
+          const _eqPct=Math.round((h.avgPrice-h.l52)/(h.h52-h.l52)*100);
+          const _eqClamp=Math.max(0,Math.min(100,_eqPct));
+          const _eqLbl=_eqClamp<=25?'Near Low':_eqClamp<=50?'Mid':_eqClamp<=75?'High':'Near Peak';
+          const _eqCol=_eqClamp<=25?'var(--grn)':_eqClamp<=50?'var(--yel)':_eqClamp<=75?'var(--orn)':'var(--red)';
+          return`<td class="mn" style="color:${_eqCol}" title="Entry ₹${f(h.avgPrice)} was at ${_eqClamp}% of current 52W range (Low ₹${f(h.l52)} → High ₹${f(h.h52)})">${_eqClamp}% · ${_eqLbl}</td>`;
         }
         case 'sl':return`<td class="mn dn" onclick="_inlineEdit(event,${h.id},'stopLoss')" title="Click to edit stop loss" style="cursor:text">${h.stopLoss?'₹'+f(h.stopLoss):'— set SL'}</td>`;
         case 't1':return`<td class="mn" style="color:var(--cyn);cursor:text" onclick="_inlineEdit(event,${h.id},'target1')" title="Click to edit Target 1">${h.target1?'₹'+f(h.target1):'— set T1'}</td>`;
@@ -11271,7 +11296,7 @@ function _renderActiveIndicators(series) {
     // ── Save real RSI to holding so table column shows actual value ──
     if (last != null && _sdHid) {
       const _rsiH = D.holdings.find(x => x.id == _sdHid);
-      if (_rsiH) { _rsiH.rsi = +last.toFixed(1); _rsiH.rsiAt = new Date().toISOString(); save('holdings'); renderHoldings(); }
+      if (_rsiH) { const _prevRsi = _rsiH.rsi; _rsiH.rsi = +last.toFixed(1); _rsiH.rsiAt = new Date().toISOString(); _checkRsiCrossing(_rsiH, _prevRsi); save('holdings'); renderHoldings(); }
     }
     const rsiValEl = document.getElementById('sd-rsi-val');
     if (rsiValEl && last != null) {
@@ -25752,6 +25777,64 @@ if ('serviceWorker' in navigator) {
     }
   });
 }
+
+// ── A: RSI crossing detector ─────────────────────────────────────────────────
+// Called whenever a holding's RSI is freshly computed.
+// Fires notification + auto-analysis on 70/30 crossings (once per 24h per direction).
+function _checkRsiCrossing(h, prevRsi) {
+  if (!h || h.rsi == null || prevRsi == null) return;
+  const curr = h.rsi, prev = prevRsi;
+  const crossedOB = prev < 70 && curr >= 70;
+  const crossedOS = prev > 30 && curr <= 30;
+  if (!crossedOB && !crossedOS) return;
+  // Rate-limit: one alert per 24h per stock per direction
+  const alertKey = 'ss_rsi_x_' + h.id + '_' + (crossedOB ? 'ob' : 'os');
+  if (Date.now() - parseInt(localStorage.getItem(alertKey)||'0') < 864e5) return;
+  localStorage.setItem(alertKey, Date.now());
+  const msg = crossedOB
+    ? `⚠ ${h.symbol} RSI hit ${curr.toFixed(1)} — overbought. Consider reducing.`
+    : `🟢 ${h.symbol} RSI dropped to ${curr.toFixed(1)} — oversold. Potential entry.`;
+  try { addNotif(crossedOB ? 'warn' : 'ok', msg, h.symbol); toast(msg, crossedOB ? 'warn' : 'ok'); } catch(e) {}
+  // Auto-trigger fresh AI analysis in background (non-blocking)
+  const ctx = (window.D && D._marketCtx) || {};
+  analyseHolding(h, ctx, {forceRefresh: true})
+    .then(() => { try { save('holdings'); renderHoldings(); } catch(e) {} })
+    .catch(() => {});
+}
+
+// ── B: Friendly retry for AI errors ──────────────────────────────────────────
+async function _retryHoldingAI(hid) {
+  const h = window.D?.holdings?.find(h => h.id === hid);
+  if (!h) return;
+  h.aiError = null;
+  renderHoldings(); // clear error state immediately
+  toast('↻ Retrying AI for ' + h.symbol + '…', 'info');
+  const ctx = (window.D && D._marketCtx) || {};
+  await analyseHolding(h, ctx, {forceRefresh: true});
+  save('holdings');
+  renderHoldings();
+}
+
+// ── D: Row density toggle ─────────────────────────────────────────────────────
+function _toggleDensity() {
+  const tbl = document.getElementById('holdTbl');
+  if (!tbl) return;
+  const isComf = tbl.classList.toggle('density-comfortable');
+  localStorage.setItem('ss_density', isComf ? 'comfortable' : 'compact');
+  const btn = document.getElementById('density-btn');
+  if (btn) btn.textContent = isComf ? '⇕ Compact' : '⇕ Comfortable';
+}
+// Restore density preference on load
+(function _restoreDensity() {
+  if (localStorage.getItem('ss_density') === 'comfortable') {
+    const apply = () => {
+      const tbl = document.getElementById('holdTbl');
+      if (tbl) { tbl.classList.add('density-comfortable'); const btn = document.getElementById('density-btn'); if (btn) btn.textContent = '⇕ Compact'; }
+      else setTimeout(apply, 500);
+    };
+    apply();
+  }
+})();
 </script>
 </body>
 </html>
