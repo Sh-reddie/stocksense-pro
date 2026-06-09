@@ -26790,6 +26790,20 @@ function _renderCoveredCalls() {
   const totalMonthly = eligible.reduce((s,x)=>s+x.monthlyIncome5, 0);
   const totalAnnual  = totalMonthly * 12;
 
+  // Aspirational: F&O stocks user doesn't yet have enough qty for
+  const aspirational = D.holdings.map(h => {
+    const ltp = h.ltp || h.avgPrice;
+    const lot = _FNO_LOT_SIZES[h.symbol] || _FNO_LOT_SIZES[h.symbol.replace(/-/g,'_')] || 0;
+    if (!lot || h.qty >= lot) return null;
+    const sharesNeeded = lot - h.qty;
+    const capitalNeeded = sharesNeeded * ltp;
+    const sigma = 0.30 + (h.beta||1)*0.10;
+    const premium = _bsCallPremium(ltp, Math.round(ltp*1.05), 25/365, 0.065, sigma);
+    return { h, ltp, lot, sharesNeeded, capitalNeeded,
+             monthlyIncome: premium*lot, monthlyYield: premium/ltp*100,
+             annualYield: premium/ltp*100*12 };
+  }).filter(Boolean).sort((a,b)=>b.monthlyIncome-a.monthlyIncome).slice(0,5);
+
   if (statsEl) {
     statsEl.innerHTML = [
       ['📈 Eligible Holdings', eligible.length],
