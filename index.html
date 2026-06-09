@@ -4160,6 +4160,7 @@ textarea.fi{resize:vertical;min-height:70px;}
             <span id="tg-test-result" style="font-size:11px;color:var(--t3)"></span>
           </div>
           <div style="margin-top:8px;font-size:10px;color:var(--t4)">Alerts sent for: SL breach · RSI overbought/oversold cross · Entry zone hit · Earnings in 2 days</div>
+          <button class="btn btn-g btn-sm" style="margin-top:8px" onclick="_sendWeeklyDigest().then(ok=>toast(ok?'✅ Digest sent!':'❌ Failed — check token','ok'))">📤 Send Digest Now</button>
           <div style="margin-top:10px;border-top:1px solid var(--b2);padding-top:10px">
             <div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:6px">📅 Weekly Digest</div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -4388,6 +4389,29 @@ textarea.fi{resize:vertical;min-height:70px;}
       </div>
       <div id="pb-result" style="display:none;background:var(--s2);border-radius:10px;padding:14px;font-size:13px;line-height:2"></div>
       <div id="pb-warning" style="display:none;margin-top:10px;padding:8px 12px;background:rgba(240,82,82,.07);border:1px solid rgba(240,82,82,.2);border-radius:7px;font-size:11px;color:var(--red)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TRADE EXECUTION CHECKLIST MODAL ════════════════════════════════ -->
+<div class="mb" id="m-tradechecklist">
+  <div class="md" style="max-width:520px">
+    <div class="md-h"><div class="md-title" id="tcl-title">✅ Sell Checklist</div><button class="x-btn" onclick="closeM('tradechecklist')">✕</button></div>
+    <div class="md-b" style="padding:18px 20px" id="tcl-body"></div>
+  </div>
+</div>
+
+<!-- ═══ WHAT-IF SIMULATOR MODAL ════════════════════════════════════════ -->
+<div class="mb" id="m-whatif">
+  <div class="md" style="max-width:560px">
+    <div class="md-h"><div class="md-title">🔬 What-If Simulator</div><button class="x-btn" onclick="closeM('whatif')">✕</button></div>
+    <div class="md-b" style="padding:18px 20px">
+      <div id="wi-from-info" style="margin-bottom:14px;padding:10px 14px;background:var(--s2);border-radius:8px;font-size:12px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <div class="fg" style="margin:0"><label class="fl">Sell shares</label><input type="number" class="fi" id="wi-sell-qty" placeholder="All" oninput="_calcWhatIf()"></div>
+        <div class="fg" style="margin:0"><label class="fl">Buy stock (symbol)</label><input type="text" class="fi" id="wi-buy-sym" placeholder="e.g. HDFCBANK" oninput="_calcWhatIf()"></div>
+      </div>
+      <div id="wi-result" style="display:none"></div>
     </div>
   </div>
 </div>
@@ -7757,6 +7781,8 @@ function renderHoldings() {
               <div class="act-more-item" onclick="openTrailSLModal(${h.id})" style="color:${h.trailSlPct?'var(--cyn)':'inherit'}"><span class="act-more-icon">${h.trailSlPct?'⟳':'📍'}</span>${h.trailSlPct?'Trailing SL · '+h.trailSlPct+'%':'Set Trailing SL'}</div>
               <div class="act-more-item" onclick="openSwapModal(${h.id})"><span class="act-more-icon">↔</span>Swap Calculator</div>
               <div class="act-more-item" onclick="openPositionBuilder(${h.id})"><span class="act-more-icon">📐</span>Position Builder</div>
+              <div class="act-more-item" onclick="openTradeChecklist(${h.id},'sell')" style="color:var(--red)"><span class="act-more-icon">✅</span>Sell Checklist</div>
+              <div class="act-more-item" onclick="openWhatIf(${h.id})"><span class="act-more-icon">🔬</span>What-If Simulator</div>
               <div class="act-more-item" onclick="openCaModal(${h.id})"><span class="act-more-icon">📋</span>Corporate Action</div>
             </div>
           </div>
@@ -26930,6 +26956,350 @@ if (typeof _origRefreshAll2 === 'function') {
   // Run exit sequencer on load if already on that page
   setTimeout(()=>{ try{if(document.getElementById('sec-exit-seq')?.closest('.sec:not([style*="display:none"])')) _renderExitSequencer();} catch(e){} }, 2500);
 })();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE 1: TRADE EXECUTION CHECKLIST
+// Pre-trade decision checklist for sell actions — tax, SL, allocation, signal
+// ═══════════════════════════════════════════════════════════════════════════════
+function openTradeChecklist(hid, action='sell') {
+  const h = D.holdings.find(x => x.id === hid);
+  if (!h) return;
+  const ltp = h.ltp || h.avgPrice;
+  const days = h.buyDate ? Math.floor((Date.now()-new Date(h.buyDate))/864e5) : 0;
+  const pnlPct = ((ltp-h.avgPrice)/h.avgPrice*100);
+  const taxType = days >= 365 ? 'LTCG' : 'STCG';
+  const nearLTCG = days < 365 && (365-days) <= 30;
+  const totalVal = D.holdings.reduce((s,x)=>s+(x.ltp||x.avgPrice)*x.qty,0);
+  const weight = ltp*h.qty/totalVal*100;
+  const pledge = _PLEDGE_DICT[h.symbol];
+  const slBreached = h.stopLoss && ltp <= h.stopLoss;
+  const rsiOB = h.rsi && h.rsi >= 70;
+
+  const checks = [
+    {
+      label: 'Signal alignment',
+      pass: ['REDUCE','EXIT'].includes(h.signal),
+      warn: h.signal?.includes('BUY'),
+      text: h.signal === 'REDUCE' ? `✅ AI says REDUCE — aligned` :
+            h.signal === 'EXIT'   ? `✅ AI says EXIT — aligned` :
+            h.signal?.includes('BUY') ? `⚠ AI says ${h.signal} — selling against signal` :
+            `ℹ AI signal: ${h.signal||'No AI yet'}`
+    },
+    {
+      label: 'Tax timing',
+      pass: taxType === 'LTCG' || pnlPct < 0,
+      warn: nearLTCG && pnlPct > 0,
+      text: nearLTCG && pnlPct > 0 ? `⚠ Only ${365-days} days to LTCG — wait ${365-days}d to save ~₹${Math.round(pnlPct/100*ltp*h.qty*0.075)} in tax` :
+            taxType === 'LTCG' && pnlPct > 0 ? `✅ LTCG eligible (${days}d held) — tax efficient` :
+            pnlPct < 0 ? `✅ Loss position — tax benefit from harvesting` :
+            `ℹ STCG applies (${days}d held) — 20% on ₹${fI(Math.max(0,pnlPct/100*ltp*h.qty))} gain`
+    },
+    {
+      label: 'Stop loss vs target',
+      pass: slBreached || (h.stopLoss && ltp > h.stopLoss),
+      warn: !h.stopLoss,
+      text: slBreached ? `🚨 SL breached (₹${f(h.stopLoss)}) — exit valid` :
+            h.stopLoss ? `ℹ SL intact at ₹${f(h.stopLoss)} (${fP((h.stopLoss/ltp-1)*100)} from LTP)` :
+            `⚠ No stop loss set — set SL before selling`
+    },
+    {
+      label: 'Portfolio impact',
+      pass: weight > (D.cfg.maxStockPct||15),
+      warn: weight < 3 && pnlPct < 0,
+      text: weight > (D.cfg.maxStockPct||15) ? `✅ Over-weight at ${weight.toFixed(1)}% — reducing improves diversification` :
+            `ℹ Weight: ${weight.toFixed(1)}% of portfolio`
+    },
+    {
+      label: 'RSI momentum',
+      pass: rsiOB || (h.rsi && h.rsi > 50),
+      warn: h.rsi && h.rsi <= 30,
+      text: rsiOB ? `✅ RSI overbought (${h.rsi}) — good exit timing` :
+            h.rsi <= 30 ? `⚠ RSI oversold (${h.rsi}) — selling at potential bottom` :
+            h.rsi ? `ℹ RSI: ${h.rsi} (neutral)` : `ℹ No RSI data`
+    },
+    {
+      label: 'Market regime',
+      pass: _marketRegime?.label?.includes('BEAR') || _marketRegime?.label?.includes('DEFENSIVE'),
+      warn: false,
+      text: _marketRegime?.label?.includes('BEAR') ? `✅ ${_marketRegime.label} — reduces/exits make sense` :
+            _marketRegime?.label?.includes('BULL') ? `⚠ Bull market — selling may mean missing upside` :
+            `ℹ Regime: ${_marketRegime?.label||'Unknown'}`
+    },
+    {
+      label: 'Reinvestment plan',
+      pass: false,
+      warn: false,
+      text: `📋 Before selling, decide where proceeds go: add to existing position, new stock, or keep as cash reserve`
+    },
+  ];
+
+  const passed = checks.filter(c=>c.pass).length;
+  const warned = checks.filter(c=>c.warn).length;
+  const verdict = warned > 0 ? `⚠ ${warned} caution flag${warned>1?'s':''} — review before proceeding` :
+                  passed >= 4 ? '✅ Good time to sell — most checks pass' :
+                  passed >= 2 ? 'ℹ Proceed with caution' : '🔴 Most checks do not support selling now';
+  const verdictCol = warned > 0 ? 'var(--yel)' : passed >= 4 ? 'var(--grn)' : passed >= 2 ? 'var(--orn)' : 'var(--red)';
+
+  const checkHtml = checks.map(c => `
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--b2)">
+      <span style="font-size:14px;flex-shrink:0;margin-top:1px">${c.pass?'✅':c.warn?'⚠️':'ℹ️'}</span>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">${c.label}</div>
+        <div style="font-size:12px;color:var(--t2);margin-top:2px">${c.text}</div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('tcl-title').textContent = `✅ Sell Checklist — ${h.symbol}`;
+  document.getElementById('tcl-body').innerHTML = `
+    <div style="padding:10px 12px;border-radius:8px;background:${verdictCol}22;border:1px solid ${verdictCol}55;margin-bottom:14px">
+      <span style="font-weight:700;color:${verdictCol}">${verdict}</span>
+    </div>
+    <div style="margin-bottom:4px;font-size:11px;font-weight:700;color:var(--t3)">
+      LTP ₹${f(ltp)} · P&L ${pnlPct>=0?'+':''}${pnlPct.toFixed(1)}% · ${days}d held · ${taxType}
+    </div>
+    ${checkHtml}
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+      <button class="btn btn-red btn-sm" onclick="closeM('tradechecklist');go('exit-seq')">🎯 Exit Sequencer</button>
+      <button class="btn btn-g btn-sm" onclick="closeM('tradechecklist');openPositionBuilder(${h.id})">📐 Position Builder</button>
+      <button class="btn btn-g btn-sm" onclick="closeM('tradechecklist')">Cancel</button>
+    </div>`;
+  openM('tradechecklist');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE 2: PORTFOLIO WHAT-IF SIMULATOR
+// Simulates selling a holding and buying a new stock — shows portfolio impact
+// ═══════════════════════════════════════════════════════════════════════════════
+let _wiHid = null;
+
+function openWhatIf(hid) {
+  _wiHid = hid;
+  const h = D.holdings.find(x=>x.id===hid);
+  if (!h) return;
+  const ltp = h.ltp || h.avgPrice;
+  const days = h.buyDate ? Math.floor((Date.now()-new Date(h.buyDate))/864e5) : 0;
+  const pnlPct = ((ltp-h.avgPrice)/h.avgPrice*100).toFixed(1);
+  document.getElementById('wi-from-info').innerHTML = `
+    <div style="display:flex;justify-content:space-between">
+      <div><span class="sym" style="font-size:13px">${h.symbol}</span> <span style="font-size:11px;color:var(--t4)">${h.name}</span></div>
+      <div style="text-align:right;font-family:var(--mono)"><span style="font-size:14px;font-weight:700">₹${f(ltp)}</span> <span style="font-size:11px;color:${pnlPct>=0?'var(--grn)':'var(--red)'}">${pnlPct>=0?'+':''}${pnlPct}%</span></div>
+    </div>
+    <div style="font-size:11px;color:var(--t3);margin-top:6px">Qty: ${h.qty} · Held ${days}d · Value: ₹${fI(ltp*h.qty)} · ${days>=365?'LTCG':'STCG'}</div>`;
+  document.getElementById('wi-sell-qty').value = '';
+  document.getElementById('wi-buy-sym').value = '';
+  document.getElementById('wi-result').style.display = 'none';
+  openM('whatif');
+}
+
+async function _calcWhatIf() {
+  const h = D.holdings.find(x=>x.id===_wiHid);
+  if (!h) return;
+  const ltp = h.ltp || h.avgPrice;
+  const sellQtyRaw = parseInt(document.getElementById('wi-sell-qty')?.value);
+  const sellQty = isNaN(sellQtyRaw) || sellQtyRaw <= 0 ? h.qty : Math.min(sellQtyRaw, h.qty);
+  const buySym = (document.getElementById('wi-buy-sym')?.value||'').trim().toUpperCase();
+  const resultEl = document.getElementById('wi-result');
+  if (!buySym || buySym.length < 2) { resultEl.style.display='none'; return; }
+
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = `<div style="color:var(--t4);font-size:12px;padding:10px 0"><div class="spin" style="display:inline-block;margin-right:8px"></div>Fetching ${buySym} price…</div>`;
+
+  const sellProceeds = sellQty * ltp;
+  const days = h.buyDate ? Math.floor((Date.now()-new Date(h.buyDate))/864e5) : 0;
+  const pnlOnSell = (ltp - h.avgPrice) * sellQty;
+  const taxType = days >= 365 ? 'LTCG' : 'STCG';
+  const taxRate = taxType === 'LTCG' ? 0.125 : 0.20;
+  const taxOwed = pnlOnSell > 0 ? Math.round(pnlOnSell * taxRate) : 0;
+  const netProceeds = sellProceeds - taxOwed;
+
+  try {
+    const buyPriceData = await fetchPrice(buySym, 'NSE').catch(()=>null);
+    const buyLtp = buyPriceData?.ltp;
+    if (!buyLtp) { resultEl.innerHTML = `<div style="color:var(--red);font-size:12px;padding:8px 0">❌ Could not fetch price for ${buySym} — check symbol</div>`; return; }
+
+    const buyQty = Math.floor(netProceeds / buyLtp);
+    const buyVal = buyQty * buyLtp;
+    const leftover = netProceeds - buyVal;
+
+    // Compute new portfolio allocation
+    const totalVal = D.holdings.reduce((s,x)=>s+(x.ltp||x.avgPrice)*x.qty,0);
+    const newTotal = totalVal - sellProceeds + buyVal;
+    const sellPct = sellProceeds/totalVal*100;
+    const buyPct = buyVal/newTotal*100;
+
+    // Check if buy stock already in portfolio
+    const existing = D.holdings.find(x=>x.symbol===buySym);
+    const newBuyWeight = existing
+      ? ((existing.ltp||existing.avgPrice)*existing.qty + buyVal) / newTotal * 100
+      : buyPct;
+
+    const maxStock = D.cfg.maxStockPct || 15;
+    const breachWarning = newBuyWeight > maxStock ? `⚠ New weight ${newBuyWeight.toFixed(1)}% > ${maxStock}% limit` : '';
+
+    resultEl.innerHTML = `
+      <div style="background:var(--s2);border-radius:10px;padding:14px;font-size:12px">
+        <div style="font-weight:700;color:var(--t1);margin-bottom:10px;font-size:13px">📊 What happens if you do this:</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+          <div style="background:rgba(240,82,82,.06);border-radius:7px;padding:10px">
+            <div style="font-size:10px;color:var(--t4);margin-bottom:5px">SELL ${h.symbol}</div>
+            <div>Qty: <strong>${sellQty} shares</strong></div>
+            <div>Proceeds: <strong>₹${fI(sellProceeds)}</strong></div>
+            <div>Tax (${taxType}): <strong style="color:${taxOwed>0?'var(--red)':'var(--grn)'}">₹${fI(taxOwed)}</strong></div>
+            <div>Net: <strong>₹${fI(netProceeds)}</strong></div>
+          </div>
+          <div style="background:rgba(45,211,111,.06);border-radius:7px;padding:10px">
+            <div style="font-size:10px;color:var(--t4);margin-bottom:5px">BUY ${buySym}</div>
+            <div>@ ₹${f(buyLtp)} · ${buyQty} shares</div>
+            <div>Value: <strong>₹${fI(buyVal)}</strong></div>
+            <div>Leftover: <strong>₹${fI(leftover)}</strong></div>
+            <div>New weight: <strong style="color:${newBuyWeight>maxStock?'var(--red)':'var(--grn)'}">${newBuyWeight.toFixed(1)}%</strong></div>
+          </div>
+        </div>
+        <div style="border-top:1px solid var(--b2);padding-top:10px">
+          <div style="color:var(--t3);margin-bottom:4px">Portfolio change:</div>
+          <div style="display:flex;gap:16px;font-size:11px;flex-wrap:wrap">
+            <span>${h.symbol}: ${sellPct.toFixed(1)}% → ${sellQty===h.qty?'0%':((h.qty-sellQty)*ltp/newTotal*100).toFixed(1)+'%'}</span>
+            <span>${buySym}: ${existing?(existing.ltp||existing.avgPrice)*existing.qty/totalVal*100+'%':' 0%'} → ${newBuyWeight.toFixed(1)}%</span>
+          </div>
+          ${breachWarning?`<div style="color:var(--red);font-weight:700;margin-top:6px">${breachWarning}</div>`:''}
+          ${taxOwed>0&&days<365&&(365-days)<=30?`<div style="color:var(--yel);margin-top:6px">⏳ Wait ${365-days}d for LTCG to save ₹${fI(Math.round(pnlOnSell*(0.20-0.125)))}</div>`:''}
+        </div>
+      </div>`;
+  } catch(e) {
+    resultEl.innerHTML = `<div style="color:var(--red);font-size:12px;padding:8px 0">❌ Error fetching data — try again</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE 3: AUTO STALE AI REFRESH
+// After each price refresh, auto-retry AI for holdings with errors or stale signals
+// ═══════════════════════════════════════════════════════════════════════════════
+let _autoAIRetryRunning = false;
+
+async function _autoRetryStaleAI() {
+  if (_autoAIRetryRunning) return;
+  const orKey = localStorage.getItem('orKey') || localStorage.getItem('apiKey');
+  if (!orKey) return;
+
+  // Only run if not mid-day (avoid hammering during active session)
+  const now = new Date();
+  const h = now.getHours();
+  // Run only between 7AM-10AM (pre-market) or if explicitly triggered
+  if (h < 7 || h > 10) return;
+
+  // Find holdings needing refresh: aiError OR signal >14 days stale
+  const staleMs = 14 * 864e5;
+  const todo = D.holdings.filter(h => {
+    if (h.aiError) return true;
+    if (!h.lastAnalysed) return true;
+    return (Date.now() - new Date(h.lastAnalysed).getTime()) > staleMs;
+  }).slice(0, 3); // max 3 per auto-run to avoid hammering
+
+  if (!todo.length) return;
+  _autoAIRetryRunning = true;
+
+  try {
+    const ctx = D._marketCtx || {};
+    for (const holding of todo) {
+      window._claudeJSONFastFailed = false;
+      holding.aiError = null;
+      await analyseHolding(holding, ctx).catch(() => {});
+      await new Promise(r => setTimeout(r, 4000));
+    }
+    save('holdings');
+    renderHoldings();
+    _updateRetryFailedBtn();
+  } catch(e) {}
+  _autoAIRetryRunning = false;
+}
+
+// Hook into refreshAll — run auto-stale check after each refresh
+const _origRefreshAll3 = window.refreshAll;
+if (typeof _origRefreshAll3 === 'function') {
+  window.refreshAll = async function() {
+    const r = await _origRefreshAll3.apply(this, arguments);
+    try { _autoRetryStaleAI(); } catch(e) {}
+    return r;
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE 4: PROMOTER PLEDGE CHANGE TRACKER
+// Tracks changes in pledge % vs last-known values, fires Telegram alert on increase
+// ═══════════════════════════════════════════════════════════════════════════════
+function _checkPledgeChanges() {
+  const stored = JSON.parse(localStorage.getItem('ss_pledge_snapshot')||'{}');
+  const now = {};
+  const alerts = [];
+
+  D.holdings.forEach(h => {
+    const current = _PLEDGE_DICT[h.symbol];
+    if (current === undefined) return;
+    now[h.symbol] = current;
+    const prev = stored[h.symbol];
+    if (prev === undefined) return; // first run — no comparison
+    const delta = current - prev;
+    if (delta >= 5) { // 5% increase in pledge = alert
+      alerts.push({ sym: h.symbol, prev, current, delta });
+    }
+  });
+
+  // Save new snapshot
+  localStorage.setItem('ss_pledge_snapshot', JSON.stringify(now));
+
+  // Fire alerts
+  alerts.forEach(a => {
+    addNotif('warn', `⚠ ${a.sym} promoter pledge increased ${a.prev}% → ${a.current}% (+${a.delta}%) — review position`, a.sym);
+    toast(`⚠ ${a.sym} pledge up +${a.delta}%`, 'warn');
+    _sendTelegramAlert(`⚠️ <b>PLEDGE INCREASE ALERT</b>\n\n<b>${a.sym}</b> promoter pledge: ${a.prev}% → <b>${a.current}%</b> (+${a.delta}%)\n\nHigh pledge = promoter funding risk. Consider reducing position.`).catch(()=>{});
+  });
+
+  return alerts;
+}
+
+// Render pledge status for all holdings in a dashboard card
+function _renderPledgeDashboard() {
+  const pledged = D.holdings.filter(h => (_PLEDGE_DICT[h.symbol]||0) > 0)
+    .map(h => ({ h, pct: _PLEDGE_DICT[h.symbol] }))
+    .sort((a,b) => b.pct - a.pct);
+
+  if (!pledged.length) return;
+
+  // Add pledge status to the daily brief pre-market section
+  const pmEl = document.getElementById('brief-premarket');
+  if (!pmEl) return;
+
+  const highPledge = pledged.filter(p => p.pct >= 30);
+  if (!highPledge.length) return;
+
+  const existingCard = pmEl.querySelector('[data-pledge-card]');
+  if (existingCard) return; // already rendered
+
+  const card = document.createElement('div');
+  card.setAttribute('data-pledge-card', '1');
+  card.className = 'pn';
+  card.style.cssText = 'flex:1;min-width:200px;border-color:rgba(240,82,82,.3);margin-top:12px';
+  card.innerHTML = `
+    <div class="pn-h"><div class="pn-t" style="color:var(--red)">🔒 High Pledge Holdings</div></div>
+    <div class="pn-b" style="display:flex;flex-direction:column;gap:6px">
+      ${highPledge.map(p=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--b2)">
+        <span class="sym" style="font-size:12px;cursor:pointer" onclick="openDetail(${p.h.id})">${p.h.symbol}</span>
+        <span style="font-size:11px;font-weight:700;color:${p.pct>=50?'var(--red)':p.pct>=30?'var(--orn)':'var(--yel)'}">🔒 ${p.pct}% pledged</span>
+      </div>`).join('')}
+    </div>`;
+  pmEl.appendChild(card);
+}
+
+// Run pledge checks on app load and daily brief
+setTimeout(() => { try { _checkPledgeChanges(); } catch(e) {} }, 3000);
+
+const _origRenderDailyBrief2 = window.renderDailyBrief;
+if (typeof _origRenderDailyBrief2 === 'function') {
+  window.renderDailyBrief = async function() {
+    await _origRenderDailyBrief2.apply(this, arguments);
+    try { _renderPledgeDashboard(); } catch(e) {}
+  };
+}
 
 // ── Watchlist Select-Mode & Targeted Analyze ──────────────────────────────────
 let _wlSelectMode = false;
