@@ -1105,6 +1105,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-div">Screeners</div>
         <div class="tn-drop-item" onclick="go('screener')">🔍 Nifty 500 Screener</div>
         <div class="tn-drop-item" onclick="go('52week')">📊 52-Week H/L Screener</div>
+        <div class="tn-drop-item" onclick="go('ipo-tracker')" style="color:var(--ac2);font-weight:600">🚀 IPO Tracker</div>
         <div class="tn-drop-item" onclick="go('watchlist-builder')">🔭 Watchlist Builder</div>
         <div class="tn-drop-sep"></div>
         <div class="tn-drop-div">Deep Analysis</div>
@@ -1514,11 +1515,18 @@ textarea.fi{resize:vertical;min-height:70px;}
         <button class="btn btn-g btn-sm" id="sent-run-all-btn" onclick="runSentimentAll()" title="AI-score news sentiment for all holdings">🗞 Sentiment</button>
         <button class="btn btn-g btn-sm" onclick="optimizeAllAtrStops()" title="Set all stop-losses to volatility-adjusted ATR levels (1.5× 14-day ATR)">⚡ ATR Stops</button>
         <button class="btn btn-yel btn-sm" id="reanalyse-stale-btn" onclick="reanalyseStale()" title="Re-analyse holdings whose AI signal is >7 days old">🔄 Refresh Stale</button>
+        <button class="btn btn-red btn-sm" id="retry-failed-ai-btn" onclick="_retryAllFailedAI()" title="Retry AI analysis for all holdings with errors" style="display:none">↻ Retry Failed (<span id="retry-failed-count">0</span>)</button>
         <button class="btn btn-g btn-sm" onclick="_batchAIThesis()" title="Generate one-line AI investment thesis for holdings without notes">✨ AI Notes</button>
         <button class="btn btn-g" onclick="go('import')">⬆ Import CSV</button>
         <button class="btn btn-red btn-sm" onclick="clearSection('holdings')">🗑 Clear</button>
         <button class="btn btn-p" onclick="openSpotlight('holdings')">+ Add Stock</button>
       </div>
+    </div>
+    <!-- Bear Market Regime Warning Banner -->
+    <div id="bear-regime-banner" style="display:none;margin-bottom:10px;padding:9px 14px;background:rgba(240,82,82,.07);border:1px solid rgba(240,82,82,.25);border-radius:8px;font-size:12px;color:var(--red);display:flex;align-items:center;gap:10px">
+      <span style="font-weight:700">🔴 BEAR MARKET</span>
+      <span style="color:var(--t2)" id="bear-banner-detail"></span>
+      <span style="margin-left:auto;font-size:10px;color:var(--t4)">BUY signals are flagged ⚠ in bear market</span>
     </div>
     <!-- Portfolio Summary Strip -->
     <div class="port-summary-strip" id="holdings-strip">
@@ -4325,7 +4333,36 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
   </div>
 
+  <!-- ═══ IPO TRACKER ═══════════════════════════════════════════ -->
+  <div class="sec" id="sec-ipo-tracker">
+    <div class="sec-head">
+      <div class="sec-title">🚀 IPO Tracker</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-g btn-sm" onclick="_fetchIPOs(true)">↻ Refresh</button>
+        <button class="btn btn-p btn-sm" onclick="_addManualIPO()">+ Add IPO</button>
+      </div>
+    </div>
+    <div id="ipo-stats" style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap"></div>
+    <div id="ipo-content"><div style="padding:40px;text-align:center;color:var(--t4)"><div class="spin" style="margin:0 auto 12px"></div>Loading IPOs…</div></div>
+  </div>
+
 </div><!-- /main -->
+
+<!-- ═══ SMART POSITION BUILDER MODAL ════════════════════════════════ -->
+<div class="mb" id="m-posbuilder">
+  <div class="md" style="max-width:500px">
+    <div class="md-h"><div class="md-title">📐 Smart Position Builder</div><button class="x-btn" onclick="closeM('posbuilder')">✕</button></div>
+    <div class="md-b" style="padding:20px">
+      <div id="pb-stock-info" style="margin-bottom:16px;padding:10px 14px;background:var(--s2);border-radius:8px;font-size:13px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div class="fg" style="margin:0"><label class="fl">Add Shares</label><input type="number" class="fi" id="pb-add-qty" placeholder="e.g. 50" oninput="_calcPositionBuilder()" min="1" step="1"></div>
+        <div class="fg" style="margin:0"><label class="fl">Or Add Amount (₹)</label><input type="number" class="fi" id="pb-add-amt" placeholder="e.g. 10000" oninput="_calcPositionBuilderAmt()" min="0"></div>
+      </div>
+      <div id="pb-result" style="display:none;background:var(--s2);border-radius:10px;padding:14px;font-size:13px;line-height:2"></div>
+      <div id="pb-warning" style="display:none;margin-top:10px;padding:8px 12px;background:rgba(240,82,82,.07);border:1px solid rgba(240,82,82,.2);border-radius:7px;font-size:11px;color:var(--red)"></div>
+    </div>
+  </div>
+</div>
 
 <!-- ═══ FAB SEARCH ═══════════════════════════════════════ -->
 <div class="fab">
@@ -5712,6 +5749,7 @@ function go(id) {
   if(id==='rebalancer') renderRebalancer();
   if(id==='divcal') renderDivCalendar();
   if(id==='deals') renderDeals();
+  if(id==='ipo-tracker') _fetchIPOs();
   if(id==='strategies') renderStrategiesSection();
   if(id==='riskpro') renderRiskPro();
   if(id==='attribution') renderAttribution();
@@ -7683,6 +7721,7 @@ function renderHoldings() {
               <div class="act-more-item" onclick="openNoteModal(${h.id})"><span class="act-more-icon">${h.note?'📝':'📋'}</span>${h.note?'Edit Note':'Add Note'}</div>
               <div class="act-more-item" onclick="openTrailSLModal(${h.id})" style="color:${h.trailSlPct?'var(--cyn)':'inherit'}"><span class="act-more-icon">${h.trailSlPct?'⟳':'📍'}</span>${h.trailSlPct?'Trailing SL · '+h.trailSlPct+'%':'Set Trailing SL'}</div>
               <div class="act-more-item" onclick="openSwapModal(${h.id})"><span class="act-more-icon">↔</span>Swap Calculator</div>
+              <div class="act-more-item" onclick="openPositionBuilder(${h.id})"><span class="act-more-icon">📐</span>Position Builder</div>
               <div class="act-more-item" onclick="openCaModal(${h.id})"><span class="act-more-icon">📋</span>Corporate Action</div>
             </div>
           </div>
@@ -11545,6 +11584,47 @@ function _sdFundContent(h) {
     </div>`;
   })() : '';
   el.innerHTML = partialBadge + funds.map(sec=>`<div class="sd-fund-section"><h4>${sec.title}</h4>${sec.rows.map(([k,v])=>`<div class="sd-fund-row"><span class="sd-fund-key">${k}</span><span class="sd-fund-val">${v}</span></div>`).join('')}</div>`).join('') + fsBlock;
+  // Append earnings surprise history (non-blocking)
+  _renderEarningsSurprise(h, el);
+}
+
+async function _renderEarningsSurprise(h, containerEl) {
+  if (!h || !containerEl) return;
+  const yfSym = h.yfTicker || _symMapLookup(h.symbol) || (h.exchange==='BSE' ? h.symbol+'.BO' : h.symbol+'.NS');
+  try {
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yfSym)}?modules=earningsHistory,earningsTrend`;
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+    const raw = await res.json();
+    const data = JSON.parse(raw.contents || '{}');
+    const history = data?.quoteSummary?.result?.[0]?.earningsHistory?.history || [];
+    if (!history.length) return;
+    const rows = history.slice(-4).reverse().map(q => {
+      const period = q.period || '—';
+      const est = q.epsEstimate?.raw;
+      const actual = q.epsActual?.raw;
+      const surprise = q.surprisePercent?.raw;
+      const beat = surprise != null ? surprise > 0 : null;
+      const col = beat === true ? 'var(--grn)' : beat === false ? 'var(--red)' : 'var(--t4)';
+      const icon = beat === true ? '✅' : beat === false ? '❌' : '—';
+      return `<tr>
+        <td class="mn" style="padding:5px 8px;font-size:11px">${period}</td>
+        <td class="mn" style="padding:5px 8px;font-size:11px">${est!=null?'₹'+est.toFixed(2):'—'}</td>
+        <td class="mn" style="padding:5px 8px;font-size:11px;font-weight:600">${actual!=null?'₹'+actual.toFixed(2):'—'}</td>
+        <td class="mn" style="padding:5px 8px;font-size:11px;color:${col};font-weight:700">${surprise!=null?(surprise>0?'+':'')+surprise.toFixed(1)+'%':icon} ${icon}</td>
+      </tr>`;
+    }).join('');
+    if (!rows) return;
+    const block = document.createElement('div');
+    block.className = 'sd-fund-section';
+    block.innerHTML = `<h4>📅 Earnings Surprise History (Last 4Q)</h4>
+      <table class="tbl" style="width:100%">
+        <thead><tr><th>Quarter</th><th class="mn">EPS Est.</th><th class="mn">EPS Actual</th><th class="mn">Surprise</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="font-size:10px;color:var(--t4);margin-top:6px">✅ Beat · ❌ Miss · Source: Yahoo Finance</div>`;
+    containerEl.appendChild(block);
+  } catch(e) {}
 }
 
 async function _sdFetchFund() {
@@ -25991,6 +26071,379 @@ async function _retryHoldingAI(hid) {
   save('holdings');
   renderHoldings();
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: BEAR MARKET SIGNAL OVERRIDE
+// In BEAR/DEFENSIVE regime, flags BUY signals with ⚠ and shows banner on holdings
+// ═══════════════════════════════════════════════════════════════════════════════
+const _origTagSig = window.tagSig;
+if (typeof _origTagSig === 'function') {
+  window.tagSig = function(s) {
+    const base = _origTagSig(s);
+    if (!_marketRegime) return base;
+    const isBear = _marketRegime.label.includes('BEAR') || _marketRegime.label.includes('DEFENSIVE');
+    if (!isBear) return base;
+    const u = (s||'').toUpperCase();
+    const isBuy = u.includes('STRONG BUY') || u === 'BUY' || u === 'BUY MORE';
+    if (!isBuy) return base;
+    return base + `<span title="Bear market — treat BUY calls with caution" style="font-size:9px;color:var(--orn);margin-left:3px;cursor:help">⚠ BEAR</span>`;
+  };
+}
+
+function _updateBearBanner() {
+  const banner = document.getElementById('bear-regime-banner');
+  if (!banner) return;
+  if (!_marketRegime) { banner.style.display = 'none'; return; }
+  const isBear = _marketRegime.label.includes('BEAR') || _marketRegime.label.includes('DEFENSIVE');
+  banner.style.display = isBear ? 'flex' : 'none';
+  const detail = document.getElementById('bear-banner-detail');
+  if (detail) detail.textContent = _marketRegime.detail?.slice(0, 100) || '';
+}
+
+// Hook into renderHoldings to update bear banner
+const _origRenderHoldings = window.renderHoldings;
+if (typeof _origRenderHoldings === 'function') {
+  window.renderHoldings = function() {
+    _origRenderHoldings.apply(this, arguments);
+    try { _updateBearBanner(); _updateRetryFailedBtn(); } catch(e) {}
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: RETRY ALL FAILED AI
+// One-click to re-queue all holdings with aiError
+// ═══════════════════════════════════════════════════════════════════════════════
+function _updateRetryFailedBtn() {
+  const failed = D.holdings.filter(h => h.aiError);
+  const btn = document.getElementById('retry-failed-ai-btn');
+  const cnt = document.getElementById('retry-failed-count');
+  if (!btn) return;
+  btn.style.display = failed.length ? 'inline-flex' : 'none';
+  if (cnt) cnt.textContent = failed.length;
+}
+
+async function _retryAllFailedAI() {
+  const failed = D.holdings.filter(h => h.aiError);
+  if (!failed.length) { toast('No failed AI holdings found', 'info'); return; }
+  const btn = document.getElementById('retry-failed-ai-btn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+  toast(`↻ Retrying AI for ${failed.length} holding${failed.length>1?'s':''}…`, 'info');
+  const ctx = D._marketCtx || await getMarketContext().catch(() => ({}));
+  const BATCH = 3;
+  for (let i = 0; i < failed.length; i += BATCH) {
+    window._claudeJSONFastFailed = false;
+    const batch = failed.slice(i, i + BATCH);
+    await Promise.allSettled(batch.map(h => {
+      h.aiError = null;
+      return analyseHolding(h, ctx).catch(() => {});
+    }));
+    if (i + BATCH < failed.length) await new Promise(r => setTimeout(r, 4000));
+  }
+  save('holdings');
+  renderHoldings();
+  const stillFailed = D.holdings.filter(h => h.aiError).length;
+  toast(stillFailed ? `⚠ ${stillFailed} still failing — check AI key` : `✅ All ${failed.length} holdings re-analysed`, stillFailed ? 'warn' : 'ok');
+  if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: SECTOR RECLASSIFICATION
+// Remaps holdings from 'Others' to correct sectors based on known NSE symbols
+// ═══════════════════════════════════════════════════════════════════════════════
+const _SECTOR_REMAP = {
+  // Energy
+  SUZLON:'Energy', INOXWIND:'Energy', NTPC:'Energy', POWERGRID:'Energy',
+  GAIL:'Energy', IREDA:'Energy', NHPC:'Energy', TATAPOWER:'Energy',
+  SJVN:'Energy', TORNTPOWER:'Energy', ADANIGREEN:'Energy', CESC:'Energy',
+  RTNPOWER:'Energy', RECLTD:'Energy', IRFC:'Energy', IRCON:'Energy',
+  // Defence
+  HAL:'Defence', BDL:'Defence', BEL:'Defence', MTAR:'Defence',
+  COCHINSHIP:'Defence', MIDHANI:'Defence', GRSE:'Defence', PARAS:'Defence',
+  // Banking / Finance
+  CGCL:'Finance', NAM_INDIA:'Finance', RADICO:'FMCG',
+  // IT
+  COFORGE:'IT',
+  // Auto
+  GABRIEL:'Auto', TMPV:'Auto',
+  // Infrastructure
+  HSCL:'Infrastructure', ORIENTCEM:'Infrastructure',
+  // Metals / Mining
+  JWL:'Metals', JINDWORLD:'Metals',
+  // Shipping
+  GESHIP:'Shipping',
+  // FMCG
+  UBL:'FMCG', ITC:'FMCG', LTFOODS:'FMCG',
+  // Misc
+  SMFIL:'SME', SIS:'Services', HITECH:'Infrastructure',
+};
+
+function _reclassifySectors(silent = false) {
+  let changed = 0;
+  D.holdings.forEach(h => {
+    const mapped = _SECTOR_REMAP[h.symbol] || _SECTOR_REMAP[h.symbol.replace(/-/g,'_')];
+    if (mapped && h.sector !== mapped) { h.sector = mapped; changed++; }
+  });
+  D.watchlist.forEach(w => {
+    const mapped = _SECTOR_REMAP[w.symbol] || _SECTOR_REMAP[w.symbol.replace(/-/g,'_')];
+    if (mapped && w.sector !== mapped) { w.sector = mapped; changed++; }
+  });
+  if (changed) {
+    save('holdings'); save('watchlist');
+    if (!silent) { toast(`✅ Sector fix: ${changed} stocks reclassified`, 'ok'); renderHoldings(); }
+  }
+  return changed;
+}
+
+// Run on load silently
+(function() { setTimeout(() => { try { _reclassifySectors(true); } catch(e) {} }, 2000); })();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: SMART POSITION BUILDER
+// Calculates new avg, weight, breakeven when adding to a position
+// ═══════════════════════════════════════════════════════════════════════════════
+let _pbHid = null;
+
+function openPositionBuilder(hid) {
+  _pbHid = hid;
+  const h = D.holdings.find(x => x.id === hid);
+  if (!h) return;
+  const ltp = h.ltp || h.avgPrice;
+  const totalVal = D.holdings.reduce((s,x) => s + (x.ltp||x.avgPrice)*x.qty, 0);
+  const curPct = totalVal ? ((ltp*h.qty/totalVal)*100).toFixed(1) : 0;
+  const pnlPct = ((ltp-h.avgPrice)/h.avgPrice*100).toFixed(1);
+  document.getElementById('pb-stock-info').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><span class="sym">${h.symbol}</span><span style="font-size:11px;color:var(--t4);margin-left:8px">${h.name}</span></div>
+      <div style="text-align:right;font-family:var(--mono)">
+        <div style="font-size:14px;font-weight:700">₹${f(ltp)}</div>
+        <div style="font-size:11px;${pnlPct>=0?'color:var(--grn)':'color:var(--red)'}">${pnlPct>=0?'+':''}${pnlPct}%</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;font-size:11px;color:var(--t3)">
+      <div>Qty: <strong style="color:var(--t1)">${h.qty}</strong></div>
+      <div>Avg: <strong style="color:var(--t1)">₹${f(h.avgPrice)}</strong></div>
+      <div>Weight: <strong style="color:var(--t1)">${curPct}%</strong></div>
+    </div>`;
+  document.getElementById('pb-add-qty').value = '';
+  document.getElementById('pb-add-amt').value = '';
+  document.getElementById('pb-result').style.display = 'none';
+  document.getElementById('pb-warning').style.display = 'none';
+  openM('posbuilder');
+}
+
+function _calcPositionBuilder() {
+  const h = D.holdings.find(x => x.id === _pbHid);
+  if (!h) return;
+  const ltp = h.ltp || h.avgPrice;
+  const addQty = parseInt(document.getElementById('pb-add-qty').value) || 0;
+  if (addQty <= 0) { document.getElementById('pb-result').style.display='none'; return; }
+  // Sync amount field
+  document.getElementById('pb-add-amt').value = (addQty * ltp).toFixed(0);
+  _showPBResult(h, ltp, addQty);
+}
+
+function _calcPositionBuilderAmt() {
+  const h = D.holdings.find(x => x.id === _pbHid);
+  if (!h) return;
+  const ltp = h.ltp || h.avgPrice;
+  const addAmt = parseFloat(document.getElementById('pb-add-amt').value) || 0;
+  if (addAmt <= 0) { document.getElementById('pb-result').style.display='none'; return; }
+  const addQty = Math.floor(addAmt / ltp);
+  document.getElementById('pb-add-qty').value = addQty;
+  _showPBResult(h, ltp, addQty);
+}
+
+function _showPBResult(h, ltp, addQty) {
+  const addAmt = addQty * ltp;
+  const newQty = h.qty + addQty;
+  const newInvested = h.qty * h.avgPrice + addQty * ltp;
+  const newAvg = newInvested / newQty;
+  const newBreakeven = h.stopLoss ? Math.max(newAvg * 0.88, h.stopLoss) : newAvg * 0.88;
+  const totalVal = D.holdings.reduce((s,x) => s + (x.ltp||x.avgPrice)*x.qty, 0) + addAmt;
+  const newPct = (newQty * ltp / totalVal * 100).toFixed(1);
+  const pnlAtNewAvg = ((ltp - newAvg) / newAvg * 100).toFixed(1);
+  const maxStock = D.cfg.maxStockPct || 15;
+  const breachesLimit = parseFloat(newPct) > maxStock;
+
+  const rows = [
+    ['New Qty', `${newQty} shares (+${addQty})`],
+    ['New Avg Cost', `₹${f(newAvg)} (was ₹${f(h.avgPrice)})`],
+    ['P&L at New Avg', `${pnlAtNewAvg>=0?'+':''}${pnlAtNewAvg}% vs LTP ₹${f(ltp)}`],
+    ['New Portfolio Weight', `${newPct}% (limit: ${maxStock}%)`],
+    ['Amount Needed', `₹${fI(addAmt)}`],
+    ['New Stop Loss (88%)', `₹${f(newAvg * 0.88)}`],
+  ];
+
+  const el = document.getElementById('pb-result');
+  el.style.display = 'block';
+  el.innerHTML = rows.map(([k,v])=>`<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--b2);padding:4px 0">
+    <span style="color:var(--t3);font-size:12px">${k}</span>
+    <span style="font-weight:600;font-size:12px;color:var(--t1)">${v}</span>
+  </div>`).join('');
+
+  const warn = document.getElementById('pb-warning');
+  if (breachesLimit) {
+    warn.style.display = 'block';
+    warn.innerHTML = `⚠ Adding ${addQty} shares takes ${h.symbol} to ${newPct}% — above your ${maxStock}% limit. Consider adding only ${Math.floor((maxStock/100*totalVal/ltp) - h.qty)} more shares to stay within limit.`;
+  } else {
+    warn.style.display = 'none';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: IPO TRACKER
+// Fetches current IPOs from NSE + lets users add manually. AI analysis per IPO.
+// ═══════════════════════════════════════════════════════════════════════════════
+let _ipoData = [];
+
+async function _fetchIPOs(force = false) {
+  const el = document.getElementById('ipo-content');
+  if (!el) return;
+  if (!force && _ipoData.length) { _renderIPOs(); return; }
+
+  el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t4)"><div class="spin" style="margin:0 auto 12px"></div>Fetching IPO data from NSE…</div>';
+
+  try {
+    // Try NSE IPO API via proxy
+    const url = 'https://www.nseindia.com/api/ipo-current-allotment-detail';
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+    const raw = await res.json();
+    const data = JSON.parse(raw.contents || '[]');
+    if (Array.isArray(data) && data.length) {
+      _ipoData = data.slice(0, 20).map(d => ({
+        name: d.companyName || d.name || '—',
+        sym: d.symbol || '—',
+        openDate: d.openDate || d.ipoOpenDate || '—',
+        closeDate: d.closeDate || d.ipoCloseDate || '—',
+        price: d.issuePrice || d.price || '—',
+        lotSize: d.lotSize || '—',
+        gmp: null, // GMP not available from NSE API
+        status: d.listingDate ? (new Date(d.listingDate) < new Date() ? 'Listed' : 'Upcoming') : 'Open',
+        listDate: d.listingDate || '—',
+        subscription: d.totalSubscription || null,
+        source: 'NSE'
+      }));
+    }
+  } catch(e) {}
+
+  // If NSE API fails, use a curated list of current/recent IPOs (updated periodically)
+  if (!_ipoData.length) {
+    _ipoData = JSON.parse(localStorage.getItem('ss_ipo_manual') || '[]');
+    if (!_ipoData.length) {
+      el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--t4)">
+        <div style="font-size:32px;margin-bottom:12px">📋</div>
+        <div style="font-size:13px;margin-bottom:8px">NSE IPO feed unavailable (rate-limited)</div>
+        <div style="font-size:11px;margin-bottom:16px">Add IPOs manually to track them with AI analysis</div>
+        <button class="btn btn-p" onclick="_addManualIPO()">+ Add IPO</button>
+      </div>`;
+      return;
+    }
+  }
+  _renderIPOs();
+}
+
+function _renderIPOs() {
+  const el = document.getElementById('ipo-content');
+  const statsEl = document.getElementById('ipo-stats');
+  if (!el) return;
+
+  const open = _ipoData.filter(i => i.status === 'Open' || i.status === 'Upcoming');
+  const listed = _ipoData.filter(i => i.status === 'Listed');
+
+  if (statsEl) {
+    statsEl.innerHTML = [
+      ['🟢 Open / Upcoming', open.length],
+      ['✅ Recently Listed', listed.length],
+      ['📋 Total Tracked', _ipoData.length],
+    ].map(([l,v])=>`<div class="sc c1" style="min-width:120px"><div class="sc-lbl">${l}</div><div class="sc-val">${v}</div></div>`).join('');
+  }
+
+  if (!_ipoData.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--t4)">No IPOs tracked. Click + Add IPO.</div>'; return; }
+
+  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
+    ${_ipoData.map((ipo,i) => {
+      const statusCol = ipo.status==='Open'?'var(--grn)':ipo.status==='Listed'?'var(--ac)':'var(--yel)';
+      return `<div class="pn" id="ipo-card-${i}">
+        <div style="display:grid;grid-template-columns:1fr auto;gap:12px;padding:12px 16px;align-items:start">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span class="sym" style="font-size:14px">${ipo.sym!=='—'?ipo.sym:ipo.name.split(' ')[0]}</span>
+              <span style="font-size:11px;font-weight:700;color:${statusCol};padding:2px 8px;border-radius:10px;background:${statusCol}22">${ipo.status}</span>
+              ${ipo.gmp?`<span style="font-size:11px;color:var(--grn);font-weight:700">GMP: ₹${ipo.gmp}</span>`:''}
+            </div>
+            <div style="font-size:12px;color:var(--t2);margin-top:3px">${ipo.name}</div>
+            <div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;font-size:11px;color:var(--t3)">
+              ${ipo.price!=='—'?`<span>💰 Price: <strong style="color:var(--t1)">₹${ipo.price}</strong></span>`:''}
+              ${ipo.openDate!=='—'?`<span>📅 Open: <strong style="color:var(--t1)">${ipo.openDate}</strong></span>`:''}
+              ${ipo.closeDate!=='—'?`<span>📅 Close: <strong style="color:var(--t1)">${ipo.closeDate}</strong></span>`:''}
+              ${ipo.lotSize!=='—'?`<span>📦 Lot: <strong style="color:var(--t1)">${ipo.lotSize}</strong></span>`:''}
+              ${ipo.subscription?`<span>📊 Sub: <strong style="color:var(--ac)">${ipo.subscription}×</strong></span>`:''}
+              ${ipo.listDate!=='—'?`<span>📈 Lists: <strong style="color:var(--t1)">${ipo.listDate}</strong></span>`:''}
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;min-width:90px">
+            <button class="btn btn-p btn-xs" onclick="_ipoAIAnalysis(${i})">🤖 AI Verdict</button>
+            <button class="btn btn-red btn-xs" onclick="_removeIPO(${i})">✕ Remove</button>
+          </div>
+        </div>
+        <div id="ipo-ai-${i}" style="display:none;padding:0 16px 12px"></div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+async function _ipoAIAnalysis(idx) {
+  const ipo = _ipoData[idx];
+  if (!ipo) return;
+  const el = document.getElementById(`ipo-ai-${idx}`);
+  if (!el) return;
+  const btn = document.querySelector(`#ipo-card-${idx} button`);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
+  el.style.display = 'block';
+  el.innerHTML = '<div class="ai-ld"><div class="spin"></div> Getting AI verdict…</div>';
+
+  const prompt = `IPO analysis for Indian retail investor. Company: ${ipo.name} (${ipo.sym}).
+Issue Price: ₹${ipo.price}. Lot Size: ${ipo.lotSize}. Status: ${ipo.status}. Subscription: ${ipo.subscription||'?'}×.
+Market regime: ${_marketRegime?.label || 'Neutral'}.
+Provide: (1) APPLY / AVOID / WAIT FOR LISTING verdict, (2) key business strength, (3) main risk, (4) listing gain estimate if any. 3-4 sentences total. Be specific.`;
+
+  try {
+    const r = await claudeJSON(prompt);
+    const text = typeof r === 'string' ? r.replace(/^\{.*\}$/s,'').trim() || r : JSON.stringify(r);
+    const verdict = text.includes('APPLY')?'🟢 APPLY':text.includes('AVOID')?'🔴 AVOID':text.includes('WAIT')?'🟡 WAIT FOR LISTING':'—';
+    el.innerHTML = `<div style="border-top:1px solid var(--b1);padding-top:10px">
+      <div style="font-weight:700;margin-bottom:6px;color:var(--t1)">${verdict} · AI Analysis</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.7">${text}</div>
+    </div>`;
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--t4);font-size:12px">AI analysis failed — check API key in Settings.</div>';
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '🔄 Re-analyse'; }
+}
+
+function _addManualIPO() {
+  const name = prompt('Company name:'); if (!name) return;
+  const price = prompt('Issue price (₹):') || '—';
+  const openDate = prompt('Open date (DD-Mon-YYYY):') || '—';
+  const closeDate = prompt('Close date (DD-Mon-YYYY):') || '—';
+  const lotSize = prompt('Lot size:') || '—';
+  const gmp = prompt('GMP (₹, or leave blank):') || null;
+  _ipoData.unshift({ name, sym: name.split(' ')[0].toUpperCase(), price, openDate, closeDate, lotSize, gmp: gmp?+gmp:null, status:'Open', listDate:'—', source:'Manual' });
+  const manuals = _ipoData.filter(i=>i.source==='Manual');
+  localStorage.setItem('ss_ipo_manual', JSON.stringify(manuals));
+  _renderIPOs();
+}
+
+function _removeIPO(idx) {
+  _ipoData.splice(idx, 1);
+  const manuals = _ipoData.filter(i=>i.source==='Manual');
+  localStorage.setItem('ss_ipo_manual', JSON.stringify(manuals));
+  _renderIPOs();
+}
+
+// Init: update retry button count on load
+setTimeout(() => { try { _updateRetryFailedBtn(); _updateBearBanner(); } catch(e) {} }, 2000);
 
 // ── Watchlist Select-Mode & Targeted Analyze ──────────────────────────────────
 let _wlSelectMode = false;
