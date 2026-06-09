@@ -26853,8 +26853,8 @@ function _calcInsurance() {
   const sigma = 0.18; // Nifty historical vol ~18%
   const r = 0.065;
 
-  // Strike = Nifty * (1 - protPct/100) — ATM protection at protPct below current
-  const strikeAtProtection = Math.round(nifty * (1 - protPct/100 / portBeta));
+  // Strike = Nifty * (1 - protPct/100) — simple OTM put; beta adjusts lots needed, not strike
+  const strikeAtProtection = Math.round(nifty * (1 - protPct/100));
   // Also calculate OTM put (10% below) and ATM put
   const strikesAndPremiums = [
     { label: `ATM Put (${nifty})`, strike: nifty },
@@ -26936,7 +26936,7 @@ function _renderRecoveryAdvisor() {
   const sel = document.getElementById('rec-stock-sel');
   const el  = document.getElementById('rec-content');
   if (!el) return;
-  const hid = parseInt(sel?.value);
+  const hid = parseFloat(sel?.value);
   if (!hid) return;
   const h = D.holdings.find(x=>x.id===hid);
   if (!h) return;
