@@ -25997,6 +25997,8 @@ async function _wlAnalyseAll() {
   save('watchlist');
   renderWatchlist();
   toast(`✅ Watchlist analysis done — ${done}/${D.watchlist.length} updated`, 'ok');
+  // Background RSI compute so RSI sort works — non-blocking, max 6 stocks
+  _batchComputeWlRSI(D.watchlist).catch(()=>{});
 }
 
 async function _wlAnalyseSelected() {
@@ -26026,6 +26028,33 @@ async function _wlAnalyseSelected() {
   renderWatchlist();
   _wlToggleSelectMode(); // exit select mode
   toast(`✅ Done — ${done}/${stocks.length} watchlist stocks updated`, 'ok');
+  _batchComputeWlRSI(stocks).catch(()=>{});
+}
+
+// ── Batch RSI computation for watchlist stocks ─────────────────────────────────
+// Fetches historical data for up to 6 watchlist stocks missing RSI — non-blocking.
+// Runs after _wlAnalyseAll / _wlAnalyseSelected so RSI sort works immediately.
+async function _batchComputeWlRSI(stocks) {
+  const staleMs = 18 * 60 * 60 * 1000;
+  const todo = (stocks || D.watchlist).filter(w => {
+    if (!w.rsi) return true;
+    if (!w.rsiAt) return true;
+    return (Date.now() - new Date(w.rsiAt).getTime()) > staleMs;
+  }).slice(0, 6);
+  if (!todo.length) return;
+  let changed = false;
+  for (const w of todo) {
+    try {
+      const yfSym = w.yfTicker || _symMapLookup(w.symbol) || (w.exchange === 'BSE' ? w.symbol + '.BO' : w.symbol + '.NS');
+      const series = await fetchYFSeries(yfSym, '3mo', '1d').catch(() => null);
+      if (!series || series.length < 16) continue;
+      const rsiArr = _calcRSI(series.map(p => p.c), 14);
+      const last = rsiArr.filter(v => v != null).slice(-1)[0];
+      if (last != null) { w.rsi = +last.toFixed(1); w.rsiAt = new Date().toISOString(); changed = true; }
+    } catch(e) {}
+    await new Promise(r => setTimeout(r, 600));
+  }
+  if (changed) { save('watchlist'); renderWatchlist(); }
 }
 
 // ── D: Row density toggle ─────────────────────────────────────────────────────
