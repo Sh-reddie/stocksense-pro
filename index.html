@@ -8465,16 +8465,19 @@ async function analyseHolding(h,ctx,{forceRefresh=false}={}) {
   let prevBlock = '';
   if (h.lastAnalysed && (h.signal || h.aiReasoning)) {
     const _daysAgo = Math.floor((Date.now()-new Date(h.lastAnalysed))/(864e5));
-    const _ageStr = _daysAgo===0?'today':_daysAgo===1?'yesterday':`${_daysAgo}d ago`;
+    const _ageStr = _daysAgo===0?'today':_daysAgo===1?'yesterday':_daysAgo+'d ago';
+    // Sanitise AI-generated strings — strip backticks and template literal syntax to
+    // prevent breaking the outer template literal, truncate to keep prompt compact
+    const _safe = (s, max=120) => s ? s.replace(/`/g,"'").replace(/\$\{/g,'${').slice(0, max) + (s.length > max ? '…' : '') : '';
     const _prevLines = [];
-    if (h.signal)       _prevLines.push(`Signal: ${h.signal}${h.confidence?' (conf '+h.confidence+'/10)':''}`);
-    if (h.stopLoss)     _prevLines.push(`SL: ₹${f(h.stopLoss)}`);
-    if (h.target1)      _prevLines.push(`T1: ₹${f(h.target1)}${h.t1Timeline?' ('+h.t1Timeline+')':''}`);
-    if (h.aiReasoning)  _prevLines.push(`Reasoning: "${h.aiReasoning}"`);
-    if (h.bullCase)     _prevLines.push(`Bull: "${h.bullCase}"`);
-    if (h.bearCase)     _prevLines.push(`Bear: "${h.bearCase}"`);
+    if (h.signal)       _prevLines.push('Signal: '+h.signal+(h.confidence?' (conf '+h.confidence+'/10)':''));
+    if (h.stopLoss)     _prevLines.push('SL: ₹'+f(h.stopLoss));
+    if (h.target1)      _prevLines.push('T1: ₹'+f(h.target1)+(h.t1Timeline?' ('+h.t1Timeline+')':''));
+    if (h.aiReasoning)  _prevLines.push('Reasoning: "'+_safe(h.aiReasoning)+'"');
+    if (h.bullCase)     _prevLines.push('Bull: "'+_safe(h.bullCase, 100)+'"');
+    if (h.bearCase)     _prevLines.push('Bear: "'+_safe(h.bearCase, 100)+'"');
     if (_prevLines.length) {
-      prevBlock = `\nPREV ANALYSIS (${_ageStr}): ${_prevLines.join(' | ')}\nNOTE: If signal changes from previous, state WHY in reasoning (price level, catalyst, or thesis break). If unchanged, confirm or tighten levels.`;
+      prevBlock = '\nPREV ANALYSIS ('+_ageStr+'): '+_prevLines.join(' | ')+'\nNOTE: If signal changes from previous, state WHY in reasoning (price level, catalyst, or thesis break). If unchanged, confirm or tighten levels.';
     }
   }
   const prompt=`Senior Indian equity analyst (NSE/BSE). Decision-support for ${h.symbol} (${h.exchange}). Not SEBI-registered advice.
