@@ -1709,10 +1709,11 @@ textarea.fi{resize:vertical;min-height:70px;}
           <option value="sym-za">🔤 Symbol Z → A</option>
           <option value="chg-desc">📅 Today's Movers</option>
           <option value="52w-asc">📉 52W Low (Most Upside)</option>
+          <option value="rsi-low">📉 RSI (Most Oversold)</option>
+          <option value="rsi-high">📈 RSI (Most Overbought)</option>
           <option value="added">🕐 Recently Added</option>
         </select>
-        <button class="btn btn-g btn-sm" onclick="rankAllWatchlist()" title="AI-score all watchlist stocks and sort by opportunity (1-10)">🏆 AI Rank All</button>
-        <button class="btn btn-p btn-sm" onclick="_wlAnalyseAll()" title="Run AI analysis on all watchlist stocks">🤖 Analyze Watchlist</button>
+        <button class="btn btn-p btn-sm" onclick="_wlAnalyseAll()" title="Run AI analysis on all watchlist stocks — batches of 3 with rate-limit protection">🤖 Analyze Watchlist</button>
         <button class="btn btn-g btn-sm" id="wl-sel-toggle" onclick="_wlToggleSelectMode()" title="Select specific stocks to analyze">☑ Select</button>
         <div id="wl-sel-bar" style="display:none;align-items:center;gap:6px">
           <span id="wl-sel-count" style="font-size:11px;color:var(--t3)">0 selected</span>
@@ -8059,7 +8060,9 @@ function renderSummary() {
       const _convTag = _convScore >= 7 ? 'High' : _convScore >= 5 ? 'Medium' : 'Low';
       _convEl.textContent = _convScore + '/10';
       _convEl.style.color = _convCol;
-      if (_convLbl) { _convLbl.textContent = _convTag + ' · ' + _convH.length + ' stocks'; _convLbl.style.color = _convCol; }
+      const _unanalysed = D.holdings.length - _convH.length;
+      const _coverageNote = _unanalysed > 0 ? ` · ${_unanalysed} pending` : '';
+      if (_convLbl) { _convLbl.textContent = _convTag + ' · ' + _convH.length + ' stocks' + _coverageNote; _convLbl.style.color = _unanalysed > 0 ? 'var(--yel)' : _convCol; }
     }
   }
 
@@ -8667,9 +8670,12 @@ Reply ONLY compact JSON no markdown: {"decision":"ENTER NOW|WAIT|AVOID","entrySc
     // Targets: 15% and 28% above entry, capped at 52W high + 5%
     const t1Raw = Math.round((entL || ltp) * 1.15);
     const t2Raw = Math.round((entL || ltp) * 1.28);
-    const cap   = w.h52 ? Math.round(w.h52 * 1.05) : Infinity;
-    w.target1    = Math.min(t1Raw, cap);
-    w.target2    = Math.min(t2Raw, cap);
+    const t1Cap = w.h52 ? Math.round(w.h52 * 1.05) : Infinity;  // T1 capped at 52W high +5%
+    const t2Cap = w.h52 ? Math.round(w.h52 * 1.15) : Infinity;  // T2 capped at 52W high +15% (breakout room)
+    w.target1    = Math.min(t1Raw, t1Cap);
+    w.target2    = Math.min(t2Raw, t2Cap);
+    // Ensure T2 > T1 always (edge case when both hit cap)
+    if (w.target2 <= w.target1) w.target2 = Math.round(w.target1 * 1.08);
     w.target1Pct = entL ? +((w.target1 - entL) / entL * 100).toFixed(1) : null;
     w.target2Pct = entL ? +((w.target2 - entL) / entL * 100).toFixed(1) : null;
     w.t1Timeline = '2-3 months';
@@ -8685,9 +8691,12 @@ Reply ONLY compact JSON no markdown: {"decision":"ENTER NOW|WAIT|AVOID","entrySc
     w.signal       = dec === 'ENTER NOW' ? 'BUY' : dec === 'AVOID' ? 'SELL' : 'HOLD';
     w.lastAnalysed = new Date().toISOString();
   } catch(e) {
-    w.wlDecision = 'WAIT';
-    w.entryScore = preScore;
+    w.aiError    = e.message || 'Analysis failed — check AI key / network';
+    w.wlDecision = w.wlDecision || 'WAIT'; // keep prior decision if it existed
+    w.entryScore = w.entryScore || preScore;
+    (window.D && D._aiErrors) && D._aiErrors.push(w.symbol+' (watch): '+(e.message||'exception'));
   }
+  w.lastAnalysed = new Date().toISOString();
 }
 
 // Single-stock watchlist AI analysis (called from per-card button)
@@ -8701,14 +8710,16 @@ async function rankAllWatchlist() {
   const ctx = D._marketCtx || await getMarketContext();
   D._marketCtx = ctx;
   let done = 0;
-  // Batch 3 at a time
+  // Batch 3 at a time with 4s delay to respect free-tier rate limits
   for (let i = 0; i < D.watchlist.length; i += 3) {
+    window._claudeJSONFastFailed = false; // reset cascade cache each batch
     const batch = D.watchlist.slice(i, i+3);
     await Promise.allSettled(batch.map(async w => {
       try { await analyseWatchStock(w, ctx); } catch(e) {}
       done++;
       if (btn) btn.textContent = `⏳ Ranking (${done}/${total})…`;
     }));
+    if (i + 3 < D.watchlist.length) await new Promise(r => setTimeout(r, 4000));
   }
   save('watchlist');
   if (btn) { btn.disabled = false; btn.textContent = '🏆 AI Rank All'; }
@@ -8716,7 +8727,7 @@ async function rankAllWatchlist() {
   // Show summary
   const enterNow = D.watchlist.filter(w=>w.wlDecision==='ENTER NOW').length;
   const avoid    = D.watchlist.filter(w=>w.wlDecision==='AVOID').length;
-  toast(`✅ Ranking done — ${enterNow} ENTER NOW · ${avoid} AVOID · rest WAIT`, 'success');
+  toast(`✅ Ranking done — ${enterNow} ENTER NOW · ${avoid} AVOID · rest WAIT`, 'ok');
 }
 async function _wlAnalyseSingle(id) {
   // Guard: undefined/null id means the item was saved before the id field existed.
@@ -24356,17 +24367,17 @@ function _applyWlSort(sort) {
     parentMap.get(parent).push(card);
   });
 
-  const sym   = el => el.querySelector('.sym')?.textContent?.trim() || '';
-  const chg   = el => parseFloat(el.querySelector('[class*="up"],[class*="dn"]')
-                        ?.textContent?.replace(/[+%]/g,'') || '0') || 0;
-  const pos52 = el => {
-    const ltp  = parseFloat(el.querySelector('.sc-price,[style*="font-size:16"]')
-                   ?.textContent?.replace(/[₹,]/g,'') || '0') || 0;
-    const item = D.watchlist.find(w => w.symbol === sym(el));
-    if (!item || !item.h52 || !item.l52 || item.h52 <= item.l52) return 1;
-    return (ltp - item.l52) / (item.h52 - item.l52);
+  // Use data-wlid to look up live data — avoids fragile DOM text scraping
+  const wItem  = el => D.watchlist.find(w => w.id === +el.id.replace('wlc-',''));
+  const sym    = el => wItem(el)?.symbol || '';
+  const chg    = el => wItem(el)?.chgP || 0;
+  const pos52  = el => {
+    const w = wItem(el);
+    if (!w || !w.h52 || !w.l52 || w.h52 <= w.l52) return 1;
+    return ((w.ltp||0) - w.l52) / (w.h52 - w.l52);
   };
-  const ts    = el => D.watchlist.find(w => w.symbol === sym(el))?.id || 0;
+  const ts     = el => wItem(el)?.id || 0;
+  const rsiVal = el => wItem(el)?.rsi ?? 50;
 
   parentMap.forEach((cards, container) => {
     if (cards.length < 2) return;
@@ -24377,6 +24388,8 @@ function _applyWlSort(sort) {
         case 'chg-desc': return chg(b) - chg(a);
         case '52w-asc':  return pos52(a) - pos52(b);
         case 'added':    return ts(b) - ts(a);
+        case 'rsi-low':  return rsiVal(a) - rsiVal(b);
+        case 'rsi-high': return rsiVal(b) - rsiVal(a);
         default: return 0;
       }
     });
