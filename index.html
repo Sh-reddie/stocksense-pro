@@ -404,6 +404,11 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 .tbl td{padding:10px 10px;font-size:12px;border-bottom:1px solid rgba(30,37,64,.5);vertical-align:middle;}
 .tbl tbody tr:hover td{background:rgba(79,142,247,.06);}
 .tbl tbody tr:last-child td{border-bottom:none;}
+/* Skeleton loading animation */
+@keyframes skeleton-pulse{0%,100%{opacity:.35}50%{opacity:.65}}
+.sk{background:var(--s3);border-radius:4px;animation:skeleton-pulse 1.4s ease-in-out infinite;display:inline-block;}
+.sk-line{height:11px;margin:4px 0;border-radius:3px;}
+.sk-block{height:36px;border-radius:6px;margin:4px 0;}
 /* Row density toggle */
 #holdTbl.density-comfortable td{padding:16px 10px !important;}
 #holdTbl.density-comfortable .sym{font-size:14px;}
@@ -1304,7 +1309,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div id="ds-today-panel">
       <div class="dtp-card">
         <div class="dtp-title">📈 Today's Movers <span id="dtp-market-status" style="float:right;font-size:10px;padding:2px 7px;border-radius:8px"></span></div>
-        <div id="dtp-movers"><div style="color:var(--t4);font-size:12px">Prices loading…</div></div>
+        <div id="dtp-movers"><div style="padding:4px 0">${[70,55,80,65,45].map(w=>`<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span class="sk sk-line" style="width:${w}%"></span><span class="sk sk-line" style="width:18%"></span></div>`).join('')}</div></div>
       </div>
       <div class="dtp-card">
         <div class="dtp-title">📅 Coming Up This Week</div>
@@ -1434,7 +1439,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <!-- Indices -->
         <div class="pn" style="margin-bottom:14px">
           <div class="pn-h"><div class="pn-t">📉 Indices</div><button class="btn btn-g btn-sm" onclick="fetchIndices()">↻</button></div>
-          <div id="idx-panel" style="padding:0"><div style="padding:20px;text-align:center;color:var(--t4);font-size:12px">Loading…</div></div>
+          <div id="idx-panel" style="padding:0"><div style="padding:12px 14px">${[1,2,3,4].map(()=>`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span class="sk sk-line" style="width:40%"></span><span class="sk sk-line" style="width:30%"></span></div>`).join('')}</div></div>
         </div>
         <!-- Action needed -->
         <div class="pn">
@@ -2024,8 +2029,9 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="sec-title">🔔 Notifications</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-g btn-sm" onclick="markAllNotifsRead();renderNotifs()">Mark read</button>
+        <button class="btn btn-g btn-sm" onclick="_pruneOldNotifs()" title="Remove notifications older than 7 days and deduplicate">🧹 Clear old</button>
         <button class="btn btn-p btn-sm" onclick="scanAndFixTickers()" title="Check every holding's saved ticker against Yahoo Finance and auto-fix any that return no price">🔧 Scan & Fix Tickers</button>
-        <button class="btn btn-red btn-sm" onclick="clearSection('notifs')">🗑 Clear</button>
+        <button class="btn btn-red btn-sm" onclick="clearSection('notifs')">🗑 Clear all</button>
       </div>
     </div>
     <div class="notif-grid">
@@ -5472,8 +5478,19 @@ let _notifFilter = 'all';
 function addNotif(type, msg, sym) {
   // type: 'error' | 'warn' | 'info' | 'alert' | 'log'
   if (!msg) return;
-  D.notifs.unshift({ id: _notifId++, ts: new Date().toISOString(), type, msg: String(msg), sym: sym||null, read: false });
-  if (D.notifs.length > 200) D.notifs = D.notifs.slice(0, 200); // keep last 200
+  const _msgStr = String(msg);
+  // ── Spam filter: drop internal model-cascade messages (claudeJSON model-switch logs)
+  if (/claudeJSON|fast JSON model|All fast JSON|fast model/i.test(_msgStr)) return;
+  // ── Deduplication: same symbol + type + same first-50-chars within 4h → skip
+  const _dedupeKey = (sym||'') + '|' + type + '|' + _msgStr.slice(0, 50);
+  const _4h = 4 * 3600000;
+  const _recent = D.notifs.find(n => n._dk === _dedupeKey && (Date.now() - new Date(n.ts).getTime()) < _4h);
+  if (_recent) { _recent.ts = new Date().toISOString(); _recent.read = false; save('notifs'); updateNotifBadge(); return; }
+  // ── 7-day auto-expiry: prune stale notifications on each write
+  const _7d = 7 * 864e5;
+  D.notifs = D.notifs.filter(n => (Date.now() - new Date(n.ts).getTime()) < _7d);
+  D.notifs.unshift({ id: _notifId++, ts: new Date().toISOString(), type, msg: _msgStr, sym: sym||null, read: false, _dk: _dedupeKey });
+  if (D.notifs.length > 150) D.notifs = D.notifs.slice(0, 150);
   save('notifs');
   updateNotifBadge();
   if (document.getElementById('sec-notifications')?.classList.contains('on')) renderNotifs();
@@ -9113,6 +9130,33 @@ function renderWatchlist() {
             <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:${col}">${val}</div>
           </div>`).join('')}
       </div>` : ''}
+
+      <!-- ── EV% + ENTRY ZONE STRIP ───────────────────────── -->
+      ${(() => {
+        const _evOk = w.entryScore && w.target1Pct && w.stopLossPct;
+        const _eqOk = w.h52 && w.l52 && ltp && w.h52 !== w.l52;
+        if (!_evOk && !_eqOk) return '';
+        let items = [];
+        if (_evOk) {
+          const _p = w.entryScore / 10;
+          const _ev = _p * Math.abs(w.target1Pct) - (1 - _p) * Math.abs(w.stopLossPct);
+          const _evCol = _ev > 5 ? 'var(--grn)' : _ev > 0 ? 'var(--yel)' : 'var(--red)';
+          items.push(`<div style="padding:7px 12px;border-right:1px solid ${ds.border}">
+            <div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px">EV%</div>
+            <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:${_evCol}" title="Expected Value = ${_p.toFixed(1)}×${f(Math.abs(w.target1Pct),1)}% − ${(1-_p).toFixed(1)}×${f(Math.abs(w.stopLossPct),1)}%">${_ev>=0?'+':''}${f(_ev,1)}%</div>
+          </div>`);
+        }
+        if (_eqOk) {
+          const _eqPct = Math.max(0,Math.min(100,Math.round((ltp-w.l52)/(w.h52-w.l52)*100)));
+          const _eqLbl = _eqPct<=25?'Near Low':_eqPct<=50?'Mid Range':_eqPct<=75?'High':'Near Peak';
+          const _eqCol = _eqPct<=25?'var(--grn)':_eqPct<=50?'var(--yel)':_eqPct<=75?'var(--orn)':'var(--red)';
+          items.push(`<div style="padding:7px 12px;border-right:1px solid ${ds.border}">
+            <div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px">Entry Zone</div>
+            <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:${_eqCol}" title="LTP at ${_eqPct}% of 52W range (Low ₹${f(w.l52)} → High ₹${f(w.h52)})">${_eqPct}% · ${_eqLbl}</div>
+          </div>`);
+        }
+        return `<div style="display:flex;border-top:1px solid ${ds.border}">${items.join('')}</div>`;
+      })()}
 
       <!-- ── EXPANDABLE DETAIL ──────────────────────────── -->
       <div class="wl-expand" id="wle-${w.id}" style="display:none">
@@ -25815,6 +25859,26 @@ if ('serviceWorker' in navigator) {
       // Already handled inline elsewhere — forward to app if needed
     }
   });
+}
+
+// ── C: Notification pruner ───────────────────────────────────────────────────
+function _pruneOldNotifs() {
+  const before = D.notifs.length;
+  const _7d = 7 * 864e5;
+  // Remove entries older than 7 days OR that are claudeJSON spam
+  D.notifs = D.notifs.filter(n =>
+    (Date.now() - new Date(n.ts).getTime()) < _7d &&
+    !/claudeJSON|fast JSON model|All fast JSON/i.test(n.msg||'')
+  );
+  // Deduplicate: keep only most-recent per _dk key
+  const seen = new Set();
+  D.notifs = D.notifs.filter(n => {
+    const k = n._dk || n.msg?.slice(0,50);
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+  save('notifs'); updateNotifBadge(); renderNotifs();
+  toast(`🧹 Pruned ${before - D.notifs.length} old/duplicate notifications`, 'info');
 }
 
 // ── A: RSI crossing detector ─────────────────────────────────────────────────
