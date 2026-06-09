@@ -964,6 +964,9 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="mob-nav-item" onclick="mgo('momentum')">🔥 Momentum Board</div>
     <div class="mob-nav-item" onclick="mgo('heatmap')">🔥 Correlation Heatmap</div>
     <div class="mob-nav-item" onclick="mgo('covered-calls')" style="color:var(--grn);font-weight:600">📈 Covered Calls</div>
+    <div class="mob-nav-item" onclick="mgo('sector-rotation')" style="color:var(--ac2);font-weight:600">🔄 Sector Rotation</div>
+    <div class="mob-nav-item" onclick="mgo('insurance')" style="color:var(--red);font-weight:600">🛡 Portfolio Insurance</div>
+    <div class="mob-nav-item" onclick="mgo('recovery')">💊 Recovery Advisor</div>
     <div class="mob-nav-item" onclick="mgo('fii-dii')">🏦 FII / DII Flows</div>
     <div class="mob-nav-item" onclick="mgo('deals')">💼 Bulk / Block Deals</div>
     <div class="mob-nav-item" onclick="mgo('sectormap')">🌡 Sector Map</div>
@@ -1130,6 +1133,8 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-item" onclick="go('analysis')">🔍 Stock Deep Dive</div>
         <div class="tn-drop-item" onclick="go('fair-value')">💎 Fair Value Engine</div>
         <div class="tn-drop-item" onclick="go('covered-calls')" style="color:var(--grn);font-weight:600">📈 Covered Calls</div>
+        <div class="tn-drop-item" onclick="go('sector-rotation')" style="color:var(--ac2);font-weight:600">🔄 Sector Rotation</div>
+        <div class="tn-drop-item" onclick="go('insurance')" style="color:var(--red);font-weight:600">🛡 Portfolio Insurance</div>
         <div class="tn-drop-item" onclick="go('comparator')">⚔ Stock Comparator</div>
         <div class="tn-drop-item" onclick="go('momentum')">🚀 Momentum Board</div>
         <div class="tn-drop-item" onclick="go('heatmap')">🔥 Correlation Heatmap</div>
@@ -4205,6 +4210,11 @@ textarea.fi{resize:vertical;min-height:70px;}
           <div style="margin-top:8px;font-size:10px;color:var(--t4)">Alerts sent for: SL breach · RSI overbought/oversold cross · Entry zone hit · Earnings in 2 days</div>
           <button class="btn btn-g btn-sm" style="margin-top:8px" onclick="_sendWeeklyDigest().then(ok=>toast(ok?'✅ Digest sent!':'❌ Failed — check token','ok'))">📤 Send Digest Now</button>
           <div style="margin-top:10px;border-top:1px solid var(--b2);padding-top:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:6px">🌅 Daily Market Open Brief (9:10 AM)</div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="cfg-daily-brief" onchange="saveSettings()"> Send daily brief at 9:10 AM on trading days</label>
+            <button class="btn btn-g btn-sm" onclick="_sendDailyOpenBrief().then(()=>toast('✅ Sent!','ok')).catch(()=>toast('❌ Failed','error'))">📤 Send Now</button>
+          </div>
+          <div style="margin-top:10px;border-top:1px solid var(--b2);padding-top:10px">
             <div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:6px">📅 Weekly Digest</div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
               <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="cfg-weekly-digest" onchange="saveSettings()"> Send weekly summary every Monday 8 AM</label>
@@ -4236,7 +4246,11 @@ textarea.fi{resize:vertical;min-height:70px;}
           </div>
           <div id="storage-status" style="margin-top:10px;font-size:11px;color:var(--t4)"></div>
         </div>
-        <div style="margin-top:12px"><button class="btn btn-red btn-sm" onclick="if(confirm('Delete ALL data?')){localStorage.clear();location.reload()}">🗑 Clear All Data</button></div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-p btn-sm" id="pwa-install-btn" style="display:none" onclick="_installPWA()">📱 Install App</button>
+          <button class="btn btn-g btn-sm" onclick="_registerSW()">🔄 Update App Cache</button>
+          <button class="btn btn-red btn-sm" onclick="if(confirm('Delete ALL data?')){localStorage.clear();location.reload()}">🗑 Clear All Data</button>
+        </div>
       </div></div>
     </div>
   </div>
@@ -4419,6 +4433,56 @@ textarea.fi{resize:vertical;min-height:70px;}
     </div>
     <div id="cc-stats" style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap"></div>
     <div id="cc-content"></div>
+  </div>
+
+  <!-- ═══ SECTOR ROTATION ADVISOR ═══════════════════════════════ -->
+  <div class="sec" id="sec-sector-rotation">
+    <div class="sec-head">
+      <div class="sec-title">🔄 Sector Rotation Advisor</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g btn-sm" onclick="_renderSectorRotation()">↻ Refresh</button>
+        <button class="btn btn-p btn-sm" onclick="_sectorRotationAI()">🤖 AI Rotation Plan</button>
+      </div>
+    </div>
+    <div id="sr-content"></div>
+  </div>
+
+  <!-- ═══ PORTFOLIO INSURANCE CALCULATOR ══════════════════════════ -->
+  <div class="sec" id="sec-insurance">
+    <div class="sec-head">
+      <div class="sec-title">🛡 Portfolio Insurance Calculator</div>
+      <button class="btn btn-g btn-sm" onclick="_calcInsurance()">↻ Recalculate</button>
+    </div>
+    <div style="font-size:11px;color:var(--t3);margin-bottom:12px;padding:8px 12px;background:rgba(240,82,82,.05);border:1px solid rgba(240,82,82,.2);border-radius:8px">
+      🛡 Buy Nifty PUT options to protect your portfolio from a market crash. Pay a small premium to cap your downside.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px">
+      <div class="fg" style="margin:0"><label class="fl">Portfolio Value (₹)</label><input type="number" class="fi" id="ins-portfolio-val" oninput="_calcInsurance()"></div>
+      <div class="fg" style="margin:0"><label class="fl">Protect Against Drop %</label><input type="number" class="fi" id="ins-protect-pct" value="15" min="5" max="40" oninput="_calcInsurance()"></div>
+      <div class="fg" style="margin:0"><label class="fl">Nifty Current Level</label><input type="number" class="fi" id="ins-nifty-level" oninput="_calcInsurance()"></div>
+      <div class="fg" style="margin:0"><label class="fl">Hedge Duration</label>
+        <select class="fi" id="ins-duration" onchange="_calcInsurance()">
+          <option value="1">1 Month</option>
+          <option value="3" selected>3 Months</option>
+          <option value="6">6 Months</option>
+        </select>
+      </div>
+    </div>
+    <div id="ins-result"></div>
+  </div>
+
+  <!-- ═══ RECOVERY ADVISOR ═════════════════════════════════════════ -->
+  <div class="sec" id="sec-recovery">
+    <div class="sec-head">
+      <div class="sec-title">💊 Loss Recovery Advisor</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select class="fi" id="rec-stock-sel" style="width:180px" onchange="_renderRecoveryAdvisor()">
+          <option value="">— Select a holding —</option>
+        </select>
+        <button class="btn btn-p btn-sm" onclick="_recoveryAI()" id="rec-ai-btn">🤖 AI Recovery Plan</button>
+      </div>
+    </div>
+    <div id="rec-content"><div style="text-align:center;padding:40px;color:var(--t4)">Select a holding to see recovery scenarios</div></div>
   </div>
 
   <!-- ═══ IPO TRACKER ═══════════════════════════════════════════ -->
@@ -5869,6 +5933,9 @@ function go(id) {
   if(id==='ipo-tracker') _fetchIPOs();
   if(id==='exit-seq') _renderExitSequencer();
   if(id==='covered-calls') _renderCoveredCalls();
+  if(id==='sector-rotation') _renderSectorRotation();
+  if(id==='insurance') { _calcInsurance(); _prefillInsurance(); }
+  if(id==='recovery') _populateRecoveryDropdown();
   if(id==='strategies') renderStrategiesSection();
   if(id==='riskpro') renderRiskPro();
   if(id==='attribution') renderAttribution();
@@ -26598,6 +26665,459 @@ function _removeIPO(idx) {
   localStorage.setItem('ss_ipo_manual', JSON.stringify(manuals));
   _renderIPOs();
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: PWA INSTALL + SERVICE WORKER
+// ═══════════════════════════════════════════════════════════════════════════════
+let _pwaInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _pwaInstallPrompt = e;
+  const btn = document.getElementById('pwa-install-btn');
+  if (btn) btn.style.display = 'inline-flex';
+  // Show install nudge on dashboard
+  const nudge = document.getElementById('ds-pwa-nudge');
+  if (nudge) nudge.style.display = 'flex';
+});
+
+async function _installPWA() {
+  if (!_pwaInstallPrompt) { toast('App install not available — use browser menu to install', 'info'); return; }
+  _pwaInstallPrompt.prompt();
+  const { outcome } = await _pwaInstallPrompt.userChoice;
+  if (outcome === 'accepted') {
+    toast('✅ StockSense Pro installed!', 'ok');
+    const btn = document.getElementById('pwa-install-btn');
+    if (btn) btn.style.display = 'none';
+  }
+  _pwaInstallPrompt = null;
+}
+
+function _registerSW() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+      regs.forEach(r => r.update());
+      toast('✅ App cache updated — reload for latest version', 'ok');
+    });
+  } else {
+    toast('Service worker not supported in this browser', 'info');
+  }
+}
+
+// Register service worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: SECTOR ROTATION ADVISOR
+// Compares portfolio sector weights vs regime-optimal weights, gives rotation plan
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Ideal sector weights by market regime (based on historical NSE sector performance)
+const _REGIME_SECTOR_WEIGHTS = {
+  BULL:       { Energy:15, IT:20, Banking:20, FMCG:10, Auto:10, Defence:5, Finance:8, Infrastructure:7, Others:5 },
+  CAUTIOUS:   { Energy:12, IT:15, Banking:18, FMCG:15, Auto:8,  Defence:8, Finance:10, Infrastructure:9, Others:5 },
+  NEUTRAL:    { Energy:15, IT:15, Banking:18, FMCG:12, Auto:8,  Defence:8, Finance:10, Infrastructure:9, Others:5 },
+  BEAR:       { Energy:8,  IT:10, Banking:12, FMCG:25, Auto:5,  Defence:15, Finance:8, Infrastructure:5, Others:12 },
+  DEFENSIVE:  { Energy:8,  IT:8,  Banking:10, FMCG:28, Auto:5,  Defence:18, Finance:8, Infrastructure:5, Others:10 },
+};
+
+function _renderSectorRotation() {
+  const el = document.getElementById('sr-content');
+  if (!el || !D.holdings.length) return;
+
+  const regime = _marketRegime?.label || 'NEUTRAL';
+  const regimeKey = regime.includes('BULL') ? 'BULL' : regime.includes('DEFENSIVE') ? 'DEFENSIVE' :
+                    regime.includes('BEAR') ? 'BEAR' : regime.includes('CAUTIOUS') ? 'CAUTIOUS' : 'NEUTRAL';
+  const ideal = _REGIME_SECTOR_WEIGHTS[regimeKey] || _REGIME_SECTOR_WEIGHTS['NEUTRAL'];
+
+  const totalVal = D.holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0);
+  const sectorMap = {};
+  D.holdings.forEach(h=>{
+    const sec = h.sector||'Others';
+    sectorMap[sec] = (sectorMap[sec]||0) + (h.ltp||h.avgPrice)*h.qty;
+  });
+
+  // All sectors (union of current + ideal)
+  const allSectors = new Set([...Object.keys(sectorMap), ...Object.keys(ideal)]);
+  const rows = [...allSectors].map(sec => {
+    const currentPct = sectorMap[sec] ? (sectorMap[sec]/totalVal*100) : 0;
+    const idealPct = ideal[sec] || 0;
+    const delta = currentPct - idealPct;
+    const action = Math.abs(delta) < 2 ? '✅ OK' : delta > 0 ? '🔻 Reduce' : '🔼 Add';
+    const actionCol = Math.abs(delta) < 2 ? 'var(--grn)' : delta > 0 ? 'var(--red)' : 'var(--ac)';
+    const rebalAmt = Math.abs(delta/100 * totalVal);
+    return { sec, currentPct, idealPct, delta, action, actionCol, rebalAmt };
+  }).sort((a,b) => Math.abs(b.delta) - Math.abs(a.delta));
+
+  const reduce = rows.filter(r=>r.delta>2);
+  const add    = rows.filter(r=>r.delta<-2);
+  const ok     = rows.filter(r=>Math.abs(r.delta)<=2);
+
+  el.innerHTML = `
+    <div style="padding:10px 14px;border-radius:8px;background:${regimeKey==='BEAR'?'rgba(240,82,82,.07)':regimeKey==='BULL'?'rgba(45,211,111,.07)':'rgba(79,142,247,.07)'};border:1px solid var(--b2);margin-bottom:14px;display:flex;align-items:center;gap:10px">
+      <span style="font-weight:700;font-size:13px">Regime: ${regime}</span>
+      <span style="font-size:11px;color:var(--t3)">Ideal weights adjusted for ${regimeKey.toLowerCase()} market. ${reduce.length} sectors to reduce, ${add.length} to add.</span>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl">
+      <thead><tr><th>Sector</th><th class="mn">Current %</th><th class="mn">Ideal %</th><th class="mn">Gap</th><th class="mn">Action</th><th class="mn">Amount</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td style="font-weight:600">${r.sec}</td>
+        <td class="mn" style="font-family:var(--mono)">${r.currentPct.toFixed(1)}%</td>
+        <td class="mn" style="font-family:var(--mono);color:var(--t4)">${r.idealPct}%</td>
+        <td class="mn" style="font-family:var(--mono);color:${r.delta>2?'var(--red)':r.delta<-2?'var(--ac)':'var(--grn)'}">${r.delta>0?'+':''}${r.delta.toFixed(1)}%</td>
+        <td class="mn"><span style="font-weight:700;color:${r.actionCol}">${r.action}</span></td>
+        <td class="mn" style="font-size:11px;color:var(--t3)">${Math.abs(r.delta)>2?'₹'+fI(r.rebalAmt):'—'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    ${reduce.length ? `<div style="margin-top:12px;padding:10px 14px;background:rgba(240,82,82,.06);border-radius:8px;border-left:3px solid var(--red)">
+      <strong style="color:var(--red)">🔻 Reduce:</strong> ${reduce.map(r=>`${r.sec} by ₹${fI(r.rebalAmt)}`).join(' · ')}
+    </div>`:''}
+    ${add.length ? `<div style="margin-top:8px;padding:10px 14px;background:rgba(79,142,247,.06);border-radius:8px;border-left:3px solid var(--ac)">
+      <strong style="color:var(--ac)">🔼 Add:</strong> ${add.map(r=>`${r.sec} by ₹${fI(r.rebalAmt)}`).join(' · ')}
+    </div>`:''}
+    <div style="margin-top:10px;font-size:10px;color:var(--t4)">Ideal weights based on historical NSE sector performance in ${regimeKey.toLowerCase()} markets. Not SEBI advice.</div>`;
+}
+
+async function _sectorRotationAI() {
+  const el = document.getElementById('sr-content');
+  if (!el) return;
+  const totalVal = D.holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0);
+  const sectorMap = {};
+  D.holdings.forEach(h=>{const sec=h.sector||'Others'; sectorMap[sec]=(sectorMap[sec]||0)+(h.ltp||h.avgPrice)*h.qty/totalVal*100;});
+  const current = Object.entries(sectorMap).sort((a,b)=>b[1]-a[1]).map(([s,p])=>`${s}:${p.toFixed(1)}%`).join(', ');
+  const loadDiv = document.createElement('div');
+  loadDiv.className='ai-ld'; loadDiv.innerHTML='<div class="spin"></div> Generating rotation plan…';
+  el.insertBefore(loadDiv, el.firstChild);
+  const prompt = `Sector rotation advisor for Indian equity investor. Current allocation: ${current}. Market regime: ${_marketRegime?.label||'Unknown'}. Portfolio value: ₹${fI(totalVal)}.
+Give 3 specific rotation recommendations: which sectors to reduce, which to add, with reasoning based on current market regime and NSE sector cycles. Include specific stock suggestions from the user's portfolio. 3 bullets, 2 sentences each.`;
+  try {
+    const r = await claude(prompt);
+    loadDiv.remove();
+    const div = document.createElement('div');
+    div.className='ai-box'; div.style.marginBottom='12px';
+    div.innerHTML=`<div class="ai-txt" style="color:var(--t1);line-height:1.7"><strong style="color:var(--ac2)">🤖 AI Rotation Plan</strong><br>${md2h(r)}</div>`;
+    el.insertBefore(div, el.firstChild);
+  } catch(e) { loadDiv.remove(); toast('AI failed — check API key','error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: PORTFOLIO INSURANCE CALCULATOR
+// Black-Scholes Nifty PUT pricing for portfolio downside protection
+// ═══════════════════════════════════════════════════════════════════════════════
+function _prefillInsurance() {
+  const pfVal = document.getElementById('ins-portfolio-val');
+  const niftyEl = document.getElementById('ins-nifty-level');
+  if (pfVal && !pfVal.value) {
+    const totalVal = D.holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0);
+    pfVal.value = Math.round(totalVal);
+  }
+  // Try to get live Nifty level
+  if (niftyEl && !niftyEl.value) {
+    const niftyCache = window._niftyHistory;
+    if (niftyCache && niftyCache.size) {
+      const last = [...niftyCache.values()].slice(-1)[0];
+      if (last) niftyEl.value = Math.round(last);
+    } else {
+      // Try from topnav
+      const ixText = [...document.querySelectorAll('.tn-ix')].find(el=>el.textContent.includes('NIFTY 50'));
+      const match = ixText?.querySelector('.tn-ix-val')?.textContent?.match(/[\d,]+/);
+      if (match) niftyEl.value = match[0].replace(/,/g,'');
+    }
+  }
+}
+
+function _calcInsurance() {
+  const el = document.getElementById('ins-result');
+  if (!el) return;
+  const pfVal   = parseFloat(document.getElementById('ins-portfolio-val')?.value) || 0;
+  const protPct = parseFloat(document.getElementById('ins-protect-pct')?.value) || 15;
+  const nifty   = parseFloat(document.getElementById('ins-nifty-level')?.value) || 23000;
+  const months  = parseInt(document.getElementById('ins-duration')?.value) || 3;
+  if (!pfVal || !nifty) { el.innerHTML=''; return; }
+
+  // Portfolio beta (weighted average)
+  const totalVal = D.holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0) || pfVal;
+  const portBeta = D.holdings.length ? D.holdings.reduce((s,h)=>{
+    const w = (h.ltp||h.avgPrice)*h.qty/totalVal;
+    return s + (h.beta||1)*w;
+  }, 0) : 1;
+
+  // Nifty PUT calculation
+  const niftyLotSize = 75; // Current Nifty lot size
+  const niftyLotVal  = nifty * niftyLotSize;
+  const T = months / 12;
+  const sigma = 0.18; // Nifty historical vol ~18%
+  const r = 0.065;
+
+  // Strike = Nifty * (1 - protPct/100) — ATM protection at protPct below current
+  const strikeAtProtection = Math.round(nifty * (1 - protPct/100 / portBeta));
+  // Also calculate OTM put (10% below) and ATM put
+  const strikesAndPremiums = [
+    { label: `ATM Put (${nifty})`, strike: nifty },
+    { label: `5% OTM Put (${Math.round(nifty*0.95)})`, strike: Math.round(nifty*0.95) },
+    { label: `${protPct}% Protection (${strikeAtProtection})`, strike: strikeAtProtection },
+  ].map(s => {
+    // Put premium via put-call parity: P = C - S + K*e^(-rT)
+    const callPrem = _bsCallPremium(nifty, s.strike, T, r, sigma);
+    const putPrem  = callPrem - nifty + s.strike * Math.exp(-r*T);
+    const putPremAdjusted = Math.max(putPrem, Math.max(0, s.strike - nifty)); // intrinsic floor
+    return { ...s, putPrem: +putPremAdjusted.toFixed(2) };
+  });
+
+  // How many lots needed to hedge (delta hedge)
+  const lotsNeeded = Math.ceil((pfVal * portBeta) / niftyLotVal);
+  const hedgeCoverage = (lotsNeeded * niftyLotVal / (pfVal * portBeta) * 100).toFixed(0);
+
+  const selectedPut = strikesAndPremiums[2]; // Use protection-level put
+  const totalPremium = selectedPut.putPrem * niftyLotSize * lotsNeeded;
+  const hedgeCostPct = (totalPremium / pfVal * 100).toFixed(2);
+  const maxLoss      = (pfVal * protPct / 100).toFixed(0);
+  const maxLossAfterHedge = Math.round(pfVal * protPct / 100 - totalPremium);
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px">
+      ${[
+        ['Portfolio Beta', portBeta.toFixed(2), 'var(--t2)'],
+        ['Lots Needed', lotsNeeded+' lots', 'var(--ac)'],
+        ['Hedge Coverage', hedgeCoverage+'%', 'var(--grn)'],
+        ['Premium Cost', '₹'+fI(totalPremium), 'var(--orn)'],
+        ['Cost % of Portfolio', hedgeCostPct+'%', 'var(--orn)'],
+        ['Max Loss (unhedged)', '₹'+fI(maxLoss), 'var(--red)'],
+      ].map(([l,v,c])=>`<div class="sc c1" style="min-width:0"><div class="sc-lbl">${l}</div><div class="sc-val" style="color:${c};font-size:18px">${v}</div></div>`).join('')}
+    </div>
+    <div style="overflow-x:auto"><table class="tbl" style="margin-bottom:12px">
+      <thead><tr><th>Option Type</th><th class="mn">Strike</th><th class="mn">Put Premium/share</th><th class="mn">Total Cost (${lotsNeeded} lots)</th><th class="mn">Monthly Cost</th></tr></thead>
+      <tbody>${strikesAndPremiums.map(s=>{
+        const tot = s.putPrem * niftyLotSize * lotsNeeded;
+        return `<tr ${s.label.includes('Protection')?'style="font-weight:700;background:var(--s2)"':''}>
+          <td>${s.label}</td>
+          <td class="mn">₹${s.strike.toLocaleString()}</td>
+          <td class="mn" style="color:var(--orn)">₹${s.putPrem}</td>
+          <td class="mn" style="color:var(--red)">₹${fI(tot)}</td>
+          <td class="mn" style="color:var(--t3)">₹${fI(tot/months)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>
+    <div style="padding:10px 14px;background:rgba(45,211,111,.06);border-radius:8px;font-size:12px;line-height:1.7">
+      <strong style="color:var(--grn)">💡 How this works:</strong><br>
+      Buy <strong>${lotsNeeded} Nifty PUT contracts</strong> at strike ₹${strikeAtProtection.toLocaleString()} (${months}M expiry).
+      If Nifty falls ${protPct}% to ₹${Math.round(nifty*(1-protPct/100)).toLocaleString()}, your portfolio loses ~₹${fI(maxLoss)} but your PUTs gain ~₹${fI(maxLoss)} — offsetting the loss.
+      Cost: ₹${fI(totalPremium)} (${hedgeCostPct}% of portfolio) — like insurance premium.
+    </div>
+    <div style="margin-top:8px;font-size:10px;color:var(--t4)">Premiums estimated using Black-Scholes (σ=18%). Actual market premiums vary. F&O requires SEBI registration. Not SEBI advice.</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: LOSS RECOVERY ADVISOR
+// Detailed recovery analysis for losing positions
+// ═══════════════════════════════════════════════════════════════════════════════
+function _populateRecoveryDropdown() {
+  const sel = document.getElementById('rec-stock-sel');
+  if (!sel || sel.children.length > 1) return;
+  const losers = [...D.holdings]
+    .filter(h => h.ltp && h.ltp < h.avgPrice)
+    .sort((a,b) => ((a.ltp-a.avgPrice)/a.avgPrice) - ((b.ltp-b.avgPrice)/b.avgPrice));
+  losers.forEach(h => {
+    const pnlPct = ((h.ltp-h.avgPrice)/h.avgPrice*100).toFixed(1);
+    const opt = document.createElement('option');
+    opt.value = h.id;
+    opt.textContent = `${h.symbol} (${pnlPct}%)`;
+    sel.appendChild(opt);
+  });
+  // Auto-select worst performer
+  if (losers.length) { sel.value = losers[0].id; _renderRecoveryAdvisor(); }
+}
+
+function _renderRecoveryAdvisor() {
+  const sel = document.getElementById('rec-stock-sel');
+  const el  = document.getElementById('rec-content');
+  if (!el) return;
+  const hid = parseInt(sel?.value);
+  if (!hid) return;
+  const h = D.holdings.find(x=>x.id===hid);
+  if (!h) return;
+
+  const ltp   = h.ltp || h.avgPrice;
+  const pnl   = (ltp - h.avgPrice) * h.qty;
+  const pnlPct = ((ltp - h.avgPrice)/h.avgPrice*100);
+  const days  = h.buyDate ? Math.floor((Date.now()-new Date(h.buyDate))/864e5) : 0;
+  const taxType = days >= 365 ? 'LTCG' : 'STCG';
+  const totalVal = D.holdings.reduce((s,x)=>s+(x.ltp||x.avgPrice)*x.qty,0);
+  const weight = ltp*h.qty/totalVal*100;
+
+  // Recovery scenarios
+  const scenarios = [
+    { label: 'Break Even',      target: h.avgPrice,       desc: 'Recover full cost' },
+    { label: 'Recover 50%',     target: h.avgPrice*(1 - pnlPct/100*0.5), desc: 'Recover half the loss' },
+    { label: '52W High',        target: h.h52,            desc: 'Previous high' },
+    { label: 'Target 1',        target: h.target1,        desc: 'AI target' },
+  ].filter(s => s.target && s.target > ltp).map(s => ({
+    ...s,
+    gainNeeded: ((s.target - ltp)/ltp*100).toFixed(1),
+    daysEst: Math.round(Math.abs((s.target-ltp)/ltp) / (0.12/252)), // 12% annual = 0.047% daily
+  }));
+
+  // Average down scenarios
+  const avgDownScenarios = [0.9, 0.85, 0.80].map(pct => {
+    const buyAt = Math.round(ltp * pct);
+    const addQty = h.qty; // double the position
+    const newQty = h.qty + addQty;
+    const newAvg = (h.qty*h.avgPrice + addQty*buyAt) / newQty;
+    const breakEvenGain = ((h.avgPrice - newAvg)/h.avgPrice*100).toFixed(1);
+    const capital = addQty * buyAt;
+    return { buyAt, addQty, newAvg: newAvg.toFixed(2), breakEvenGain, capital };
+  });
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px">
+      ${[
+        ['Current Loss', (pnl<0?'':'+')+'₹'+fI(Math.abs(pnl)), pnl<0?'var(--red)':'var(--grn)'],
+        ['Loss %', pnlPct.toFixed(1)+'%', 'var(--red)'],
+        ['Held', days+'d ('+taxType+')', 'var(--t2)'],
+        ['Weight', weight.toFixed(1)+'%', 'var(--t3)'],
+        ['Signal', h.signal||'No AI', h.signal?.includes('BUY')?'var(--grn)':h.signal==='REDUCE'?'var(--red)':'var(--t2)'],
+        ['RSI', h.rsi?h.rsi:'—', h.rsi&&h.rsi<=30?'var(--grn)':h.rsi&&h.rsi>=70?'var(--red)':'var(--t2)'],
+      ].map(([l,v,c])=>`<div class="sc c1"><div class="sc-lbl">${l}</div><div class="sc-val" style="color:${c};font-size:16px">${v}</div></div>`).join('')}
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div>
+        <div style="font-weight:700;color:var(--t1);margin-bottom:8px;font-size:13px">📈 Recovery Targets</div>
+        ${scenarios.length ? `<table class="tbl"><thead><tr><th>Target</th><th class="mn">Price</th><th class="mn">Gain Needed</th><th class="mn">Est. Days</th></tr></thead><tbody>
+          ${scenarios.map(s=>`<tr><td style="font-size:12px">${s.label}</td><td class="mn">₹${f(s.target)}</td><td class="mn" style="color:var(--ac)">${s.gainNeeded}%</td><td class="mn" style="color:var(--t4)">${s.daysEst}d</td></tr>`).join('')}
+        </tbody></table>` : '<div style="color:var(--t4);font-size:12px;padding:10px">All targets below current price — consider cutting</div>'}
+      </div>
+      <div>
+        <div style="font-weight:700;color:var(--t1);margin-bottom:8px;font-size:13px">📉 Average Down Scenarios</div>
+        <table class="tbl"><thead><tr><th>Buy At</th><th class="mn">New Avg</th><th class="mn">Breakeven Saved</th><th class="mn">Capital</th></tr></thead><tbody>
+          ${avgDownScenarios.map(s=>`<tr><td>₹${s.buyAt} <span style="font-size:9px;color:var(--t4)">(${((s.buyAt/ltp-1)*100).toFixed(0)}%)</span></td><td class="mn" style="color:var(--ac)">₹${s.newAvg}</td><td class="mn" style="color:var(--grn)">-${s.breakEvenGain}%</td><td class="mn" style="color:var(--orn)">₹${fI(s.capital)}</td></tr>`).join('')}
+        </tbody></table>
+      </div>
+    </div>
+    <div id="rec-ai-output" style="margin-top:14px"></div>`;
+}
+
+async function _recoveryAI() {
+  const sel = document.getElementById('rec-stock-sel');
+  const el = document.getElementById('rec-ai-output');
+  if (!el || !sel?.value) { toast('Select a holding first', 'error'); return; }
+  const h = D.holdings.find(x=>x.id===parseInt(sel.value));
+  if (!h) return;
+  const btn = document.getElementById('rec-ai-btn');
+  if (btn) { btn.disabled=true; btn.textContent='⏳ Analysing…'; }
+  el.innerHTML='<div class="ai-ld"><div class="spin"></div> Getting recovery plan…</div>';
+
+  const ltp = h.ltp||h.avgPrice;
+  const pnlPct = ((ltp-h.avgPrice)/h.avgPrice*100).toFixed(1);
+  const days = h.buyDate?Math.floor((Date.now()-new Date(h.buyDate))/864e5):0;
+  const prompt=`Recovery advisor for Indian investor. Holding: ${h.symbol} (${h.sector||'?'}).
+Position: bought at ₹${f(h.avgPrice)}, current ₹${f(ltp)}, loss ${pnlPct}%, held ${days}d, qty ${h.qty}.
+Fundamentals: PE ${h.pe||'?'}, ROE ${h.roe?(h.roe*100).toFixed(0)+'%':'?'}, D/E ${h.de||'?'}, RSI ${h.rsi||'?'}.
+Market: ${_marketRegime?.label||'Unknown'}. Signal: ${h.signal||'HOLD'}.
+Give a clear 3-part recovery plan:
+1. CUT OR HOLD — specific recommendation with the exact price level to cut at if continuing down
+2. AVERAGING — should they average down? If yes, at what price and how many shares
+3. RECOVERY TIMELINE — realistic timeframe and what catalysts to watch
+Be direct, specific with ₹ levels. No generic advice.`;
+  try {
+    const r = await claude(prompt);
+    el.innerHTML=`<div class="ai-box"><div class="ai-txt" style="color:var(--t1);line-height:1.7"><strong style="color:var(--ac)">🤖 AI Recovery Plan for ${h.symbol}</strong><br>${md2h(r)}</div></div>`;
+  } catch(e) { el.innerHTML='<div style="color:var(--red);font-size:12px">AI failed — check API key</div>'; }
+  if (btn) { btn.disabled=false; btn.textContent='🤖 AI Recovery Plan'; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: AI DAILY MARKET OPEN BRIEF (9:10 AM)
+// Auto-sends a focused 5-line Telegram brief every trading day at market open
+// ═══════════════════════════════════════════════════════════════════════════════
+async function _sendDailyOpenBrief() {
+  const token = localStorage.getItem('tgToken');
+  if (!token) return;
+  const enabled = localStorage.getItem('tgDailyBrief') === '1';
+  if (!enabled) return;
+
+  const now = new Date();
+  const todayKey = 'ss_daily_brief_'+now.toISOString().slice(0,10);
+  if (localStorage.getItem(todayKey)) return; // already sent today
+  localStorage.setItem(todayKey, '1');
+
+  const totalVal = D.holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0);
+  const totalInv = D.holdings.reduce((s,h)=>s+h.avgPrice*h.qty,0);
+  const pnlPct   = ((totalVal-totalInv)/totalInv*100).toFixed(1);
+  const slBreach = D.holdings.filter(h=>h.stopLoss&&h.ltp&&h.ltp<=h.stopLoss);
+  const reduces  = D.holdings.filter(h=>h.signal==='REDUCE'||h.signal==='EXIT');
+  const earningsToday = D.holdings.filter(h=>{
+    if(!h.earningsTs) return false;
+    const d=(h.earningsTs*1000-Date.now())/864e5;
+    return d>=-0.5&&d<=0.5;
+  });
+  const earningsSoon = D.holdings.filter(h=>{
+    if(!h.earningsTs) return false;
+    const d=(h.earningsTs*1000-Date.now())/864e5;
+    return d>0.5&&d<=3;
+  });
+
+  // Get Nifty level from DOM
+  const niftyEl = [...document.querySelectorAll('.tn-ix')].find(el=>el.textContent.includes('NIFTY 50'));
+  const niftyText = niftyEl?.querySelector('.tn-ix-val')?.textContent || '—';
+  const regime = _marketRegime?.label || '⚪ Unknown';
+
+  const msg = `📊 <b>Daily Market Brief — ${now.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})}</b>
+
+🌡 <b>Regime:</b> ${regime}
+📈 <b>Nifty:</b> ${niftyText}
+💼 <b>Portfolio:</b> ₹${fI(totalVal)} (${pnlPct>=0?'+':''}${pnlPct}%)
+
+${slBreach.length?`🚨 <b>SL Breach:</b> ${slBreach.map(h=>h.symbol).join(', ')} — Review immediately\n`:''}${reduces.length?`⚠️ <b>Reduce signals:</b> ${reduces.map(h=>h.symbol).join(', ')}\n`:''}${earningsToday.length?`📅 <b>Results TODAY:</b> ${earningsToday.map(h=>h.symbol).join(', ')}\n`:''}${earningsSoon.length?`📅 <b>Results soon:</b> ${earningsSoon.map(h=>`${h.symbol} (${Math.round((h.earningsTs*1000-Date.now())/864e5)}d)`).join(', ')}\n`:''}
+<b>Today's focus:</b> ${slBreach.length?`Exit ${slBreach[0].symbol} — SL breached`:reduces.length?`Review ${reduces[0].symbol} reduce signal`:'Monitor positions, no urgent action'}`;
+
+  _sendTelegramAlert(msg).catch(()=>{});
+}
+
+function _checkDailyBriefSchedule() {
+  const enabled = localStorage.getItem('tgDailyBrief') === '1';
+  if (!enabled) return;
+  const now = new Date();
+  const h = now.getHours(), m = now.getMinutes();
+  const day = now.getDay();
+  if (day === 0 || day === 6) return; // skip weekends
+  // Send between 9:10 and 9:30 AM
+  if (h === 9 && m >= 10 && m <= 30) {
+    _sendDailyOpenBrief().catch(()=>{});
+  }
+}
+
+// Add daily brief toggle to settings Telegram panel
+const _origSaveSettings3 = window.saveSettings;
+if (typeof _origSaveSettings3 === 'function') {
+  window.saveSettings = function() {
+    _origSaveSettings3.apply(this, arguments);
+    const daily = document.getElementById('cfg-daily-brief')?.checked;
+    if (daily != null) localStorage.setItem('tgDailyBrief', daily?'1':'0');
+  };
+}
+
+// Hook into refreshAll for daily brief check
+const _origRefreshAll4 = window.refreshAll;
+if (typeof _origRefreshAll4 === 'function') {
+  window.refreshAll = async function() {
+    const r = await _origRefreshAll4.apply(this, arguments);
+    try { _checkDailyBriefSchedule(); } catch(e) {}
+    return r;
+  };
+}
+
+// Restore daily brief setting on load
+(function() {
+  const en = localStorage.getItem('tgDailyBrief')==='1';
+  if (en) { const el=document.getElementById('cfg-daily-brief'); if(el) el.checked=true; }
+  // Trigger sector rotation and insurance prefill on load
+  setTimeout(()=>{ try{ _prefillInsurance(); } catch(e){} }, 2000);
+})();
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ██  FEATURE 1: URGENT ACTION CENTER
