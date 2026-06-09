@@ -1135,6 +1135,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-div">Trade Decisions</div>
         <div class="tn-drop-item" onclick="go('entry-triggers')">🎯 Entry Triggers</div>
         <div class="tn-drop-item" onclick="go('exit-planner')">🚪 Exit Planner</div>
+        <div class="tn-drop-item" onclick="go('exit-seq')" style="color:var(--ac2);font-weight:600">🎯 Exit Sequencer</div>
         <div class="tn-drop-item" onclick="go('position-builder')">📐 Position Builder</div>
         <div class="tn-drop-item" onclick="go('strategies')">🧠 Advanced Strategies</div>
         <div class="tn-drop-sep"></div>
@@ -1763,6 +1764,24 @@ textarea.fi{resize:vertical;min-height:70px;}
   </div>
 
   <!-- ═══ EXIT PLANNER ═══════════════════════════════════════ -->
+  <!-- ═══ SMART EXIT SEQUENCER ══════════════════════════════════════ -->
+  <div class="sec" id="sec-exit-seq">
+    <div class="sec-head">
+      <div class="sec-title">🎯 Smart Exit Sequencer</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select class="fi" id="exit-seq-sort" style="width:180px" onchange="_renderExitSequencer()">
+          <option value="priority">🎯 Priority Score</option>
+          <option value="tax">💸 Tax Efficiency</option>
+          <option value="concentration">📊 Concentration</option>
+          <option value="signal">🤖 Signal Strength</option>
+          <option value="pnl">📉 Biggest Losers</option>
+        </select>
+        <button class="btn btn-p btn-sm" onclick="_renderExitSequencer()">↻ Refresh</button>
+      </div>
+    </div>
+    <div id="exit-seq-content"></div>
+  </div>
+
   <div class="sec" id="sec-plan">
     <div class="sec-head"><div class="sec-title">Exit Planner</div><button class="btn btn-p" onclick="genExitPlan()">🤖 Generate AI Exit Plan</button></div>
     <div class="ai-box gap" id="exit-ai"><div class="ai-txt" style="color:var(--t4)">Click "Generate AI Exit Plan" for personalised exit strategies with stop-losses, profit booking targets, tax timing and rebalancing advice.</div></div>
@@ -4141,6 +4160,15 @@ textarea.fi{resize:vertical;min-height:70px;}
             <span id="tg-test-result" style="font-size:11px;color:var(--t3)"></span>
           </div>
           <div style="margin-top:8px;font-size:10px;color:var(--t4)">Alerts sent for: SL breach · RSI overbought/oversold cross · Entry zone hit · Earnings in 2 days</div>
+          <div style="margin-top:10px;border-top:1px solid var(--b2);padding-top:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:6px">📅 Weekly Digest</div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="cfg-weekly-digest" onchange="saveSettings()"> Send weekly summary every Monday 8 AM</label>
+              <select class="fi" id="cfg-digest-day" style="width:140px" onchange="saveSettings()">
+                <option value="1">Monday</option><option value="0">Sunday</option><option value="5">Friday evening</option>
+              </select>
+            </div>
+          </div>
         </div></div>
       </div>
       <div class="pn"><div class="pn-h"><div class="pn-t">ℹ Data Sources</div></div><div class="pn-b" style="font-size:12px;line-height:2;color:var(--t2)">
@@ -4466,6 +4494,12 @@ textarea.fi{resize:vertical;min-height:70px;}
           <div style="height:70px;position:relative"><canvas id="sd-macd-canvas" style="width:100%;height:70px"></canvas></div>
         </div>
         <div class="sd-stat-grid" id="sd-stats"></div>
+        <!-- Multi-timeframe RSI panel -->
+        <div id="sd-mtf-rsi" style="display:none;margin-top:8px;padding:8px 12px;background:var(--s2);border-radius:8px;border:1px solid var(--b2)">
+          <div style="font-size:9px;font-weight:700;color:var(--t4);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Multi-Timeframe RSI</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap" id="sd-mtf-rsi-vals"></div>
+          <div id="sd-mtf-rsi-verdict" style="margin-top:6px;font-size:11px"></div>
+        </div>
       </div>
       <!-- FUNDAMENTALS TAB -->
       <div class="sd-tp" id="sd-tab-fund">
@@ -5750,6 +5784,7 @@ function go(id) {
   if(id==='divcal') renderDivCalendar();
   if(id==='deals') renderDeals();
   if(id==='ipo-tracker') _fetchIPOs();
+  if(id==='exit-seq') _renderExitSequencer();
   if(id==='strategies') renderStrategiesSection();
   if(id==='riskpro') renderRiskPro();
   if(id==='attribution') renderAttribution();
@@ -26480,6 +26515,421 @@ function _removeIPO(idx) {
 
 // Init: update retry button count on load
 setTimeout(() => { try { _updateRetryFailedBtn(); _updateBearBanner(); } catch(e) {} }, 2000);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: ALLOCATION GUARD FIX-IT ACTIONS
+// Enhanced guard showing exact shares to sell + tax impact per breach
+// ═══════════════════════════════════════════════════════════════════════════════
+(function _patchAllocationGuard() {
+  const _origGuard = window._renderAllocationGuard;
+  if (typeof _origGuard !== 'function') return;
+  window._renderAllocationGuard = function() {
+    _origGuard.apply(this, arguments);
+    const el = document.getElementById('ds-alloc-guard');
+    if (!el || el.style.display === 'none' || !el.innerHTML) return;
+
+    const maxStock  = +(D.cfg.maxStockPct  || 15);
+    const maxSector = +(D.cfg.maxSectorPct || 25);
+    const totalVal  = D.holdings.reduce((s,h) => s + (h.ltp||h.avgPrice)*h.qty, 0);
+
+    // Build fix-it details for each breach
+    const fixRows = [];
+
+    // Stock breaches
+    D.holdings
+      .map(h => ({ h, pct: (h.ltp||h.avgPrice)*h.qty/totalVal*100 }))
+      .filter(x => x.pct > maxStock)
+      .sort((a,b) => b.pct - a.pct)
+      .forEach(({ h, pct }) => {
+        const ltp = h.ltp || h.avgPrice;
+        const targetVal = totalVal * maxStock / 100;
+        const excessVal = ltp * h.qty - targetVal;
+        const sellQty = Math.ceil(excessVal / ltp);
+        const days = h.buyDate ? Math.floor((Date.now()-new Date(h.buyDate))/864e5) : 0;
+        const taxType = days >= 365 ? 'LTCG' : 'STCG';
+        const pnlPerShare = ltp - h.avgPrice;
+        const taxRate = taxType === 'LTCG' ? 0.125 : 0.20;
+        const taxImpact = pnlPerShare > 0 ? Math.round(pnlPerShare * sellQty * taxRate) : 0;
+        const nearLTCG = days < 365 && (365 - days) <= 30;
+        fixRows.push(`<div style="margin-top:8px;padding:8px 10px;background:var(--s2);border-radius:7px;border-left:3px solid rgba(240,82,82,.4)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <span style="font-weight:700;color:var(--t1)">${h.symbol} — Reduce by ${sellQty} shares</span>
+            <span class="tag ${taxType==='LTCG'?'t-buy':'t-neu'}" style="font-size:9px">${taxType}</span>
+          </div>
+          <div style="font-size:11px;color:var(--t3);line-height:1.6">
+            Sell ${sellQty} @ ₹${f(ltp)} = <strong style="color:var(--t1)">₹${fI(sellQty*ltp)}</strong>
+            · Brings weight to ${maxStock}%
+            ${taxImpact > 0 ? `· Est. tax: ₹${fI(taxImpact)} (${taxType} @${(taxRate*100).toFixed(0)}%)` : '· Loss position — no tax'}
+            ${nearLTCG ? `<span style="color:var(--yel);font-weight:600"> · ⏳ LTCG in ${365-days}d — consider waiting!</span>` : ''}
+          </div>
+          <button class="btn btn-g btn-xs" style="margin-top:6px" onclick="openPositionBuilder(${h.id})">📐 Position Builder →</button>
+        </div>`);
+      });
+
+    // Sector breaches
+    D.holdings
+      .reduce((acc, h) => {
+        const sec = h.sector || 'Others';
+        const val = (h.ltp||h.avgPrice)*h.qty;
+        const pct = val/totalVal*100;
+        if (!acc[sec]) acc[sec] = { sec, val:0, holdings:[] };
+        acc[sec].val += val;
+        acc[sec].holdings.push({ h, val, pct });
+        return acc;
+      }, {})
+    ;
+    const sectorMap2 = {};
+    D.holdings.forEach(h => {
+      const sec = h.sector||'Others';
+      if (!sectorMap2[sec]) sectorMap2[sec] = [];
+      sectorMap2[sec].push(h);
+    });
+    Object.entries(sectorMap2).forEach(([sec, stocks]) => {
+      const secVal = stocks.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty, 0);
+      const secPct = secVal/totalVal*100;
+      if (secPct <= maxSector) return;
+      const excessPct = secPct - maxSector;
+      const excessVal = totalVal * excessPct / 100;
+      // Rank stocks in sector to reduce: REDUCE signal first, then by weight desc
+      const ranked = stocks
+        .map(h => ({ h, w: (h.ltp||h.avgPrice)*h.qty/totalVal*100 }))
+        .sort((a,b) => {
+          const sigScore = s => s==='REDUCE'?0:s==='EXIT'?0:s==='HOLD'?1:2;
+          return sigScore(a.h.signal) - sigScore(b.h.signal) || b.w - a.w;
+        });
+      const topReduce = ranked.slice(0,3).map(r => r.h.symbol).join(', ');
+      fixRows.push(`<div style="margin-top:8px;padding:8px 10px;background:var(--s2);border-radius:7px;border-left:3px solid rgba(251,191,36,.4)">
+        <div style="font-weight:700;color:var(--t1);margin-bottom:4px">${sec} Sector — Reduce by ₹${fI(excessVal)}</div>
+        <div style="font-size:11px;color:var(--t3);line-height:1.6">
+          Currently ${secPct.toFixed(1)}% → target ${maxSector}% · Excess: ₹${fI(excessVal)}<br>
+          Best to reduce: <strong style="color:var(--t1)">${topReduce}</strong>
+          (${ranked[0]?.h.signal||'HOLD'} signal · highest weight)
+        </div>
+        <button class="btn btn-g btn-xs" style="margin-top:6px" onclick="go('exit-seq')">🎯 Exit Sequencer →</button>
+      </div>`);
+    });
+
+    if (fixRows.length) {
+      const existing = el.querySelector('[style*="border-radius:10px"]');
+      if (existing) {
+        const fixWrap = document.createElement('div');
+        fixWrap.style.cssText = 'margin-top:10px;border-top:1px solid var(--b2);padding-top:8px';
+        fixWrap.innerHTML = `<div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:4px">💡 How to fix it:</div>${fixRows.join('')}`;
+        existing.appendChild(fixWrap);
+      }
+    }
+  };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: SMART EXIT SEQUENCER
+// Ranks holdings by exit priority: signal + tax + concentration + RSI + P&L
+// ═══════════════════════════════════════════════════════════════════════════════
+function _renderExitSequencer() {
+  const el = document.getElementById('exit-seq-content');
+  if (!el || !D.holdings.length) return;
+  const sort = document.getElementById('exit-seq-sort')?.value || 'priority';
+  const totalVal = D.holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0);
+
+  const scored = D.holdings.map(h => {
+    const ltp = h.ltp || h.avgPrice;
+    const pnlPct = (ltp - h.avgPrice)/h.avgPrice*100;
+    const days = h.buyDate ? Math.floor((Date.now()-new Date(h.buyDate))/864e5) : 0;
+    const weight = ltp*h.qty/totalVal*100;
+    const taxType = days >= 365 ? 'LTCG' : 'STCG';
+    const nearLTCG = days < 365 && (365-days) <= 30;
+    const maxStock = D.cfg.maxStockPct || 15;
+    const overWeight = Math.max(0, weight - maxStock);
+
+    // Priority score (higher = exit sooner)
+    let priority = 0;
+    // Signal score
+    const sig = (h.signal||'').toUpperCase();
+    if (sig.includes('EXIT'))          priority += 35;
+    else if (sig === 'REDUCE')         priority += 25;
+    else if (sig === 'HOLD')           priority += 10;
+    else if (sig.includes('BUY'))      priority += 0;
+    // Bear market: add urgency to BUY signals
+    if (_marketRegime?.label?.includes('BEAR') && sig.includes('BUY')) priority += 15;
+    // Concentration
+    priority += overWeight * 2;
+    // RSI overbought
+    if (h.rsi >= 75) priority += 15;
+    else if (h.rsi >= 70) priority += 8;
+    // SL breach
+    if (h.stopLoss && ltp <= h.stopLoss) priority += 30;
+    // P&L — reward harvesting losses
+    if (pnlPct < -15) priority += 10;
+    // Tax efficiency: penalise near-LTCG (don't exit yet)
+    if (nearLTCG) priority -= 20;
+    // Tax: STCG on gains is expensive — prefer to exit LTCG gains
+    if (taxType === 'STCG' && pnlPct > 0) priority += 5;
+
+    // Tax efficiency score (higher = more tax-efficient to exit now)
+    let taxScore = 0;
+    if (pnlPct < 0) taxScore = 80 + Math.abs(pnlPct); // loss harvest = highest priority
+    else if (taxType === 'LTCG') taxScore = 50; // LTCG gains = tax efficient
+    else taxScore = 20; // STCG gains = least efficient
+
+    return { h, ltp, pnlPct, days, weight, taxType, nearLTCG, overWeight, priority, taxScore, sig };
+  });
+
+  // Sort
+  const sorted = [...scored].sort((a,b) => {
+    switch(sort) {
+      case 'tax':           return b.taxScore - a.taxScore;
+      case 'concentration': return b.overWeight - a.overWeight;
+      case 'signal':        return (['EXIT','REDUCE','HOLD','BUY MORE','STRONG BUY','BUY'].indexOf(b.sig) - ['EXIT','REDUCE','HOLD','BUY MORE','STRONG BUY','BUY'].indexOf(a.sig));
+      case 'pnl':           return a.pnlPct - b.pnlPct;
+      default:              return b.priority - a.priority;
+    }
+  });
+
+  // Only show the top exit candidates (priority > 15 or all if sort != priority)
+  const candidates = sort === 'priority' ? sorted.filter(s=>s.priority>15) : sorted;
+  if (!candidates.length) {
+    el.innerHTML = `<div class="pn"><div class="pn-b" style="text-align:center;padding:30px;color:var(--t4)">✅ No urgent exits — portfolio looks balanced. Run AI Analyze All to update signals.</div></div>`;
+    return;
+  }
+
+  const rows = candidates.map((s,i) => {
+    const { h, ltp, pnlPct, days, weight, taxType, nearLTCG, overWeight, priority, sig } = s;
+    const rank = i + 1;
+    const rankCol = rank<=3 ? 'var(--red)' : rank<=6 ? 'var(--orn)' : 'var(--yel)';
+    const reasons = [];
+    if (h.stopLoss && ltp <= h.stopLoss) reasons.push('🚨 SL breached');
+    if (sig==='REDUCE'||sig==='EXIT') reasons.push(`🤖 Signal: ${sig}`);
+    if (_marketRegime?.label?.includes('BEAR') && sig.includes('BUY')) reasons.push('🔴 BUY in bear market');
+    if (overWeight > 0) reasons.push(`📊 ${weight.toFixed(1)}% weight (over by ${overWeight.toFixed(1)}%)`);
+    if (h.rsi >= 70) reasons.push(`📈 RSI ${h.rsi} (overbought)`);
+    if (pnlPct < -15) reasons.push(`💸 Loss harvest ${pnlPct.toFixed(1)}%`);
+    if (nearLTCG) reasons.push(`⏳ LTCG in ${365-days}d — WAIT`);
+    if (taxType==='LTCG'&&pnlPct>0) reasons.push('✅ LTCG eligible — tax efficient');
+
+    const pnlStr = pnlPct>=0?`+${pnlPct.toFixed(1)}%`:`${pnlPct.toFixed(1)}%`;
+    const pnlCol = pnlPct>=0?'var(--grn)':'var(--red)';
+
+    return `<div style="display:grid;grid-template-columns:32px 1fr auto;gap:12px;align-items:start;padding:12px 16px;border-bottom:1px solid var(--b1)">
+      <div style="width:28px;height:28px;border-radius:50%;background:${rankCol}22;border:2px solid ${rankCol};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:${rankCol};flex-shrink:0">${rank}</div>
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="sym" style="font-size:13px">${h.symbol}</span>
+          ${tagSig(h.signal)}
+          <span class="tag ${taxType==='LTCG'?'t-buy':'t-neu'}" style="font-size:9px">${taxType} · ${days}d</span>
+          ${nearLTCG?`<span class="tag t-yel" style="font-size:9px">⏳ ${365-days}d to LTCG</span>`:''}
+        </div>
+        <div style="font-size:11px;color:var(--t3);margin-top:4px">${reasons.slice(0,3).join(' · ')}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-family:var(--mono);font-size:13px;font-weight:700">₹${f(ltp)}</div>
+        <div style="font-size:11px;color:${pnlCol};font-weight:600">${pnlStr}</div>
+        <div style="font-size:10px;color:var(--t4)">${weight.toFixed(1)}% wt</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const totalPriority = candidates.reduce((s,c)=>s+c.priority,0);
+  el.innerHTML = `<div class="pn">
+    <div style="padding:10px 16px;border-bottom:1px solid var(--b1);display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:12px;color:var(--t3)">${candidates.length} exit candidates · Priority score: ${totalPriority.toFixed(0)}</span>
+      <span style="font-size:11px;color:var(--t4)">Higher rank = exit sooner</span>
+    </div>
+    ${rows}
+    <div style="padding:10px 16px;font-size:10px;color:var(--t4);border-top:1px solid var(--b1)">⚠ LTCG items flagged with ⏳ — wait before exiting to save tax. Not SEBI advice.</div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: MULTI-TIMEFRAME RSI
+// Shows daily + weekly + monthly RSI in chart tab with confluence verdict
+// ═══════════════════════════════════════════════════════════════════════════════
+async function _computeMultiTfRSI(hid) {
+  const h = D.holdings.find(x=>x.id===hid);
+  if (!h) return;
+  const panel = document.getElementById('sd-mtf-rsi');
+  const vals = document.getElementById('sd-mtf-rsi-vals');
+  const verdict = document.getElementById('sd-mtf-rsi-verdict');
+  if (!panel || !vals) return;
+  panel.style.display = 'block';
+  vals.innerHTML = '<span style="color:var(--t4);font-size:11px">Computing…</span>';
+
+  const yfSym = h.yfTicker || _symMapLookup(h.symbol) || (h.exchange==='BSE'?h.symbol+'.BO':h.symbol+'.NS');
+  const timeframes = [
+    { label:'Daily',  range:'3mo', interval:'1d'  },
+    { label:'Weekly', range:'1y',  interval:'1wk' },
+    { label:'Monthly',range:'5y',  interval:'1mo' },
+  ];
+
+  const results = [];
+  for (const tf of timeframes) {
+    try {
+      const series = await fetchYFSeries(yfSym, tf.range, tf.interval).catch(()=>null);
+      if (!series || series.length < 16) { results.push({ label:tf.label, rsi:null }); continue; }
+      const rsiArr = _calcRSI(series.map(p=>p.c), 14);
+      const last = rsiArr.filter(v=>v!=null).slice(-1)[0];
+      results.push({ label:tf.label, rsi: last!=null ? +last.toFixed(1) : null });
+    } catch(e) { results.push({ label:tf.label, rsi:null }); }
+    await new Promise(r=>setTimeout(r,300));
+  }
+
+  vals.innerHTML = results.map(r => {
+    if (r.rsi == null) return `<div style="text-align:center"><div style="font-size:9px;color:var(--t4)">${r.label}</div><div style="font-size:14px;font-weight:700;color:var(--t4)">—</div></div>`;
+    const col = r.rsi>=70?'var(--red)':r.rsi<=30?'var(--grn)':'var(--t2)';
+    const lbl = r.rsi>=70?'OB':r.rsi<=30?'OS':'';
+    return `<div style="text-align:center;padding:4px 10px;background:var(--s3);border-radius:6px">
+      <div style="font-size:9px;color:var(--t4);margin-bottom:2px">${r.label}</div>
+      <div style="font-size:16px;font-weight:800;color:${col};font-family:var(--mono)">${r.rsi}</div>
+      ${lbl?`<div style="font-size:9px;color:${col};font-weight:700">${lbl}</div>`:''}
+    </div>`;
+  }).join('');
+
+  // Confluence verdict
+  const valid = results.filter(r=>r.rsi!=null);
+  if (valid.length >= 2) {
+    const avgRsi = valid.reduce((s,r)=>s+r.rsi,0)/valid.length;
+    const allOB = valid.every(r=>r.rsi>=70);
+    const allOS = valid.every(r=>r.rsi<=30);
+    const dayOSweekOB = results[0]?.rsi<=35 && results[1]?.rsi>=65;
+    const dayOBweekOS = results[0]?.rsi>=65 && results[1]?.rsi<=35;
+
+    let msg='', col='var(--t3)';
+    if (allOB)         { msg='⚠ All timeframes overbought — high reversal risk'; col='var(--red)'; }
+    else if (allOS)    { msg='✅ All timeframes oversold — strong entry confluence'; col='var(--grn)'; }
+    else if (dayOSweekOB) { msg='⚠ TRAP: Daily oversold but weekly overbought — avoid entry'; col='var(--orn)'; }
+    else if (dayOBweekOS) { msg='📈 Daily overbought but weekly oversold — short-term pullback expected'; col='var(--yel)'; }
+    else if (avgRsi<40) { msg='📉 Bearish momentum across timeframes'; col='var(--orn)'; }
+    else if (avgRsi>60) { msg='📈 Bullish momentum across timeframes'; col='var(--grn)'; }
+    else               { msg='⚪ Neutral — no clear timeframe confluence'; col='var(--t4)'; }
+    if (verdict) verdict.innerHTML = `<span style="color:${col};font-size:11px">${msg}</span>`;
+  }
+}
+
+// Hook multi-TF RSI into chart load — triggers when user opens chart tab
+const _origLoadSdChart = window.loadSdChart;
+if (typeof _origLoadSdChart === 'function') {
+  window.loadSdChart = async function() {
+    await _origLoadSdChart.apply(this, arguments);
+    const rsiActive = document.querySelector('.sd-sma-btn[data-sma]'); // chart loaded
+    if (_sdHid) {
+      const panel = document.getElementById('sd-mtf-rsi');
+      if (panel) panel.style.display = 'none'; // reset before recompute
+      _computeMultiTfRSI(_sdHid).catch(()=>{});
+    }
+  };
+}
+
+// Also trigger when stock detail opens on chart tab
+const _origOpenDetail = window.openDetail;
+if (typeof _origOpenDetail === 'function') {
+  window.openDetail = function(hid) {
+    _origOpenDetail.apply(this, arguments);
+    setTimeout(() => {
+      if (document.getElementById('sdt-chart')?.classList.contains('on')) {
+        _computeMultiTfRSI(hid).catch(()=>{});
+      }
+    }, 800);
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  FEATURE: WEEKLY TELEGRAM DIGEST
+// Auto-sends portfolio summary to Telegram every Monday 8AM (or configured day)
+// ═══════════════════════════════════════════════════════════════════════════════
+async function _sendWeeklyDigest() {
+  const token = localStorage.getItem('tgToken');
+  const chatId = localStorage.getItem('tgChatId');
+  if (!token || !chatId) return;
+
+  const totalVal = D.holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty, 0);
+  const totalInv = D.holdings.reduce((s,h)=>s+h.avgPrice*h.qty, 0);
+  const totalPnl = totalVal - totalInv;
+  const pnlPct = (totalPnl/totalInv*100).toFixed(1);
+
+  const slBreaches = D.holdings.filter(h=>h.stopLoss&&h.ltp&&h.ltp<=h.stopLoss);
+  const reduces = D.holdings.filter(h=>h.signal==='REDUCE'||h.signal==='EXIT');
+  const topGainer = [...D.holdings].sort((a,b)=>((b.ltp||b.avgPrice)-b.avgPrice)/b.avgPrice-((a.ltp||a.avgPrice)-a.avgPrice)/a.avgPrice)[0];
+  const topLoser = [...D.holdings].sort((a,b)=>((a.ltp||a.avgPrice)-a.avgPrice)/a.avgPrice-((b.ltp||b.avgPrice)-b.avgPrice)/b.avgPrice)[0];
+
+  const earningsThisWeek = D.holdings.filter(h=>{
+    if(!h.earningsTs) return false;
+    const d=(h.earningsTs*1000-Date.now())/864e5;
+    return d>=0&&d<=7;
+  }).map(h=>h.symbol);
+
+  const maxStock = D.cfg.maxStockPct||15;
+  const breachStock = D.holdings.filter(h=>(h.ltp||h.avgPrice)*h.qty/totalVal*100>maxStock).map(h=>h.symbol);
+
+  const regime = _marketRegime?.label || '⚪ Unknown';
+  const conviction = document.getElementById('ds-conviction')?.textContent || '—';
+
+  const msg = `📊 <b>StockSense Weekly Digest</b>
+${new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'short'})}
+
+<b>Portfolio</b>
+💼 Value: ₹${fI(totalVal)} | ${totalPnl>=0?'▲':'▼'} ₹${fI(Math.abs(totalPnl))} (${pnlPct}%)
+🤖 Conviction: ${conviction}
+🌡 Regime: ${regime}
+
+<b>Alerts</b>
+${slBreaches.length?`🚨 SL Breached: ${slBreaches.map(h=>h.symbol).join(', ')}`:'✅ No SL breaches'}
+${reduces.length?`⚠️ Reduce signals: ${reduces.map(h=>h.symbol).join(', ')}`:''}
+${breachStock.length?`📊 Over-weight: ${breachStock.join(', ')} (>${maxStock}%)`:''}
+${earningsThisWeek.length?`📅 Earnings this week: ${earningsThisWeek.join(', ')}`:''}
+
+<b>Movers</b>
+🏆 Best: ${topGainer?.symbol} (${(((topGainer?.ltp||topGainer?.avgPrice)-topGainer?.avgPrice)/topGainer?.avgPrice*100).toFixed(1)}%)
+📉 Worst: ${topLoser?.symbol} (${(((topLoser?.ltp||topLoser?.avgPrice)-topLoser?.avgPrice)/topLoser?.avgPrice*100).toFixed(1)}%)`;
+
+  return _sendTelegramAlert(msg);
+}
+
+function _checkWeeklyDigestSchedule() {
+  const enabled = document.getElementById('cfg-weekly-digest')?.checked || localStorage.getItem('tgWeeklyDigest')==='1';
+  if (!enabled) return;
+  const lastSent = parseInt(localStorage.getItem('ss_weekly_digest_last')||'0');
+  const now = Date.now();
+  const dayMs = 864e5;
+  const configDay = parseInt(localStorage.getItem('tgDigestDay')||'1'); // 0=Sun,1=Mon
+  const today = new Date().getDay();
+  const h = new Date().getHours();
+
+  if (today === configDay && h >= 8 && (now - lastSent) > dayMs * 6) {
+    localStorage.setItem('ss_weekly_digest_last', now);
+    _sendWeeklyDigest().catch(()=>{});
+  }
+}
+
+// Extend saveSettings to save digest prefs
+const _origSaveSettings2 = window.saveSettings;
+if (typeof _origSaveSettings2 === 'function') {
+  window.saveSettings = function() {
+    _origSaveSettings2.apply(this, arguments);
+    const digEnabled = document.getElementById('cfg-weekly-digest')?.checked;
+    const digDay = document.getElementById('cfg-digest-day')?.value;
+    if (digEnabled != null) localStorage.setItem('tgWeeklyDigest', digEnabled?'1':'0');
+    if (digDay) localStorage.setItem('tgDigestDay', digDay);
+  };
+}
+
+// Check weekly digest schedule on every refresh
+const _origRefreshAll2 = window.refreshAll;
+if (typeof _origRefreshAll2 === 'function') {
+  window.refreshAll = async function() {
+    const r = await _origRefreshAll2.apply(this, arguments);
+    try { _checkWeeklyDigestSchedule(); } catch(e) {}
+    return r;
+  };
+}
+
+// Restore digest settings on load
+(function() {
+  const en = localStorage.getItem('tgWeeklyDigest')==='1';
+  const dy = localStorage.getItem('tgDigestDay');
+  if (en) { const el=document.getElementById('cfg-weekly-digest'); if(el) el.checked=true; }
+  if (dy) { const el=document.getElementById('cfg-digest-day'); if(el) el.value=dy; }
+  // Run exit sequencer on load if already on that page
+  setTimeout(()=>{ try{if(document.getElementById('sec-exit-seq')?.closest('.sec:not([style*="display:none"])')) _renderExitSequencer();} catch(e){} }, 2500);
+})();
 
 // ── Watchlist Select-Mode & Targeted Analyze ──────────────────────────────────
 let _wlSelectMode = false;
