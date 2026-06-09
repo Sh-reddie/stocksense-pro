@@ -948,27 +948,43 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="mob-nav-item" onclick="mgo('sip')">📈 SIP / DCA</div>
     <div class="mob-nav-item" onclick="mgo('realised')">💰 Realised P&amp;L</div>
     <div class="mob-nav-item" onclick="mgo('dividends')">🏦 Dividends</div>
+    <div class="mob-nav-item" onclick="mgo('divcal')">🗓 Dividend Calendar</div>
     <div class="mob-nav-item" onclick="mgo('journal')">📒 Trade Journal</div>
     <div class="mob-nav-item" onclick="mgo('benchmark')">📊 vs Nifty Benchmark</div>
     <div class="mob-nav-item" onclick="mgo('timeline')">📈 Value Timeline</div>
+    <div class="mob-nav-item" onclick="mgo('rebalancer')">⚖ Rebalancer</div>
+    <div class="mob-nav-item" onclick="mgo('attribution')">📊 Performance Attribution</div>
     <div class="mob-nav-sect">🔍 Research</div>
     <div class="mob-nav-item" onclick="mgo('screener')">🔍 Nifty 500 Screener</div>
     <div class="mob-nav-item" onclick="mgo('52week')">📊 52-Week Screener</div>
     <div class="mob-nav-item" onclick="mgo('fair-value')">💎 Fair Value Engine</div>
+    <div class="mob-nav-item" onclick="mgo('ipo-tracker')" style="color:var(--ac2);font-weight:600">🚀 IPO Tracker</div>
+    <div class="mob-nav-item" onclick="mgo('watchlist-builder')">🔭 Watchlist Builder</div>
+    <div class="mob-nav-item" onclick="mgo('comparator')">⚔ Stock Comparator</div>
+    <div class="mob-nav-item" onclick="mgo('momentum')">🔥 Momentum Board</div>
+    <div class="mob-nav-item" onclick="mgo('heatmap')">🔥 Correlation Heatmap</div>
+    <div class="mob-nav-item" onclick="mgo('covered-calls')" style="color:var(--grn);font-weight:600">📈 Covered Calls</div>
     <div class="mob-nav-item" onclick="mgo('fii-dii')">🏦 FII / DII Flows</div>
+    <div class="mob-nav-item" onclick="mgo('deals')">💼 Bulk / Block Deals</div>
     <div class="mob-nav-item" onclick="mgo('sectormap')">🌡 Sector Map</div>
     <div class="mob-nav-item" onclick="mgo('macro')">🌐 Macro &amp; Institutional</div>
     <div class="mob-nav-item" onclick="mgo('news')">📰 News &amp; Events</div>
     <div class="mob-nav-item" onclick="mgo('calendar')">📅 Earnings Calendar</div>
     <div class="mob-nav-sect">🤖 AI Insights</div>
+    <div class="mob-nav-item" onclick="mgo('action')">⚡ Action Center</div>
     <div class="mob-nav-item" onclick="mgo('action-plan')">📋 Weekly Action Plan</div>
     <div class="mob-nav-item" onclick="mgo('portfolio-doctor')">🩺 Portfolio Doctor</div>
     <div class="mob-nav-item" onclick="mgo('intel-report')">📑 Intel Report</div>
     <div class="mob-nav-item" onclick="mgo('analysis')">🔍 Stock Deep Dive</div>
     <div class="mob-nav-item" onclick="mgo('entry-triggers')">🎯 Entry Triggers</div>
-    <div class="mob-nav-item" onclick="mgo('exit-planner')">🚪 Exit Planner</div>
+    <div class="mob-nav-item" onclick="mgo('exit-planner')">🚪 AI Exit Planner</div>
+    <div class="mob-nav-item" onclick="mgo('exit-seq')" style="color:var(--ac2);font-weight:600">🎯 Exit Sequencer</div>
     <div class="mob-nav-item" onclick="mgo('opportunity')">🏆 Opportunity Ranker</div>
     <div class="mob-nav-item" onclick="mgo('stress-test')">🧨 Stress Test</div>
+    <div class="mob-nav-item" onclick="mgo('position-builder')">📐 Position Builder</div>
+    <div class="mob-nav-item" onclick="mgo('ai-rebalancer')">⚖️ AI Rebalancer</div>
+    <div class="mob-nav-item" onclick="mgo('earnings-preview')">📣 Earnings Preview</div>
+    <div class="mob-nav-item" onclick="mgo('dividend-opt')">💸 Dividend Optimizer</div>
     <div class="mob-nav-item" onclick="mgo('goal-planner')">🎯 Goal Planner</div>
     <div class="mob-nav-item" onclick="mgo('planner')">📐 Investment Planner</div>
     <div class="mob-nav-item" onclick="mgo('strategies')">🧠 AI Strategies</div>
@@ -980,6 +996,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="mob-nav-item" onclick="mgo('notifications')">📬 Notifications</div>
     <div class="mob-nav-item" onclick="mgo('tax')">🧾 Tax Report</div>
     <div class="mob-nav-item" onclick="mgo('import')">⬆ Import CSV</div>
+    <div class="mob-nav-item" onclick="mgo('settings')">⚙ Settings</div>
     <div class="mob-nav-item" onclick="toggleTheme();toggleMobileNav()">🌙 Toggle Theme</div>
   </div>
 </div>
@@ -1135,7 +1152,8 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div class="tn-drop-sep"></div>
         <div class="tn-drop-div">Trade Decisions</div>
         <div class="tn-drop-item" onclick="go('entry-triggers')">🎯 Entry Triggers</div>
-        <div class="tn-drop-item" onclick="go('exit-planner')">🚪 Exit Planner</div>
+        <div class="tn-drop-item" onclick="go('exit-planner')">🚪 AI Exit Planner</div>
+        <div class="tn-drop-item" onclick="go('plan')">📋 Exit Planner (Classic)</div>
         <div class="tn-drop-item" onclick="go('exit-seq')" style="color:var(--ac2);font-weight:600">🎯 Exit Sequencer</div>
         <div class="tn-drop-item" onclick="go('position-builder')">📐 Position Builder</div>
         <div class="tn-drop-item" onclick="go('strategies')">🧠 Advanced Strategies</div>
