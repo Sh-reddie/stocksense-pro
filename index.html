@@ -26798,7 +26798,31 @@ function _renderCoveredCalls() {
     ].map(([l,v])=>`<div class="sc c1" style="min-width:140px"><div class="sc-lbl">${l}</div><div class="sc-val" style="color:var(--grn)">${v}</div></div>`).join('');
   }
 
-  el.innerHTML = `<div style="overflow-x:auto"><table class="tbl">
+  // Aspirational section if we have any
+  let aspirationalHtml = '';
+  if (aspirational.length) {
+    const aspRows = aspirational.map(x=>{
+      const col = x.monthlyYield>2?'var(--grn)':x.monthlyYield>1?'var(--yel)':'var(--t3)';
+      return `<tr>
+        <td><div class="sym">${x.h.symbol}</div><div class="snm">${x.h.name?.slice(0,20)||''}</div></td>
+        <td class="mn">${x.h.qty} / <span style="color:var(--ac)">${x.lot}</span> needed</td>
+        <td class="mn" style="color:var(--orn)">₹${fI(x.capitalNeeded)}</td>
+        <td class="mn" style="color:var(--cyn)">₹${x.h.qty*x.ltp<100000?fI(x.capitalNeeded):'Add '+x.sharesNeeded+' shares'}</td>
+        <td class="mn" style="font-weight:700;color:${col}">₹${fI(x.monthlyIncome)}/mo</td>
+        <td class="mn" style="color:${col}">${x.monthlyYield.toFixed(2)}%/mo</td>
+        <td class="mn" style="color:${x.annualYield>15?'var(--grn)':'var(--yel)'}"><strong>${x.annualYield.toFixed(1)}%</strong>/yr</td>
+      </tr>`;
+    }).join('');
+    aspirationalHtml = `<div style="margin-bottom:14px">
+      <div style="font-weight:700;color:var(--t2);margin-bottom:8px;font-size:13px">🎯 F&O Aspirational — What You Could Earn (if you reach 1 full lot)</div>
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr>
+        <th>Stock</th><th class="mn">Qty / Lot Size</th><th class="mn">Capital Needed</th><th class="mn">Action</th>
+        <th class="mn">Monthly Income</th><th class="mn">Mo. Yield</th><th class="mn">Ann. Yield</th>
+      </tr></thead><tbody>${aspRows}</tbody></table></div>
+    </div>`;
+  }
+
+  el.innerHTML = aspirationalHtml + `<div style="overflow-x:auto"><table class="tbl">
     <thead><tr>
       <th>Stock</th><th class="mn">Shares</th><th class="mn">LTP</th>
       <th class="mn" title="5% OTM strike price">Strike (5% OTM)</th>
