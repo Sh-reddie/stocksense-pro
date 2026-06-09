@@ -8461,11 +8461,27 @@ async function analyseHolding(h,ctx,{forceRefresh=false}={}) {
   const ltp=h.ltp||h.avgPrice; const plp=((ltp-h.avgPrice)/h.avgPrice*100).toFixed(1); const days=hDays(h.buyDate)||0; const tt=days>=365?'LTCG':'STCG';
   const isHot=ctx?.hotSectors?.includes(h.sector); const isWeak=ctx?.weakSectors?.includes(h.sector);
   const pos52 = h.h52&&h.l52&&ltp ? Math.round((ltp-h.l52)/(h.h52-h.l52)*100) : null;
+  // Build previous-analysis block — injected only when a prior run exists
+  let prevBlock = '';
+  if (h.lastAnalysed && (h.signal || h.aiReasoning)) {
+    const _daysAgo = Math.floor((Date.now()-new Date(h.lastAnalysed))/(864e5));
+    const _ageStr = _daysAgo===0?'today':_daysAgo===1?'yesterday':`${_daysAgo}d ago`;
+    const _prevLines = [];
+    if (h.signal)       _prevLines.push(`Signal: ${h.signal}${h.confidence?' (conf '+h.confidence+'/10)':''}`);
+    if (h.stopLoss)     _prevLines.push(`SL: ₹${f(h.stopLoss)}`);
+    if (h.target1)      _prevLines.push(`T1: ₹${f(h.target1)}${h.t1Timeline?' ('+h.t1Timeline+')':''}`);
+    if (h.aiReasoning)  _prevLines.push(`Reasoning: "${h.aiReasoning}"`);
+    if (h.bullCase)     _prevLines.push(`Bull: "${h.bullCase}"`);
+    if (h.bearCase)     _prevLines.push(`Bear: "${h.bearCase}"`);
+    if (_prevLines.length) {
+      prevBlock = `\nPREV ANALYSIS (${_ageStr}): ${_prevLines.join(' | ')}\nNOTE: If signal changes from previous, state WHY in reasoning (price level, catalyst, or thesis break). If unchanged, confirm or tighten levels.`;
+    }
+  }
   const prompt=`Senior Indian equity analyst (NSE/BSE). Decision-support for ${h.symbol} (${h.exchange}). Not SEBI-registered advice.
 
 POSITION: LTP ₹${f(ltp)} | Cost ₹${f(h.avgPrice)} | P&L ${plp}% | Qty ${h.qty} | Held ${days}d (${tt}${days>300&&days<365?' — LTCG in '+(365-days)+'d':''})
 MARKET: 52W ₹${f(h.l52)}–₹${f(h.h52)}${pos52!=null?' | Position '+pos52+'% of range':''} | PE ${h.pe||'N/A'} | ROE ${h.roe?(h.roe*100).toFixed(1)+'%':'N/A'} | Beta ${h.beta||'N/A'}
-CONTEXT: Sector ${h.sector||'?'} ${isHot?'(HOT)':isWeak?'(WEAK)':'(neutral)'} | Market ${ctx?.sentimentLabel||'Neutral'}
+CONTEXT: Sector ${h.sector||'?'} ${isHot?'(HOT)':isWeak?'(WEAK)':'(neutral)'} | Market ${ctx?.sentimentLabel||'Neutral'}${prevBlock}
 
 RULES: stopLoss=specific support price; targets=resistance/fair-value; action=one direct sentence on what to DO now; bullCase/bearCase must include at least one specific number or named catalyst; redFlags only if real issue exists.
 
@@ -13274,6 +13290,7 @@ async function claudeJSON(prompt, sys) {
     'mistralai/mistral-7b-instruct:free',
     'z-ai/glm-4.5-air:free'
   ];
+  let _rlCount = 0; // tracks consecutive 429s — drives backoff
   for (const model of FAST_MODELS) {
     try {
       const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -13287,17 +13304,27 @@ async function claudeJSON(prompt, sys) {
         body: JSON.stringify({
           model,
           max_tokens: 1024,
-          temperature: 0.4,
+          temperature: 0.3,
           messages: [{ role: 'system', content: sysMsg }, { role: 'user', content: prompt }]
         }),
         signal: AbortSignal.timeout(30000)
       });
       const d = await r.json();
       if (d.error) {
-        // Any API error = model unavailable or rate-limited, try next
-        ilog && ilog('⚠ claudeJSON: "'+model+'" failed ('+((d.error.message||'').slice(0,40))+'), trying next...', 'warn');
+        const _errMsg = d.error.message || '';
+        const _is429 = r.status === 429 || d.error.code === 429
+          || _errMsg.includes('429') || /rate.?limit/i.test(_errMsg);
+        if (_is429) {
+          _rlCount++;
+          const _wait = Math.min(_rlCount * 2000, 6000); // 2s → 4s → 6s cap
+          ilog && ilog(`⚠ claudeJSON: "${model}" rate-limited, waiting ${_wait}ms before next…`, 'warn');
+          await new Promise(res => setTimeout(res, _wait));
+        } else {
+          ilog && ilog('⚠ claudeJSON: "'+model+'" failed ('+_errMsg.slice(0,40)+'), trying next...', 'warn');
+        }
         continue;
       }
+      _rlCount = 0; // successful response — reset backoff counter
       const _msg = d.choices?.[0]?.message;
       const content = _msg?.content || _msg?.reasoning || '';
       const finishReason = d.choices?.[0]?.finish_reason;
