@@ -6122,15 +6122,11 @@ function go(id) {
   if(id==='smart-alerts') _renderSmartAlertsPreview();
   if(id==='portfolio-cal') _renderPortfolioCal();
   if(id==='fund-overlap') _renderFundOverlap();
-  if(id==='rebal-plan') _renderRebalPlan();
   if(id==='signal-accuracy') _renderSignalAccuracy();
-  if(id==='fund-overlap') _renderFundOverlap();
   if(id==='insurance') { _calcInsurance(); _prefillInsurance(); }
   if(id==='recovery') _populateRecoveryDropdown();
   if(id==='rebal-plan') _renderRebalPlanIntro();
-  if(id==='signal-tracker') _renderSignalTracker();
   if(id==='smart-alerts') _renderSmartAlerts();
-  if(id==='fund-overlap') _renderFundOverlap();
   if(id==='strategies') renderStrategiesSection();
   if(id==='riskpro') renderRiskPro();
   if(id==='attribution') renderAttribution();
@@ -8671,25 +8667,6 @@ function setMomTf(tf){momTf=tf;['1d','1w','1m','3m'].forEach(t=>{const b=documen
 
 
 // Position sizing calculator
-function calcPositionSize() {
-  const size=parseFloat(document.getElementById('ps-size').value)||0;
-  const entry=parseFloat(document.getElementById('ps-entry').value)||0;
-  const sl=parseFloat(document.getElementById('ps-sl').value)||0;
-  const riskPct=parseFloat(document.getElementById('ps-risk').value)||1.5;
-  if(!size||!entry||!sl||sl>=entry){document.getElementById('ps-result').style.display='none';return;}
-  const riskAmt=size*riskPct/100;
-  const riskPerShare=entry-sl;
-  const qty=Math.floor(riskAmt/riskPerShare);
-  const cap=qty*entry;
-  const loss=qty*riskPerShare;
-  const pct=size>0?cap/size*100:0;
-  document.getElementById('ps-qty').textContent=qty;
-  document.getElementById('ps-cap').textContent='₹'+fI(cap);
-  document.getElementById('ps-loss').textContent='₹'+fI(loss);
-  document.getElementById('ps-pct').textContent=f(pct,1)+'%';
-  document.getElementById('ps-result').style.display='block';
-}
-
 function psSearch(q) {
   const drop=document.getElementById('ps-drop');
   if(q.length<2){drop.style.display='none';return;}
@@ -16750,7 +16727,7 @@ function _drawChart(canvas, labels, datasets) {
 // ██  POSITION SIZING & SIP PLANNER
 // ═══════════════════════════════════════════════════════════════════════════
 function calcPositionSize() {
-  const portfolio = parseFloat(document.getElementById('ps-portfolio')?.value)||0;
+  const portfolio = parseFloat(document.getElementById('ps-portfolio')?.value) || parseFloat(document.getElementById('ps-size')?.value) || 0;
   const riskPct   = parseFloat(document.getElementById('ps-risk')?.value)||2;
   const maxPosPct = parseFloat(document.getElementById('ps-maxpos')?.value)||10;
   const entry     = parseFloat(document.getElementById('ps-entry')?.value)||0;
@@ -16791,6 +16768,21 @@ function calcPositionSize() {
   if(portPct < 2) advice += '💡 Position is &lt;2% of portfolio — consider if it\'s worth the tracking overhead. ';
   if(!advice) advice = '✅ Position sizing looks healthy. Stick to your stop loss — no exceptions.';
   if(advEl) advEl.innerHTML = advice;
+
+  // Planner section compat (sec-planner uses ps-result / ps-cap / ps-loss / ps-pct)
+  const resultEl = document.getElementById('ps-result');
+  if(resultEl) {
+    if(!portfolio || !entry || !sl || sl >= entry) { resultEl.style.display='none'; }
+    else {
+      const capEl2  = document.getElementById('ps-cap');
+      const lossEl3 = document.getElementById('ps-loss');
+      const pctEl   = document.getElementById('ps-pct');
+      if(capEl2)  capEl2.textContent  = '₹'+invest.toLocaleString('en-IN',{maximumFractionDigits:0});
+      if(lossEl3) lossEl3.textContent = '₹'+maxLoss.toLocaleString('en-IN',{maximumFractionDigits:0});
+      if(pctEl)   pctEl.textContent   = portPct.toFixed(1)+'%';
+      resultEl.style.display = 'block';
+    }
+  }
 }
 
 // ── Kelly Criterion Calculator ────────────────────────────────────────────────
@@ -27015,85 +27007,6 @@ async function _generateRebalPlan() {
 // ██  FEATURE 2: AI SIGNAL ACCURACY TRACKER
 // Scorecard of how AI signals have performed since they were given
 // ═══════════════════════════════════════════════════════════════════════════════
-function _renderSignalTracker() {
-  const el = document.getElementById('sig-track-content');
-  if (!el || !D.holdings.length) return;
-
-  const scored = D.holdings
-    .filter(h => h.signal && h.lastAnalysed && h.ltp)
-    .map(h => {
-      const analyseDate = new Date(h.lastAnalysed);
-      const daysSince = Math.floor((Date.now()-analyseDate.getTime())/864e5);
-      const ltp = h.ltp;
-      // We need price at time of analysis — use avgPrice as proxy if no snapshot
-      // Better: use h.ltpAtAnalysis if we stored it, else use current vs target
-      const priceAtAnalysis = h.ltpAtAnalysis || h.ltp; // fallback
-      const signalReturn = priceAtAnalysis && priceAtAnalysis !== ltp
-        ? ((ltp-priceAtAnalysis)/priceAtAnalysis*100) : null;
-
-      // Signal correctness
-      let correct = null;
-      if (h.signal === 'REDUCE' || h.signal === 'EXIT') {
-        correct = signalReturn !== null ? signalReturn < 0 : null; // correct if price fell
-      } else if (h.signal?.includes('BUY') || h.signal === 'HOLD') {
-        correct = signalReturn !== null ? signalReturn >= 0 : null; // correct if price held/rose
-      }
-
-      // Target achievement
-      const targetHit = h.target1 && ltp >= h.target1;
-      const slHit = h.stopLoss && ltp <= h.stopLoss;
-      const confidence = h.confidence || 5;
-
-      return { h, signal:h.signal, daysSince, signalReturn, correct, targetHit, slHit, confidence, analyseDate };
-    })
-    .sort((a,b) => b.daysSince - a.daysSince);
-
-  if (!scored.length) {
-    el.innerHTML='<div class="pn"><div class="pn-b" style="text-align:center;padding:30px;color:var(--t4)">Run AI Analyze All to start tracking signal accuracy</div></div>';
-    return;
-  }
-
-  const withReturn = scored.filter(s=>s.signalReturn!==null);
-  const correct = withReturn.filter(s=>s.correct===true).length;
-  const incorrect = withReturn.filter(s=>s.correct===false).length;
-  const accuracy = withReturn.length ? (correct/withReturn.length*100).toFixed(0) : '—';
-  const avgReturn = withReturn.length ? (withReturn.reduce((s,x)=>s+x.signalReturn,0)/withReturn.length).toFixed(1) : '—';
-  const targetsHit = scored.filter(s=>s.targetHit).length;
-  const slsHit = scored.filter(s=>s.slHit).length;
-
-  const rows = scored.map(s => {
-    const retStr = s.signalReturn!==null ? (s.signalReturn>=0?'+':'')+s.signalReturn.toFixed(1)+'%' : '—';
-    const retCol = s.signalReturn>0?'var(--grn)':s.signalReturn<0?'var(--red)':'var(--t3)';
-    const correctIcon = s.correct===true?'✅':s.correct===false?'❌':'—';
-    return `<tr>
-      <td onclick="openDetail(${s.h.id})" style="cursor:pointer"><div class="sym">${s.h.symbol}</div><div style="font-size:9px;color:var(--t4)">${s.analyseDate.toLocaleDateString('en-IN')}</div></td>
-      <td>${tagSig(s.signal)}</td>
-      <td class="mn" style="color:var(--t3)">${s.confidence}/10</td>
-      <td class="mn" style="color:${retCol};font-weight:700">${retStr}</td>
-      <td class="mn" style="font-size:14px;text-align:center">${correctIcon}</td>
-      <td class="mn">${s.targetHit?'🎯 Hit':'—'} ${s.slHit?'🚨 SL':''}</td>
-      <td class="mn" style="color:var(--t4)">${s.daysSince}d ago</td>
-    </tr>`;
-  }).join('');
-
-  const accuracyCol = accuracy>=70?'var(--grn)':accuracy>=50?'var(--yel)':'var(--red)';
-  el.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:16px">
-      ${[
-        ['Signal Accuracy',accuracy+'%',accuracyCol],
-        ['Avg Return Since Signal',avgReturn+'%',parseFloat(avgReturn)>=0?'var(--grn)':'var(--red)'],
-        ['Targets Hit',targetsHit+'/'+scored.length,'var(--ac)'],
-        ['SL Breaches',slsHit,'var(--red)'],
-        ['Signals Tracked',scored.length,'var(--t2)'],
-      ].map(([l,v,c])=>`<div class="sc c1"><div class="sc-lbl">${l}</div><div class="sc-val" style="color:${c};font-size:16px">${v}</div></div>`).join('')}
-    </div>
-    <div style="overflow-x:auto"><table class="tbl">
-      <thead><tr><th>Stock</th><th>Signal</th><th class="mn">Confidence</th><th class="mn">Return Since</th><th class="mn">Correct?</th><th class="mn">Targets</th><th class="mn">Age</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>
-    <div style="margin-top:10px;font-size:10px;color:var(--t4)">Return calculated from current LTP vs price at analysis time. Signal correctness: REDUCE/EXIT = correct if price fell; BUY/HOLD = correct if price held or rose.</div>`;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // ██  FEATURE 3: SMART ALERT AUTO-SETUP
 // One-click to create alerts for all REDUCE signals, SL levels, and RSI extremes
@@ -27206,164 +27119,10 @@ const _FUND_PORTFOLIOS = {
   'Mirae Asset Large Cap': ['HDFCBANK','ICICIBANK','RELIANCE','INFOSYS','TCS','AXISBANK','KOTAKBANK','SBIN','BAJFINANCE','LT','HINDUNILVR','ITC','BHARTIARTL','MARUTI','TITAN','NTPC','POWERGRID','GRASIM','NESTLEIND','TATAMOTORS'],
 };
 
-function _renderFundOverlap() {
-  const el = document.getElementById('fund-overlap-content');
-  if (!el || !D.holdings.length) return;
-
-  const mySymbols = new Set(D.holdings.map(h=>h.symbol));
-  const totalVal = D.holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0);
-
-  const results = Object.entries(_FUND_PORTFOLIOS).map(([fund, stocks]) => {
-    const overlap = stocks.filter(s => mySymbols.has(s));
-    const overlapVal = D.holdings.filter(h=>overlap.includes(h.symbol)).reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0);
-    const overlapPct = (overlapVal/totalVal*100).toFixed(1);
-    return { fund, fundSize:stocks.length, overlap, overlapCount:overlap.length, overlapPct:parseFloat(overlapPct), overlapVal };
-  }).sort((a,b)=>b.overlapPct-a.overlapPct);
-
-  const rows = results.map(r => {
-    const col = r.overlapPct>=30?'var(--red)':r.overlapPct>=15?'var(--yel)':'var(--grn)';
-    const pctOfFund = (r.overlapCount/r.fundSize*100).toFixed(0);
-    return `<div style="margin-bottom:12px;padding:12px 16px;background:var(--s2);border-radius:10px;border-left:3px solid ${col}">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-weight:700;color:var(--t1);font-size:13px">${r.fund}</span>
-        <span style="font-family:var(--mono);font-weight:800;font-size:16px;color:${col}">${r.overlapPct}%</span>
-      </div>
-      <div style="font-size:11px;color:var(--t3);margin-bottom:6px">
-        ${r.overlapCount} of your stocks in this fund · ${pctOfFund}% of fund · ₹${fI(r.overlapVal)} of your portfolio
-      </div>
-      ${r.overlap.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap">
-        ${r.overlap.map(s=>`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:${col}22;color:${col}">${s}</span>`).join('')}
-      </div>` : '<span style="font-size:11px;color:var(--grn)">✅ No overlap</span>'}
-    </div>`;
-  }).join('');
-
-  const highOverlap = results.filter(r=>r.overlapPct>=20);
-  el.innerHTML = `
-    ${highOverlap.length?`<div style="padding:10px 14px;background:rgba(240,82,82,.06);border-radius:8px;margin-bottom:14px;font-size:12px">
-      <strong style="color:var(--red)">⚠ High overlap detected:</strong> ${highOverlap.map(r=>`${r.fund} (${r.overlapPct}%)`).join(', ')}
-      <br><span style="color:var(--t3)">If you also hold index funds, you're double-exposed to these stocks. Consider reducing direct equity or index fund allocation.</span>
-    </div>`:''}
-    ${rows}
-    <div style="font-size:10px;color:var(--t4);margin-top:8px">Fund portfolios are representative samples (top 20-50 holdings). Actual fund composition changes quarterly.</div>`;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // ██  FEATURE 1: REBALANCING EXECUTION PLANNER
 // Week-by-week trade schedule from sector rotation targets
 // ═══════════════════════════════════════════════════════════════════════════════
-function _renderRebalPlan() {
-  const el = document.getElementById('rebal-plan-content');
-  if (!el) return;
-  const weeks = parseInt(document.getElementById('rebal-weeks')?.value) || 4;
-  const totalVal = D.holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0);
-  const regime = _marketRegime?.label?.includes('BULL')?'BULL':_marketRegime?.label?.includes('DEFENSIVE')?'DEFENSIVE':_marketRegime?.label?.includes('BEAR')?'BEAR':_marketRegime?.label?.includes('CAUTIOUS')?'CAUTIOUS':'NEUTRAL';
-  const ideal = _REGIME_SECTOR_WEIGHTS?.[regime] || {Energy:15,FMCG:25,Banking:12,IT:10,Defence:15,Finance:8,Infrastructure:5,Others:10};
-
-  const sectorMap = {};
-  D.holdings.forEach(h=>{ const s=h.sector||'Others'; sectorMap[s]=(sectorMap[s]||0)+(h.ltp||h.avgPrice)*h.qty; });
-
-  // Build sell list (overweight sectors → rank by signal priority)
-  const sells = [];
-  D.holdings.forEach(h => {
-    const ltp = h.ltp||h.avgPrice;
-    const sec = h.sector||'Others';
-    const secPct = (sectorMap[sec]||0)/totalVal*100;
-    const idealPct = ideal[sec]||0;
-    if (secPct - idealPct < 2) return; // not overweight
-    const excessVal = (secPct-idealPct)/100*totalVal;
-    const sigPriority = h.signal==='EXIT'?0:h.signal==='REDUCE'?1:h.signal==='HOLD'?2:3;
-    const days = h.buyDate?Math.floor((Date.now()-new Date(h.buyDate))/864e5):0;
-    const taxPriority = days>=365?0:days<365&&(365-days)<=30?2:1;
-    sells.push({ h, ltp, sec, secPct, idealPct, excessVal, sigPriority, taxPriority, days,
-                 sellVal: Math.min(excessVal, ltp*h.qty*0.5), // max 50% of position per plan
-                 sellQty: Math.ceil(Math.min(excessVal, ltp*h.qty*0.5)/ltp) });
-  });
-  sells.sort((a,b)=>a.sigPriority-b.sigPriority||a.taxPriority-b.taxPriority||b.excessVal-a.excessVal);
-
-  // Build buy list (underweight sectors)
-  const buys = Object.entries(ideal)
-    .map(([sec,idealPct])=>({ sec, idealPct, currentPct:(sectorMap[sec]||0)/totalVal*100 }))
-    .filter(x=>x.idealPct-x.currentPct>2)
-    .sort((a,b)=>(b.idealPct-b.currentPct)-(a.idealPct-a.currentPct));
-
-  // Distribute across weeks
-  const weeklyBudget = sells.reduce((s,x)=>s+x.sellVal,0)/weeks;
-  const weekPlans = [];
-  let sellIdx=0, cumSell=0;
-
-  for (let w=1; w<=weeks; w++) {
-    const weekSells=[], weekBuys=[];
-    let wSell=0;
-    while(sellIdx<sells.length && wSell<weeklyBudget*1.2) {
-      const s=sells[sellIdx];
-      const partial=Math.min(s.sellVal-cumSell, weeklyBudget-wSell);
-      if(partial>1000) {
-        const qty=Math.ceil(partial/s.ltp);
-        weekSells.push({...s, planQty:qty, planVal:qty*s.ltp});
-        wSell+=qty*s.ltp; cumSell+=qty*s.ltp;
-        if(cumSell>=s.sellVal) { sellIdx++; cumSell=0; }
-      } else { sellIdx++; cumSell=0; }
-      if(wSell>=weeklyBudget*0.8) break;
-    }
-    if(wSell>5000 && buys.length) {
-      // Pick target sector with biggest gap; suggest specific stocks
-      const buy = buys[0];
-      // Find candidate stocks: watchlist stocks in target sector with BUY/ENTER signal, or existing BUY-signal holdings in that sector
-      const wlCandidates = D.watchlist
-        .filter(w=>w.sector===buy.sec && (w.wlDecision==='ENTER NOW'||w.wlDecision==='WAIT')&&w.ltp)
-        .sort((a,b)=>(b.entryScore||0)-(a.entryScore||0))
-        .slice(0,2);
-      const holdingCandidates = D.holdings
-        .filter(h=>h.sector===buy.sec && (h.signal?.includes('BUY'))&&h.ltp)
-        .sort((a,b)=>(b.confidence||0)-(a.confidence||0))
-        .slice(0,1);
-      const suggestions = [...wlCandidates.map(w=>({ sym:w.symbol, ltp:w.ltp, label:'Watchlist '+(w.wlDecision==='ENTER NOW'?'ENTER NOW':'WAIT'), qty:Math.floor(wSell/buys.length/w.ltp)||1 })),
-                           ...holdingCandidates.map(h=>({ sym:h.symbol, ltp:h.ltp, label:'Add to '+h.signal, qty:Math.floor(wSell/buys.length/h.ltp)||1 }))];
-      weekBuys.push({ sec:buy.sec, budget:wSell, note:`Add ${buy.sec} stocks`, suggestions });
-    }
-    if(weekSells.length) weekPlans.push({ week:w, sells:weekSells, buys:weekBuys, total:wSell });
-  }
-
-  if (!weekPlans.length) {
-    el.innerHTML=`<div class="pn"><div class="pn-b" style="text-align:center;padding:30px;color:var(--t4)">✅ Portfolio is within target ranges — no rebalancing needed right now.</div></div>`;
-    return;
-  }
-
-  const totalToMove = weekPlans.reduce((s,w)=>s+w.total,0);
-  const wDate = (w) => { const d=new Date(); d.setDate(d.getDate()+w*7); return d.toLocaleDateString('en-IN',{day:'numeric',month:'short'}); };
-
-  el.innerHTML = `<div style="margin-bottom:10px;font-size:12px;color:var(--t3)">
-    Rebalancing <strong style="color:var(--t1)">₹${fI(totalToMove)}</strong> over ${weeks} weeks · Regime: <strong>${_marketRegime?.label||'Neutral'}</strong>
-  </div>
-  ${weekPlans.map(wp=>`<div class="pn" style="margin-bottom:12px">
-    <div class="pn-h">
-      <div class="pn-t">Week ${wp.week} · ${wDate(wp.week-1)} — ${wDate(wp.week)}</div>
-      <span style="font-size:11px;color:var(--t3)">Move ₹${fI(wp.total)}</span>
-    </div>
-    <div class="pn-b">
-      ${wp.sells.map(s=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--b2)">
-        <div><span class="sym" style="font-size:12px">${s.h.symbol}</span><span style="font-size:10px;color:var(--red);margin-left:8px">SELL ${s.planQty} shares</span>${s.days>=365?'<span class="tag t-buy" style="font-size:9px;margin-left:6px">LTCG</span>':'<span class="tag t-neu" style="font-size:9px;margin-left:6px">STCG</span>'}</div>
-        <span style="font-family:var(--mono);font-weight:700;color:var(--red)">₹${fI(s.planVal)}</span>
-      </div>`).join('')}
-      ${wp.buys.map(b=>`<div style="padding:6px 0;margin-top:4px;border-top:1px dashed var(--b2)">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div><span style="font-weight:600;color:var(--ac)">🔼 BUY: ${b.sec}</span><span style="font-size:10px;color:var(--t3);margin-left:8px">${b.note}</span></div>
-          <span style="font-family:var(--mono);font-weight:700;color:var(--grn)">₹${fI(b.budget)} to deploy</span>
-        </div>
-        ${(b.suggestions&&b.suggestions.length)?`<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">
-          ${b.suggestions.map(s=>`<div style="padding:4px 10px;background:rgba(79,142,247,.08);border-radius:6px;border:1px solid rgba(79,142,247,.2);font-size:11px">
-            <span class="sym" style="font-size:11px">${s.sym}</span>
-            <span style="color:var(--ac);margin-left:6px">${s.label}</span>
-            <span style="color:var(--t3);margin-left:6px">·</span>
-            <span style="font-family:var(--mono);margin-left:6px">₹${f(s.ltp)} × ~${s.qty} shares</span>
-          </div>`).join('')}
-        </div>`:`<div style="margin-top:4px;font-size:11px;color:var(--t4)">Add watchlist stocks in ${b.sec} sector or screen Nifty 500 for ${b.sec} candidates.</div>`}
-      </div>`).join('')}
-    </div>
-  </div>`).join('')}
-  <div style="font-size:10px;color:var(--t4);margin-top:8px">Tax note: LTCG holdings prioritised for reduction — lower tax. STCG holdings with losses reduce tax liability.</div>`;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // ██  FEATURE 2: AI SIGNAL ACCURACY TRACKER
 // Tracks AI signal vs actual price performance since last analysis
@@ -27657,84 +27416,6 @@ const _INDEX_CONSTITUENTS = {
   'HDFC Flexi Cap (Top 25)': ['ICICIBANK','HDFCBANK','INFY','TCS','HDFC','BHARTIARTL','AXISBANK','MARUTI','BAJFINANCE','KOTAKBANK','NTPC','POWERGRID','SBIN','RELIANCE','ITC','COALINDIA','HINDALCO','GAIL','TITAN','NESTLE'],
   'Mirae Asset Large Cap (Top 25)': ['HDFCBANK','ICICIBANK','INFY','TCS','RELIANCE','AXISBANK','KOTAKBANK','ITC','LT','BHARTIARTL','SBIN','BAJFINANCE','HINDUNILVR','SUNPHARMA','NTPC','DRREDDY','DIVISLAB','MARUTI','TATAMOTORS','M&M'],
 };
-
-function _renderFundOverlap() {
-  const el = document.getElementById('fund-overlap-content');
-  if (!el) return;
-  const mySyms = new Set(D.holdings.map(h=>h.symbol));
-  const totalVal = D.holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0);
-
-  if (!mySyms.size) { el.innerHTML=`<div class="pn"><div class="pn-b" style="text-align:center;padding:20px;color:var(--t4)">Add holdings first.</div></div>`; return; }
-
-  const rows = Object.entries(_INDEX_CONSTITUENTS).map(([fund, constituents]) => {
-    const overlap = constituents.filter(s=>mySyms.has(s));
-    const overlapVal = overlap.reduce((s,sym)=>{ const h=D.holdings.find(x=>x.symbol===sym); return s+(h?(h.ltp||h.avgPrice)*h.qty:0); },0);
-    const overlapPct = overlapVal/totalVal*100;
-    const indexPct = (overlap.length/constituents.length*100).toFixed(0);
-    // Double-exposure risk score (0-100): weight by portfolio %, penalise if >20%
-    const riskScore = Math.min(100, Math.round(overlapPct * (overlapPct > 30 ? 2 : overlapPct > 15 ? 1.3 : 1)));
-    const riskLabel = riskScore >= 60 ? '🔴 High' : riskScore >= 30 ? '🟡 Medium' : '🟢 Low';
-    const riskCol   = riskScore >= 60 ? 'var(--red)' : riskScore >= 30 ? 'var(--yel)' : 'var(--grn)';
-    // Sector breakdown of overlapping stocks
-    const sectorBreakdown = {};
-    overlap.forEach(sym=>{ const h=D.holdings.find(x=>x.symbol===sym); const sec=h?.sector||'Others'; sectorBreakdown[sec]=(sectorBreakdown[sec]||[]); sectorBreakdown[sec].push(sym); });
-    return { fund, overlap, overlapVal, overlapPct:overlapPct.toFixed(1), indexPct, count:overlap.length, total:constituents.length, riskScore, riskLabel, riskCol, sectorBreakdown };
-  }).sort((a,b)=>b.riskScore-a.riskScore);
-
-  // Find the most overlapping single fund and build swap suggestion
-  const topRisk = rows.filter(r=>r.riskScore>=30);
-  const swapSuggestions = [];
-  if (topRisk.length) {
-    // Stocks in your holdings that appear in NO index funds — unique alpha
-    const allOverlapped = new Set(rows.flatMap(r=>r.overlap));
-    const uniqueAlpha = D.holdings.filter(h=>!allOverlapped.has(h.symbol));
-    if (uniqueAlpha.length) {
-      swapSuggestions.push(`<strong style="color:var(--grn)">✅ Pure alpha picks</strong> (not in any tracked index): ${uniqueAlpha.map(h=>h.symbol).join(', ')} — these add genuine diversification vs index exposure.`);
-    }
-    // Holdings that are in 3+ funds = highest double-exposure
-    const freqMap = {};
-    rows.forEach(r=>r.overlap.forEach(sym=>freqMap[sym]=(freqMap[sym]||0)+1));
-    const highlyOverlapped = Object.entries(freqMap).filter(([,c])=>c>=3).sort((a,b)=>b[1]-a[1]).slice(0,3);
-    if (highlyOverlapped.length) {
-      swapSuggestions.push(`<strong style="color:var(--orn)">⚠ Triple+ overlap</strong> (in 3+ index funds): ${highlyOverlapped.map(([s,c])=>`${s} (${c} funds)`).join(', ')} — you own these both directly AND through index exposure. Consider reducing direct weight.`);
-    }
-  }
-
-  el.innerHTML=`
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:14px">
-      ${rows.slice(0,3).map(r=>`<div class="sc c1" style="min-width:0">
-        <div class="sc-lbl" style="font-size:10px">${r.fund.split(' ').slice(0,2).join(' ')}</div>
-        <div class="sc-val" style="color:${r.riskCol};font-size:16px">${r.riskLabel}</div>
-        <div style="font-size:10px;color:var(--t3)">${r.overlapPct}% of portfolio</div>
-      </div>`).join('')}
-    </div>
-
-    <div style="overflow-x:auto;margin-bottom:14px"><table class="tbl"><thead><tr>
-      <th>Fund / Index</th><th class="mn">Double-Exposure Risk</th><th class="mn">Portfolio %</th><th class="mn">Index Coverage</th><th>Overlapping Stocks</th>
-    </tr></thead><tbody>
-      ${rows.map(r=>`<tr>
-        <td style="font-weight:600">${r.fund}</td>
-        <td class="mn" style="font-weight:700;color:${r.riskCol}">${r.riskLabel} <span style="font-size:10px;color:var(--t4)">(${r.riskScore})</span></td>
-        <td class="mn" style="font-weight:700;font-family:var(--mono);color:${parseFloat(r.overlapPct)>30?'var(--red)':parseFloat(r.overlapPct)>15?'var(--yel)':'var(--grn)'}">${r.overlapPct}%</td>
-        <td class="mn" style="color:var(--t3)">${r.indexPct}%</td>
-        <td style="font-size:11px;color:var(--t2)">${r.overlap.slice(0,6).join(', ')}${r.overlap.length>6?`<span style="color:var(--t4)"> +${r.overlap.length-6} more</span>`:''}</td>
-      </tr>
-      ${Object.keys(r.sectorBreakdown).length>0?`<tr style="background:var(--s2)"><td colspan="5" style="padding:4px 14px;font-size:10px;color:var(--t3)">
-        Sector breakdown: ${Object.entries(r.sectorBreakdown).map(([sec,syms])=>`<strong>${sec}</strong>: ${syms.join(', ')}`).join(' · ')}
-      </td></tr>`:''}`).join('')}
-    </tbody></table></div>
-
-    ${swapSuggestions.length?`<div style="background:var(--s2);border-radius:8px;padding:12px 14px;margin-bottom:12px">
-      <div style="font-weight:700;font-size:12px;color:var(--t1);margin-bottom:8px">📌 Actionable Insights</div>
-      ${swapSuggestions.map(s=>`<div style="font-size:11px;color:var(--t2);line-height:1.6;margin-bottom:6px">${s}</div>`).join('')}
-    </div>`:''}
-
-    <div style="padding:10px 14px;background:var(--s2);border-radius:8px;font-size:11px;color:var(--t3);line-height:1.6">
-      💡 <strong style="color:var(--t2)">Double-Exposure Risk Score:</strong> 0–100. Weighted by portfolio % — 30%+ overlap in a single fund scores High.
-      If you hold HDFC Flexi Cap + direct equity overlapping 30%, a Nifty crash hits you twice: once in the fund, once in direct stocks.
-      <br><strong style="color:var(--t2)">Fix:</strong> Replace high-overlap direct holdings with unique mid/small-cap alpha picks not in any index.
-    </div>`;
-}
 
 // Init: render smart alerts preview on load
 setTimeout(()=>{ try{ _renderSmartAlertsPreview(); }catch(e){} }, 3000);
