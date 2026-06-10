@@ -30224,7 +30224,20 @@ function _renderRebalPlan() {
       .map(h=>({ h, sec:r.sec, action:'SELL', amount: Math.min(r.excessVal, (h.ltp||h.avgPrice)*h.qty*0.4) }));
   }).slice(0,6);
 
-  const addSuggestions = adds.map(a=>({ sec:a.sec, action:'BUY', amount:Math.min(a.deficitVal, 25000) }));
+  const addSuggestions = adds.map(a=>{
+    // Suggest specific stocks: watchlist ENTER NOW/WAIT in sector, then BUY-signal holdings in sector
+    const wlCandidates = (D.watchlist||[])
+      .filter(w=>(w.sector===a.sec)&&(w.wlDecision==='ENTER NOW'||w.wlDecision==='WAIT')&&w.ltp)
+      .sort((a,b)=>(b.entryScore||0)-(a.entryScore||0)).slice(0,2);
+    const holdCandidates = D.holdings
+      .filter(h=>(h.sector||'Others')===a.sec&&h.signal?.includes('BUY')&&h.ltp)
+      .sort((a,b)=>(b.confidence||0)-(a.confidence||0)).slice(0,1);
+    const suggestions = [
+      ...wlCandidates.map(w=>({ sym:w.symbol, ltp:w.ltp, label:w.wlDecision==='ENTER NOW'?'ENTER NOW':'WAIT' })),
+      ...holdCandidates.map(h=>({ sym:h.symbol, ltp:h.ltp, label:'Add to '+h.signal }))
+    ];
+    return { sec:a.sec, action:'BUY', amount:Math.min(a.deficitVal, 25000), suggestions };
+  });
 
   // Pair sells with buys across weeks
   let wi=0;
@@ -30249,7 +30262,12 @@ function _renderRebalPlan() {
           <span style="font-weight:700;color:${t.action==='SELL'?'var(--red)':'var(--ac)'}">${t.action}</span>
           ${t.h ? `<span class="sym" style="font-size:12px;margin-left:6px">${t.h.symbol}</span>
           <span style="font-size:10px;color:var(--t4);margin-left:4px">signal: ${t.h.signal||'HOLD'}</span>` :
-          `<span style="font-size:12px;color:var(--t2);margin-left:6px">${t.sec} sector stock</span>`}
+          (t.suggestions&&t.suggestions.length
+            ? `<span style="font-size:12px;color:var(--t2);margin-left:6px">${t.sec}</span>
+               <span style="margin-left:8px;display:inline-flex;gap:6px;flex-wrap:wrap">
+                 ${t.suggestions.map(s=>`<span style="padding:2px 8px;background:rgba(79,142,247,.1);border-radius:4px;font-size:10px;color:var(--ac)"><strong>${s.sym}</strong> · ${s.label}</span>`).join('')}
+               </span>`
+            : `<span style="font-size:12px;color:var(--t3);margin-left:6px">${t.sec} — add watchlist stocks in this sector</span>`)}
         </div>
         <span style="font-family:var(--mono);font-weight:600;color:var(--t1)">₹${fI(t.amount)}</span>
         ${t.h?`<button class="btn btn-g btn-xs" onclick="openTradeChecklist(${t.h.id},'sell')">✅</button>`:''}
@@ -30474,45 +30492,63 @@ function _renderFundOverlap() {
   const mySymbols = new Set(D.holdings.map(h=>h.symbol));
   const totalVal = D.holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0);
 
-  const overlapData = Object.entries(_FUND_COMPOSITIONS).map(([fund, stocks]) => {
+  // Use whichever composition dict exists
+  const fundDict = (typeof _FUND_COMPOSITIONS !== 'undefined') ? _FUND_COMPOSITIONS : _INDEX_CONSTITUENTS;
+
+  const overlapData = Object.entries(fundDict).map(([fund, stocks]) => {
     const overlap = stocks.filter(s=>mySymbols.has(s));
     const overlapVal = D.holdings.filter(h=>overlap.includes(h.symbol)).reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0);
-    const overlapPct = (overlapVal/totalVal*100);
-    return { fund, overlapCount:overlap.length, overlapStocks:overlap, overlapPct, totalStocks:stocks.length };
-  }).sort((a,b)=>b.overlapPct-a.overlapPct);
+    const overlapPct = overlapVal/totalVal*100;
+    const riskScore = Math.min(100, Math.round(overlapPct * (overlapPct>30?2:overlapPct>15?1.3:1)));
+    const riskLabel = riskScore>=60?'🔴 High':riskScore>=30?'🟡 Medium':'🟢 Low';
+    const riskCol   = riskScore>=60?'var(--red)':riskScore>=30?'var(--yel)':'var(--grn)';
+    // Sector breakdown of overlapping stocks
+    const sectorBreakdown = {};
+    overlap.forEach(sym=>{ const h=D.holdings.find(x=>x.symbol===sym); const sec=h?.sector||'Others'; if(!sectorBreakdown[sec]) sectorBreakdown[sec]=[]; sectorBreakdown[sec].push(sym); });
+    return { fund, overlap, overlapVal, overlapPct, overlapPct_s:overlapPct.toFixed(1), count:overlap.length, total:stocks.length, riskScore, riskLabel, riskCol, sectorBreakdown };
+  }).sort((a,b)=>b.riskScore-a.riskScore);
 
-  // Find double-exposed stocks (in 3+ funds)
-  const stockFundCount = {};
-  Object.entries(_FUND_COMPOSITIONS).forEach(([fund,stocks])=>{
-    stocks.forEach(s=>{ if(mySymbols.has(s)) stockFundCount[s]=(stockFundCount[s]||0)+1; });
-  });
-  const doubleExposed = Object.entries(stockFundCount).filter(([s,c])=>c>=3).sort((a,b)=>b[1]-a[1]);
+  // Stock fund frequency — triple+ exposure
+  const freqMap = {};
+  Object.values(fundDict).forEach(stocks=>stocks.forEach(s=>{ if(mySymbols.has(s)) freqMap[s]=(freqMap[s]||0)+1; }));
+  const tripleOverlap = Object.entries(freqMap).filter(([,c])=>c>=3).sort((a,b)=>b[1]-a[1]);
+  const allOverlapped = new Set(Object.values(fundDict).flat().filter(s=>mySymbols.has(s)));
+  const pureAlpha = D.holdings.filter(h=>!allOverlapped.has(h.symbol));
 
-  const cards = overlapData.map(o=>{
-    const col = o.overlapPct>30?'var(--red)':o.overlapPct>15?'var(--yel)':'var(--grn)';
-    const bar = Math.min(100, o.overlapPct);
-    return `<div style="padding:12px 16px;border-bottom:1px solid var(--b1)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+  const cards = overlapData.map(o=>`
+    <div style="padding:12px 16px;border-bottom:1px solid var(--b1)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
         <span style="font-weight:700;font-size:13px">${o.fund}</span>
-        <span style="font-family:var(--mono);font-weight:700;color:${col}">${o.overlapPct.toFixed(1)}% overlap</span>
+        <span style="font-weight:700;color:${o.riskCol}">${o.riskLabel} <span style="font-size:10px;color:var(--t4)">(score ${o.riskScore})</span></span>
       </div>
       <div style="height:4px;background:var(--b1);border-radius:2px;margin-bottom:6px">
-        <div style="width:${bar}%;height:100%;background:${col};border-radius:2px"></div>
+        <div style="width:${Math.min(100,o.overlapPct)}%;height:100%;background:${o.riskCol};border-radius:2px"></div>
       </div>
-      <div style="font-size:11px;color:var(--t3)">${o.overlapCount} stocks: ${o.overlapStocks.slice(0,8).join(', ')}${o.overlapStocks.length>8?'…':''}</div>
-    </div>`;
-  }).join('');
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-bottom:4px">
+        <span>${o.count} stocks overlap · <strong style="color:${o.riskCol}">${o.overlapPct_s}%</strong> of your portfolio</span>
+        <span>covers ${(o.count/o.total*100).toFixed(0)}% of index</span>
+      </div>
+      <div style="font-size:11px;color:var(--t4)">${o.overlap.slice(0,7).join(', ')}${o.overlap.length>7?` +${o.overlap.length-7} more`:''}</div>
+      ${Object.keys(o.sectorBreakdown).length ? `<div style="margin-top:4px;font-size:10px;color:var(--t4)">${Object.entries(o.sectorBreakdown).map(([sec,syms])=>`<strong>${sec}</strong>: ${syms.join(', ')}`).join(' · ')}</div>` : ''}
+    </div>`).join('');
 
-  const doubleHtml = doubleExposed.length ? `<div style="margin-top:14px;padding:10px 14px;background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:8px">
-    <div style="font-weight:700;color:var(--yel);margin-bottom:6px">⚠ Highly overlapped stocks (in 3+ funds)</div>
-    <div style="font-size:12px;color:var(--t2)">${doubleExposed.map(([s,c])=>`<span style="margin-right:12px"><strong>${s}</strong> <span style="color:var(--t4)">in ${c} funds</span></span>`).join('')}</div>
-    <div style="font-size:11px;color:var(--t4);margin-top:6px">These stocks are held by many funds — significant institutional ownership. Good for liquidity, but if funds sell they all sell together.</div>
-  </div>` : '';
+  const insightsHtml = (tripleOverlap.length||pureAlpha.length) ? `
+    <div style="margin-top:14px;padding:12px 14px;background:var(--s2);border-radius:8px">
+      <div style="font-weight:700;font-size:12px;color:var(--t1);margin-bottom:8px">📌 Actionable Insights</div>
+      ${tripleOverlap.length?`<div style="font-size:11px;color:var(--t2);margin-bottom:6px;line-height:1.6">
+        <strong style="color:var(--orn)">⚠ Triple+ exposure:</strong> ${tripleOverlap.map(([s,c])=>`<strong>${s}</strong> (${c} funds)`).join(', ')} — you own these both directly AND through fund exposure. Consider reducing direct weight.
+      </div>`:''}
+      ${pureAlpha.length?`<div style="font-size:11px;color:var(--t2);line-height:1.6">
+        <strong style="color:var(--grn)">✅ Pure alpha (not in any fund):</strong> ${pureAlpha.map(h=>h.symbol).join(', ')} — these add genuine diversification.
+      </div>`:''}
+    </div>` : '';
 
   el.innerHTML=`<div class="pn">
-    <div style="padding:10px 16px;border-bottom:1px solid var(--b1);font-size:12px;color:var(--t3)">Overlap = % of your portfolio value held by each fund/index. High overlap means you're "paying twice" for the same exposure.</div>
+    <div style="padding:8px 16px;border-bottom:1px solid var(--b1);font-size:11px;color:var(--t3)">
+      Double-Exposure Risk Score 0–100: weighted by portfolio %. &gt;30% overlap in a single fund = High risk — market selloff hits you in the fund AND in direct stocks simultaneously.
+    </div>
     ${cards}
-    ${doubleHtml}
+    ${insightsHtml}
   </div>`;
 }
 
