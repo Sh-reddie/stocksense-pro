@@ -19840,7 +19840,10 @@ function renderMarket() {
     const pr   = window._mktPrices[s.sym+'|'+s.xch];
     const ltpTxt = pr?.ltp ? '₹'+f(pr.ltp,2) : '<span style="color:var(--t4)">—</span>';
     const chgTxt = pr?.ltp ? `<span style="color:${(pr.chgP||0)>=0?'var(--grn)':'var(--red)'};font-size:11px">${(pr.chgP||0)>=0?'+':''}${fP(pr.chgP||0)}</span>` : '<span style="color:var(--t4);font-size:11px">—</span>';
-    const rowClick = `onclick="openMktDetail('${s.sym}','${s.xch}','${(s.name||'').replace(/'/g,'\\'')}','${(s.sec||'').replace(/'/g,"\\'")}')"`;
+    const nn = (s.name||'').replace(/['"\\`]/g,'');
+    const ns = (s.sec||'').replace(/['"\\`]/g,'');
+    const rowClick = `onclick="openMktDetail('${s.sym}','${s.xch}','${nn}','${ns}')"`;
+
     return `<tr style="cursor:pointer" onmouseover="this.style.background='var(--s2)'" onmouseout="this.style.background=''">
       <td ${rowClick}><strong style="font-size:13px;color:var(--ac)">${s.sym}</strong></td>
       <td ${rowClick} style="font-size:11px;color:var(--t2)">${s.name}</td>
