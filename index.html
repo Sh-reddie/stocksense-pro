@@ -3155,7 +3155,9 @@ textarea.fi{resize:vertical;min-height:70px;}
             <th style="width:90px">Symbol</th>
             <th>Name</th>
             <th style="width:45px">Exch</th>
-            <th style="width:120px">Sector</th>
+            <th style="width:110px">Sector</th>
+            <th style="width:68px">LTP</th>
+            <th style="width:58px">Chg%</th>
             <th style="width:65px">Signal</th>
             <th style="width:48px" title="AI Entry Score 1–10">Score</th>
             <th style="width:55px">SL</th>
@@ -9681,7 +9683,7 @@ function renderWatchlist() {
         <!-- LEFT: Identity + score -->
         <div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <span class="sym">${w.symbol}</span>
+            <span class="sym" style="cursor:pointer;text-decoration:underline;text-decoration-color:var(--b2)" onclick="openWlDetail(${w.id})" title="View ${w.symbol} detail">${w.symbol}</span>
             ${hasAI ? `<span style="font-size:12px;font-weight:700;color:${ds.color}">${ds.icon} ${ds.label}</span>` : `<span style="font-size:10px;color:var(--t4)">⏳ Run AI Analyze</span>`}
             ${w.wlConviction ? `<span style="font-size:9px;background:var(--s4);border:1px solid var(--b2);border-radius:3px;padding:1px 6px;color:var(--t3)">${w.wlConviction}</span>` : ''}
             ${inRange ? `<span style="font-size:9px;background:rgba(45,211,111,.15);border:1px solid rgba(45,211,111,.3);border-radius:3px;padding:1px 6px;color:var(--grn);font-weight:700">📍 IN RANGE</span>` : ''}
@@ -12727,6 +12729,208 @@ async function openIndexDetail(yfSym, name) {
     document.querySelectorAll('.sd-tf').forEach(b=>b.classList.remove('on'));
     const firstTf = document.querySelector('.sd-tf');
     if(firstTf) firstTf.classList.add('on');
+    loadSdChart('1d', firstTf);
+  }, 80);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// openMktDetail: stock detail popup for Market Scanner rows
+// ─────────────────────────────────────────────────────────────────────────────
+async function openMktDetail(sym, xch, name, sector) {
+  _sdHid = null;
+  const yfSym = _symMapLookup(sym) || (xch === 'BSE' ? sym + '.BO' : sym + '.NS');
+  _sdSym = yfSym;
+
+  document.getElementById('sd-sym').textContent   = sym;
+  document.getElementById('sd-name').textContent  = (name || sym) + ' · ' + (sector || '') + ' · ' + xch;
+  document.getElementById('sd-price').textContent = '—';
+  document.getElementById('sd-chg').textContent   = '';
+  document.getElementById('sd-tags').innerHTML    =
+    `<span class="tag t-neu">${xch}</span><span class="tag t-neu">${sector || 'Market'}</span>`;
+  document.getElementById('sd-stats').innerHTML   = '';
+
+  document.getElementById('sd-tab-hold').innerHTML =
+    '<div style="padding:20px;color:var(--t4);font-size:12px">Stock is not in your portfolio. Add it via the Holdings tab.</div>';
+  document.getElementById('sd-edit-content').innerHTML =
+    '<div style="padding:20px;color:var(--t4);font-size:12px">Edit is only available for portfolio holdings.</div>';
+
+  // AI tab — show existing market analysis or prompt
+  const analysis = _mktLoad();
+  const a = analysis[sym + '|' + xch];
+  const aiEl = document.getElementById('sd-ai-content');
+  if (a) {
+    const sigCol   = a.signal === 'BUY' ? 'var(--grn)' : a.signal === 'SELL' ? 'var(--red)' : 'var(--yel)';
+    const scoreCol = (a.score||0) >= 8 ? 'var(--grn)' : (a.score||0) >= 5 ? 'var(--yel)' : 'var(--red)';
+    const inWL = D.watchlist.some(w => w.symbol === sym);
+    aiEl.innerHTML = `
+      <div style="background:${sigCol}12;border:1.5px solid ${sigCol}30;border-radius:12px;padding:14px 16px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+          <span style="font-size:22px;font-weight:900;color:${sigCol};letter-spacing:.5px">${a.signal || 'HOLD'}</span>
+          <span style="font-size:13px;font-weight:700;color:${scoreCol}">Score: ${a.score || '—'}/10</span>
+          <span style="font-size:10px;color:var(--t4);margin-left:auto">${a.analyzedAt ? 'Updated ' + new Date(a.analyzedAt).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : ''}</span>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          ${a.sl  ? `<div style="padding:7px 12px;background:var(--s2);border-radius:8px;border:1px solid var(--b2)"><div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px">Stop Loss</div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--red)">${a.sl}</div></div>` : ''}
+          ${a.t1  ? `<div style="padding:7px 12px;background:var(--s2);border-radius:8px;border:1px solid var(--b2)"><div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px">Target 1</div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--grn)">${a.t1}</div></div>` : ''}
+          ${a.t2  ? `<div style="padding:7px 12px;background:var(--s2);border-radius:8px;border:1px solid var(--b2)"><div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px">Target 2</div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--cyn)">${a.t2}</div></div>` : ''}
+        </div>
+      </div>
+      ${a.thesis ? `<div style="background:var(--s2);border:1px solid var(--b1);border-left:3px solid ${sigCol};border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px"><div style="font-size:9.5px;font-weight:800;color:var(--t4);text-transform:uppercase;letter-spacing:.9px;margin-bottom:5px">📋 Thesis</div><div style="font-size:13px;color:var(--t1);line-height:1.6">${a.thesis}</div></div>` : ''}
+      <div style="text-align:center;padding:8px 0">
+        <button class="btn btn-p btn-sm" onclick="_mktAnalyzeSingleModal('${sym}','${xch}',this)">🔄 Re-analyse</button>
+        ${!inWL ? `<button class="btn btn-g btn-sm" style="margin-left:8px" onclick="_addMktToWatchlist('${sym}','${xch}')">+ Watchlist</button>` : '<span style="font-size:11px;color:var(--t4);margin-left:8px">✓ In Watchlist</span>'}
+      </div>`;
+  } else {
+    aiEl.innerHTML = `<div style="padding:36px;text-align:center">
+      <div style="font-size:36px;margin-bottom:12px">🔍</div>
+      <div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:8px">Not analyzed yet</div>
+      <div style="font-size:12px;color:var(--t4);margin-bottom:18px;line-height:1.5">Run AI analysis to get signal, stop-loss, targets &amp; thesis for ${sym}</div>
+      <button class="btn btn-p" onclick="_mktAnalyzeSingleModal('${sym}','${xch}',this)" style="padding:10px 24px;font-size:13px">⚡ Run AI Analysis</button>
+    </div>`;
+  }
+
+  sdTab('chart', document.getElementById('sdt-chart'));
+  openM('stockdetail');
+
+  fetchYF(yfSym).then(meta => {
+    if (meta) {
+      const p = meta.regularMarketPrice || 0, prev = meta.chartPreviousClose || p, chg = p - prev, pct = prev > 0 ? chg / prev * 100 : 0;
+      document.getElementById('sd-price').textContent = '₹' + f(p, 2);
+      const chgEl = document.getElementById('sd-chg');
+      chgEl.textContent = (chg >= 0 ? '+' : '') + f(chg, 2) + ' (' + fP(pct) + ') today';
+      chgEl.className = 'sd-chg ' + (chg >= 0 ? 'up' : 'dn');
+      _sdPopulateStats(null, meta);
+    }
+  });
+
+  document.getElementById('sd-fund-content').innerHTML =
+    '<div style="color:var(--t4);font-size:12px;padding:20px">Fetching fundamentals…</div>';
+  fetchFund(sym, xch).then(fund => {
+    if (fund) { fund.symbol = sym; _sdFundContent(fund); }
+    else document.getElementById('sd-fund-content').innerHTML =
+      '<div style="color:var(--t4);font-size:12px;padding:20px">No fundamental data available for ' + sym + '.</div>';
+  });
+
+  setTimeout(() => {
+    document.querySelectorAll('.sd-tf').forEach(b => b.classList.remove('on'));
+    const firstTf = document.querySelector('.sd-tf');
+    if (firstTf) firstTf.classList.add('on');
+    loadSdChart('1d', firstTf);
+  }, 80);
+}
+
+// Analyze from inside the modal then re-open to refresh AI tab
+async function _mktAnalyzeSingleModal(sym, xch, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Analyzing…'; }
+  const stock = MARKET_UNIVERSE.find(s => s.sym === sym && s.xch === xch);
+  if (!stock) return;
+  const result = await analyseMarketStock(stock);
+  if (result?._rateLimited) { toast('Rate limited — try again in a moment.', 'warn'); if (btn) { btn.disabled = false; btn.textContent = '⚡ Run AI Analysis'; } return; }
+  if (result && !result._parseError) {
+    const analysis = _mktLoad();
+    analysis[sym + '|' + xch] = result;
+    _mktSave(analysis);
+    renderMarket();
+    toast('✅ ' + sym + ': ' + result.signal + ' (score ' + result.score + '/10)', 'ok');
+    openMktDetail(sym, xch, stock.name || sym, stock.sec || '');
+  } else {
+    toast('Could not analyze ' + sym + ' — try again.', 'warn');
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ Run AI Analysis'; }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// openWlDetail: stock detail popup for Watchlist cards
+// ─────────────────────────────────────────────────────────────────────────────
+function openWlDetail(wid) {
+  const w = D.watchlist.find(x => x.id == wid);
+  if (!w) return;
+  _sdHid = null;
+  const yfSym = _symMapLookup(w.symbol) || (w.exchange === 'BSE' ? w.symbol + '.BO' : w.symbol + '.NS');
+  _sdSym = yfSym;
+
+  document.getElementById('sd-sym').textContent   = w.symbol;
+  document.getElementById('sd-name').textContent  = (w.name || w.symbol) + ' · ' + (w.sector || '') + ' · Watchlist';
+  document.getElementById('sd-price').textContent = w.ltp ? '₹' + f(w.ltp, 2) : '—';
+  document.getElementById('sd-chg').textContent   = w.chgP ? fP(w.chgP) + ' today' : '';
+  if (w.chgP) document.getElementById('sd-chg').className = 'sd-chg ' + (w.chgP >= 0 ? 'up' : 'dn');
+  document.getElementById('sd-tags').innerHTML    =
+    `<span class="tag t-neu">WATCHLIST</span>${w.sector ? `<span class="tag t-neu">${w.sector}</span>` : ''}${w.signal ? `<span class="tag ${w.signal.includes('BUY') ? 't-buy' : w.signal === 'SELL' ? 't-sell' : 't-neu'}">${w.signal}</span>` : ''}`;
+  document.getElementById('sd-stats').innerHTML   = '';
+
+  // Holdings tab — show portfolio position if it exists
+  const holding = D.holdings.find(h => h.symbol === w.symbol);
+  if (holding) {
+    _sdHoldContent(holding);
+  } else {
+    document.getElementById('sd-tab-hold').innerHTML =
+      '<div style="padding:20px;color:var(--t4);font-size:12px">Not in portfolio.<br><button class="btn btn-grn btn-sm" style="margin-top:10px" onclick="quickAddToHoldings(' + wid + ')">+ Add to Holdings</button></div>';
+  }
+
+  document.getElementById('sd-edit-content').innerHTML =
+    '<div style="padding:20px;color:var(--t4);font-size:12px">Edit is only available for portfolio holdings.<br><button class="btn btn-g btn-sm" style="margin-top:10px" onclick="closeM(\'stockdetail\');go(\'watchlist\')">← Back to Watchlist</button></div>';
+
+  // AI tab — show watchlist AI data
+  const aiEl = document.getElementById('sd-ai-content');
+  const hasAI = !!(w.wlDecision || w.signal);
+  if (hasAI) {
+    const sig    = w.signal || w.wlDecision || 'HOLD';
+    const sigCol = sig.includes('BUY') || sig === 'ENTER NOW' ? 'var(--grn)' : sig.includes('SELL') || sig === 'AVOID' ? 'var(--red)' : 'var(--yel)';
+    aiEl.innerHTML = `
+      <div style="background:${sigCol}12;border:1.5px solid ${sigCol}30;border-radius:12px;padding:14px 16px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+          <span style="font-size:22px;font-weight:900;color:${sigCol}">${sig}</span>
+          ${w.entryScore ? `<span style="font-size:13px;font-weight:700;color:var(--t2)">Score: ${w.entryScore}/10</span>` : ''}
+          ${w.lastAnalysed ? `<span style="font-size:10px;color:var(--t4);margin-left:auto">Updated ${new Date(w.lastAnalysed).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>` : ''}
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          ${w.wlEntryLow  ? `<div style="padding:7px 12px;background:var(--s2);border-radius:8px;border:1px solid var(--b2)"><div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px">Entry Range</div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--ac3)">₹${f(w.wlEntryLow)}–${f(w.wlEntryHigh)}</div></div>` : ''}
+          ${w.stopLoss    ? `<div style="padding:7px 12px;background:var(--s2);border-radius:8px;border:1px solid var(--b2)"><div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px">Stop Loss</div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--red)">₹${f(w.stopLoss)}</div></div>` : ''}
+          ${w.target1     ? `<div style="padding:7px 12px;background:var(--s2);border-radius:8px;border:1px solid var(--b2)"><div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px">Target 1</div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--grn)">₹${f(w.target1)}</div></div>` : ''}
+          ${w.target2     ? `<div style="padding:7px 12px;background:var(--s2);border-radius:8px;border:1px solid var(--b2)"><div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px">Target 2</div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--cyn)">₹${f(w.target2)}</div></div>` : ''}
+        </div>
+      </div>
+      ${w.wlWhyEnter ? `<div style="background:var(--s2);border:1px solid var(--b1);border-left:3px solid ${sigCol};border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px"><div style="font-size:9.5px;font-weight:800;color:var(--t4);text-transform:uppercase;letter-spacing:.9px;margin-bottom:5px">📋 Why Enter</div><div style="font-size:13px;color:var(--t1);line-height:1.6">${w.wlWhyEnter}</div></div>` : ''}
+      ${w.note ? `<div style="padding:12px 14px;background:var(--s2);border-radius:8px;border:1px solid var(--b2);margin-bottom:12px"><div style="font-size:9.5px;color:var(--t4);text-transform:uppercase;letter-spacing:.9px;margin-bottom:4px">📝 Notes</div><div style="font-size:12px;color:var(--t2);line-height:1.55">${w.note}</div></div>` : ''}
+      <div style="text-align:center;padding:8px 0">
+        <button class="btn btn-p btn-sm" onclick="closeM('stockdetail');_wlAnalyseSingle(${w.id});setTimeout(()=>openWlDetail(${w.id}),3000)">🔄 Re-analyse</button>
+        <button class="btn btn-grn btn-sm" style="margin-left:8px" onclick="closeM('stockdetail');quickAddToHoldings(${w.id})">+ Holdings</button>
+      </div>`;
+  } else {
+    aiEl.innerHTML = `<div style="padding:36px;text-align:center">
+      <div style="font-size:36px;margin-bottom:12px">🤖</div>
+      <div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:8px">No AI analysis yet</div>
+      <div style="font-size:12px;color:var(--t4);margin-bottom:18px;line-height:1.5">Run analysis to get signal, entry zone, targets &amp; thesis</div>
+      <button class="btn btn-p" onclick="closeM('stockdetail');_wlAnalyseSingle(${w.id})" style="padding:10px 24px;font-size:13px">⚡ Run AI Analysis</button>
+    </div>`;
+  }
+
+  sdTab('chart', document.getElementById('sdt-chart'));
+  openM('stockdetail');
+
+  fetchYF(yfSym).then(meta => {
+    if (meta) {
+      const p = meta.regularMarketPrice || 0, prev = meta.chartPreviousClose || p, chg = p - prev, pct = prev > 0 ? chg / prev * 100 : 0;
+      document.getElementById('sd-price').textContent = '₹' + f(p, 2);
+      const chgEl = document.getElementById('sd-chg');
+      chgEl.textContent = (chg >= 0 ? '+' : '') + f(chg, 2) + ' (' + fP(pct) + ') today';
+      chgEl.className = 'sd-chg ' + (chg >= 0 ? 'up' : 'dn');
+      _sdPopulateStats(null, meta);
+    }
+  });
+
+  document.getElementById('sd-fund-content').innerHTML =
+    '<div style="color:var(--t4);font-size:12px;padding:20px">Fetching fundamentals…</div>';
+  fetchFund(w.symbol, w.exchange || 'NSE').then(fund => {
+    if (fund) { fund.symbol = w.symbol; _sdFundContent(fund); }
+    else document.getElementById('sd-fund-content').innerHTML =
+      '<div style="color:var(--t4);font-size:12px;padding:20px">No fundamental data available.</div>';
+  });
+
+  setTimeout(() => {
+    document.querySelectorAll('.sd-tf').forEach(b => b.classList.remove('on'));
+    const firstTf = document.querySelector('.sd-tf');
+    if (firstTf) firstTf.classList.add('on');
     loadSdChart('1d', firstTf);
   }, 80);
 }
@@ -19492,8 +19696,9 @@ const MARKET_UNIVERSE = (function(){
 })();
 
 // ── Market scanner state ──
-window._mktScan = { running:false, paused:false, queue:[], done:0, total:0, retryWait:30000, retryCount:0, _timer:null };
-window._mktPage = 0;
+window._mktScan   = { running:false, paused:false, queue:[], done:0, total:0, retryWait:30000, retryCount:0, _timer:null };
+window._mktPage   = 0;
+window._mktPrices = {};   // keyed by "SYM|XCH" → {ltp, chgP}
 const MKT_PAGE_SIZE = 50;
 
 // Load / save analysis results (stored separately from D to avoid KV bloat)
@@ -19502,6 +19707,37 @@ function _mktLoad() {
 }
 function _mktSave(obj) {
   try { localStorage.setItem('marketAnalysis', JSON.stringify(obj)); } catch(e) {}
+}
+
+// Batch-fetch live prices for a page of stocks and update cells in-place
+async function _mktFetchPrices(pageStocks) {
+  if (!pageStocks || !pageStocks.length) return;
+  // Build YF symbols
+  const yfsyms = pageStocks.map(s => _symMapLookup(s.sym) || (s.xch === 'BSE' ? s.sym + '.BO' : s.sym + '.NS'));
+  const url = '/api/quote?symbols=' + encodeURIComponent(yfsyms.join(','));
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return;
+    const data = await res.json();
+    const quotes = Array.isArray(data) ? data : (data.quoteResponse?.result || data.result || []);
+    quotes.forEach(q => {
+      const p   = q.regularMarketPrice || 0;
+      const chg = q.regularMarketChangePercent || 0;
+      // Match back to our sym|xch key
+      const rawSym = (q.symbol || '').replace(/\.(NS|BO)$/, '');
+      const xch    = (q.symbol || '').endsWith('.BO') ? 'BSE' : 'NSE';
+      const key    = rawSym + '|' + xch;
+      window._mktPrices[key] = { ltp: p, chgP: chg };
+      // Update cell in-place if visible
+      const ltpEl = document.getElementById('mkt-ltp-' + rawSym + '-' + xch);
+      const chgEl = document.getElementById('mkt-chg-' + rawSym + '-' + xch);
+      if (ltpEl) ltpEl.textContent = p ? '₹' + f(p, 2) : '—';
+      if (chgEl) {
+        chgEl.textContent = p ? (chg >= 0 ? '+' : '') + fP(chg) : '—';
+        chgEl.style.color = p ? (chg >= 0 ? 'var(--grn)' : 'var(--red)') : 'var(--t4)';
+      }
+    });
+  } catch(e) { /* silently ignore — prices are best-effort */ }
 }
 
 function renderMarket() {
@@ -19599,26 +19835,35 @@ function renderMarket() {
     return `<span style="color:${c};font-weight:700">${n}</span><span style="color:var(--t4);font-size:10px">/10</span>`;
   };
   tbody.innerHTML = paginated.map(s => {
-    const a = analysis[s.sym+'|'+s.xch];
+    const a    = analysis[s.sym+'|'+s.xch];
     const inWL = D.watchlist.some(w => w.symbol === s.sym);
-    return `<tr>
-      <td><strong style="font-size:13px">${s.sym}</strong></td>
-      <td style="font-size:11px;color:var(--t2)">${s.name}</td>
-      <td><span style="font-size:10px;padding:2px 6px;border-radius:3px;background:var(--b1);color:var(--t3)">${s.xch}</span></td>
-      <td style="font-size:11px;color:var(--t3)">${s.sec}</td>
-      <td>${sigBadge(a?.signal)}</td>
-      <td>${scoreBar(a?.score)}</td>
+    const pr   = window._mktPrices[s.sym+'|'+s.xch];
+    const ltpTxt = pr?.ltp ? '₹'+f(pr.ltp,2) : '<span style="color:var(--t4)">—</span>';
+    const chgTxt = pr?.ltp ? `<span style="color:${(pr.chgP||0)>=0?'var(--grn)':'var(--red)'};font-size:11px">${(pr.chgP||0)>=0?'+':''}${fP(pr.chgP||0)}</span>` : '<span style="color:var(--t4);font-size:11px">—</span>';
+    const rowClick = `onclick="openMktDetail('${s.sym}','${s.xch}','${(s.name||'').replace(/'/g,'\\'')}','${(s.sec||'').replace(/'/g,"\\'")}')"`;
+    return `<tr style="cursor:pointer" onmouseover="this.style.background='var(--s2)'" onmouseout="this.style.background=''">
+      <td ${rowClick}><strong style="font-size:13px;color:var(--ac)">${s.sym}</strong></td>
+      <td ${rowClick} style="font-size:11px;color:var(--t2)">${s.name}</td>
+      <td ${rowClick}><span style="font-size:10px;padding:2px 6px;border-radius:3px;background:var(--b1);color:var(--t3)">${s.xch}</span></td>
+      <td ${rowClick} style="font-size:11px;color:var(--t3)">${s.sec}</td>
+      <td id="mkt-ltp-${s.sym}-${s.xch}" style="font-family:var(--mono);font-size:12px;font-weight:600">${ltpTxt}</td>
+      <td id="mkt-chg-${s.sym}-${s.xch}">${chgTxt}</td>
+      <td ${rowClick}>${sigBadge(a?.signal)}</td>
+      <td ${rowClick}>${scoreBar(a?.score)}</td>
       <td style="font-size:11px;color:var(--red)">${a?.sl||'—'}</td>
       <td style="font-size:11px;color:var(--grn)">${a?.t1||'—'}</td>
       <td style="font-size:11px;color:var(--cyn)">${a?.t2||'—'}</td>
-      <td style="font-size:11px;color:var(--t3);max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${a?.thesis||''}">${a?.thesis||'<span style="color:var(--t4)">Not analyzed</span>'}</td>
-      <td>
+      <td ${rowClick} style="font-size:11px;color:var(--t3);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${a?.thesis||''}">${a?.thesis||'<span style="color:var(--t4)">Not analyzed</span>'}</td>
+      <td onclick="event.stopPropagation()">
         ${!a ? `<button class="btn btn-g btn-xs" onclick="_mktAnalyzeSingle('${s.sym}','${s.xch}')" title="Analyze this stock">⚡</button>` : ''}
-        ${a && !inWL ? `<button class="btn btn-g btn-xs" style="color:var(--grn)" onclick="_addMktToWatchlist('${s.sym}','${s.xch}')" title="Add to Watchlist">+ WL</button>` : ''}
-        ${inWL ? `<span style="font-size:10px;color:var(--t4)">In WL</span>` : ''}
+        ${a && !inWL ? `<button class="btn btn-g btn-xs" style="color:var(--grn)" onclick="_addMktToWatchlist('${s.sym}','${s.xch}')" title="Add to Watchlist">+WL</button>` : ''}
+        ${inWL ? `<span style="font-size:10px;color:var(--t4)">✓WL</span>` : ''}
       </td>
     </tr>`;
   }).join('');
+
+  // Fetch live prices for this page (async, updates cells in-place)
+  _mktFetchPrices(paginated);
 }
 
 function _startMarketScan() {
