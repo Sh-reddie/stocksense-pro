@@ -1790,7 +1790,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="sec-head">
       <div class="sec-title">Watchlist</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:11px;color:var(--t4)">Press <kbd style="background:var(--s3);border:1px solid var(--b2);border-radius:3px;padding:1px 5px;font-family:var(--mono)">/</kbd> to search</span>
+        <div class="srch-wrap" style="margin-bottom:0"><span class="srch-ico">🔍</span><input type="text" class="srch-inp" id="wl-search" placeholder="Search watchlist…" oninput="renderWatchlist()" style="width:160px"></div>
         <select class="fi" id="wl-sort" style="width:160px" onchange="renderWatchlist()" title="Sort watchlist">
           <option value="score">🏆 Entry Score</option>
           <option value="sym-az">🔤 Symbol A → Z</option>
@@ -1861,6 +1861,7 @@ textarea.fi{resize:vertical;min-height:70px;}
   <!-- ═══ REALISED P&L ═══════════════════════════════════════ -->
   <div class="sec" id="sec-realised">
     <div class="sec-head"><div class="sec-title">Realised P&L</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <div class="srch-wrap" style="margin-bottom:0"><span class="srch-ico">🔍</span><input type="text" class="srch-inp" id="rl-search" placeholder="Search symbol…" oninput="renderRealised()" style="width:140px"></div>
       <select class="fi" id="rl-sort" style="width:170px" onchange="renderRealised()" title="Sort trades">
         <option value="date-desc">📅 Date (Newest First)</option>
         <option value="date-asc">📅 Date (Oldest First)</option>
@@ -1896,7 +1897,7 @@ textarea.fi{resize:vertical;min-height:70px;}
 
   <!-- ═══ DIVIDENDS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-dividends">
-    <div class="sec-head"><div class="sec-title">Dividend Tracker</div><div style="display:flex;gap:8px"><button class="btn btn-red btn-sm" onclick="clearSection('dividends')">🗑 Clear</button><button class="btn btn-p" onclick="openM('adddiv')">+ Log Dividend</button></div></div>
+    <div class="sec-head"><div class="sec-title">Dividend Tracker</div><div style="display:flex;gap:8px;align-items:center"><div class="srch-wrap" style="margin-bottom:0"><span class="srch-ico">🔍</span><input type="text" class="srch-inp" id="div-search" placeholder="Search symbol…" oninput="renderDividends()" style="width:140px"></div><button class="btn btn-red btn-sm" onclick="clearSection('dividends')">🗑 Clear</button><button class="btn btn-p" onclick="openM('adddiv')">+ Log Dividend</button></div></div>
     <div class="sg sg-4 gap">
       <div class="sc c3"><div class="sc-lbl">Total Received</div><div class="sc-val up" id="div-tot">₹0</div><div class="sc-sub" id="div-ct">0 payments</div></div>
       <div class="sc c1"><div class="sc-lbl">FY 2025-26</div><div class="sc-val" id="div-fy">₹0</div><div class="sc-sub">Apr 25 – Mar 26</div></div>
@@ -1993,6 +1994,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="sec-head">
       <div class="sec-title">🔔 Price Alerts</div>
       <div style="display:flex;gap:8px;align-items:center">
+        <div class="srch-wrap" style="margin-bottom:0"><span class="srch-ico">🔍</span><input type="text" class="srch-inp" id="alrt-search" placeholder="Search symbol…" oninput="renderAlerts()" style="width:140px"></div>
         <span id="alrt-notif-status" style="font-size:11px;color:var(--t4)"></span>
         <button class="btn btn-g" onclick="syncAlerts()">⟳ Sync from Portfolio</button>
         <button class="btn btn-red btn-sm" onclick="clearSection('alerts')">🗑 Clear</button>
@@ -3082,7 +3084,8 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div class="sec" id="sec-journal">
     <div class="sec-head">
       <div class="sec-title">📒 Trade Journal</div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <div class="srch-wrap" style="margin-bottom:0"><span class="srch-ico">🔍</span><input type="text" class="srch-inp" id="jnl-search" placeholder="Search symbol…" oninput="renderJournal()" style="width:140px"></div>
         <select class="fi" id="jnl-sort" style="width:170px" onchange="renderJournal()" title="Sort trades">
           <option value="date-desc">📅 Date (Newest First)</option>
           <option value="date-asc">📅 Date (Oldest First)</option>
@@ -4306,7 +4309,7 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div class="sec" id="sec-sip">
     <div class="sec-head">
       <div class="sec-title">📈 SIP Tracker</div>
-      <div style="display:flex;gap:8px"><button class="btn btn-red btn-sm" onclick="clearSection('sip')">🗑 Clear</button><button class="btn btn-p" onclick="openSipModal()">+ Add SIP</button></div>
+      <div style="display:flex;gap:8px;align-items:center"><div class="srch-wrap" style="margin-bottom:0"><span class="srch-ico">🔍</span><input type="text" class="srch-inp" id="sip-search" placeholder="Search symbol…" oninput="renderSipTracker()" style="width:140px"></div><button class="btn btn-red btn-sm" onclick="clearSection('sip')">🗑 Clear</button><button class="btn btn-p" onclick="openSipModal()">+ Add SIP</button></div>
     </div>
     <!-- Summary cards -->
     <div class="sg sg-4 gap">
@@ -9489,9 +9492,19 @@ function renderWatchlist() {
     return;
   }
 
+  // Search filter
+  const _wlQ = (document.getElementById('wl-search')?.value || '').trim().toUpperCase();
+  const _wlBase = _wlQ
+    ? D.watchlist.filter(w => w.symbol.toUpperCase().includes(_wlQ) || (w.name||'').toUpperCase().includes(_wlQ))
+    : D.watchlist;
+  if (_wlBase.length === 0 && _wlQ) {
+    grid.innerHTML = `<div style="text-align:center;padding:40px;color:var(--t4);font-size:13px">No watchlist items match <strong style="color:var(--t2)">"${_wlQ}"</strong></div>`;
+    return;
+  }
+
   // Sort by entry score descending (highest opportunity first)
   // Stocks without AI analysis go to bottom
-  const sorted = [...D.watchlist].sort((a,b) => {
+  const sorted = [..._wlBase].sort((a,b) => {
     const sa = a.entryScore ?? -1;
     const sb = b.entryScore ?? -1;
     return sb - sa;
@@ -9789,7 +9802,10 @@ function addTrade() {
 function renderRealised() {
   const tbody=document.getElementById('rpl-tbody');
   if(!D.realised.length){tbody.innerHTML='<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--t4)">No closed trades.</td></tr>';return;}
-  tbody.innerHTML=D.realised.map(r=>`<tr><td><div class="sym">${r.symbol}</div></td><td style="font-size:10px;color:var(--t4)">${r.exchange||'NSE'}</td><td class="mn">${r.qty}</td><td class="mn">₹${f(r.buyPrice)}</td><td class="mn">₹${f(r.sellPrice)}</td><td style="font-size:11px">${r.buyDate||'—'}</td><td style="font-size:11px">${r.sellDate||'—'}</td><td class="mn">${r.holdDays||'—'}d</td><td class="mn ${cls(r.pl)}">${r.pl>=0?'+':''}₹${fI(Math.abs(r.pl))}</td><td class="mn ${cls(r.plPct)}">${fP(r.plPct)}</td><td><span class="tag ${r.taxType==='LTCG'?'t-ltcg':'t-stcg'}">${r.taxType}</span></td><td><button class="btn btn-red btn-xs" onclick="rmTrade(${r.id})">✕</button></td></tr>`).join('');
+  const _rlQ = (document.getElementById('rl-search')?.value || '').trim().toUpperCase();
+  const _rlRows = _rlQ ? D.realised.filter(r => r.symbol.toUpperCase().includes(_rlQ) || (r.name||'').toUpperCase().includes(_rlQ)) : D.realised;
+  if(!_rlRows.length){tbody.innerHTML=`<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--t4)">No trades match <strong>"${_rlQ}"</strong></td></tr>`;return;}
+  tbody.innerHTML=_rlRows.map(r=>`<tr><td><div class="sym">${r.symbol}</div></td><td style="font-size:10px;color:var(--t4)">${r.exchange||'NSE'}</td><td class="mn">${r.qty}</td><td class="mn">₹${f(r.buyPrice)}</td><td class="mn">₹${f(r.sellPrice)}</td><td style="font-size:11px">${r.buyDate||'—'}</td><td style="font-size:11px">${r.sellDate||'—'}</td><td class="mn">${r.holdDays||'—'}d</td><td class="mn ${cls(r.pl)}">${r.pl>=0?'+':''}₹${fI(Math.abs(r.pl))}</td><td class="mn ${cls(r.plPct)}">${fP(r.plPct)}</td><td><span class="tag ${r.taxType==='LTCG'?'t-ltcg':'t-stcg'}">${r.taxType}</span></td><td><button class="btn btn-red btn-xs" onclick="rmTrade(${r.id})">✕</button></td></tr>`).join('');
   const totalPl = D.realised.reduce((s,r)=>s+r.pl,0);
   const winners = D.realised.filter(r=>r.pl>0);
   const losers  = D.realised.filter(r=>r.pl<=0);
@@ -9952,7 +9968,10 @@ function addDividend() {
 function renderDividends() {
   const tbody=document.getElementById('div-tbody');
   if(!D.dividends.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--t4)">No dividends.</td></tr>';return;}
-  tbody.innerHTML=D.dividends.map(d=>`<tr><td class="sym">${d.symbol}</td><td class="mn">₹${f(d.amtPerShare,2)}</td><td class="mn">${d.qty||'—'}</td><td class="mn up">${d.total?'₹'+f(d.total,2):'—'}</td><td style="font-size:11px">${d.exDate}</td><td style="font-size:11px">${d.payDate||'—'}</td><td><span class="tag t-sbuy">${d.type}</span></td><td><button class="btn btn-red btn-xs" onclick="rmDiv(${d.id})">✕</button></td></tr>`).join('');
+  const _divQ=(document.getElementById('div-search')?.value||'').trim().toUpperCase();
+  const _divRows=_divQ?D.dividends.filter(d=>d.symbol.toUpperCase().includes(_divQ)):D.dividends;
+  if(!_divRows.length){tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--t4)">No dividends match <strong>"${_divQ}"</strong></td></tr>`;return;}
+  tbody.innerHTML=_divRows.map(d=>`<tr><td class="sym">${d.symbol}</td><td class="mn">₹${f(d.amtPerShare,2)}</td><td class="mn">${d.qty||'—'}</td><td class="mn up">${d.total?'₹'+f(d.total,2):'—'}</td><td style="font-size:11px">${d.exDate}</td><td style="font-size:11px">${d.payDate||'—'}</td><td><span class="tag t-sbuy">${d.type}</span></td><td><button class="btn btn-red btn-xs" onclick="rmDiv(${d.id})">✕</button></td></tr>`).join('');
   const total=D.dividends.reduce((s,d)=>s+(d.total||0),0);
   const fy=D.dividends.filter(d=>d.exDate>='2025-04-01'&&d.exDate<='2026-03-31').reduce((s,d)=>s+(d.total||0),0);
   const inv=D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0);
@@ -15744,10 +15763,19 @@ function renderAlerts() {
     </div>`;
   };
 
+  const _alrtQ = (document.getElementById('alrt-search')?.value || '').trim().toUpperCase();
+  const _filterA = arr => _alrtQ ? arr.filter(a => a.sym.toUpperCase().includes(_alrtQ)) : arr;
+  const _filteredAI  = _filterA(aiAlerts);
+  const _filteredCu  = _filterA(customAlerts);
+
   const aiEl = document.getElementById('alrt-ai-list');
   const cuEl = document.getElementById('alrt-custom-list');
-  aiEl.innerHTML = aiAlerts.length ? aiAlerts.map(mkRow).join('') : '<div style="color:var(--t4);font-size:12px;padding:20px">Run <strong>AI Analyze All</strong> then click <strong>Sync from Portfolio</strong>.</div>';
-  cuEl.innerHTML = customAlerts.length ? customAlerts.map(mkRow).join('') : '<div style="color:var(--t4);font-size:12px;padding:20px">No custom alerts. Click <strong>+ Add Alert</strong> to create one.</div>';
+  aiEl.innerHTML = _filteredAI.length  ? _filteredAI.map(mkRow).join('')
+    : _alrtQ ? `<div style="color:var(--t4);font-size:12px;padding:20px">No AI alerts match <strong>"${_alrtQ}"</strong></div>`
+    : '<div style="color:var(--t4);font-size:12px;padding:20px">Run <strong>AI Analyze All</strong> then click <strong>Sync from Portfolio</strong>.</div>';
+  cuEl.innerHTML = _filteredCu.length  ? _filteredCu.map(mkRow).join('')
+    : _alrtQ ? `<div style="color:var(--t4);font-size:12px;padding:20px">No custom alerts match <strong>"${_alrtQ}"</strong></div>`
+    : '<div style="color:var(--t4);font-size:12px;padding:20px">No custom alerts. Click <strong>+ Add Alert</strong> to create one.</div>';
   renderAlertHistory();
 }
 
@@ -17373,7 +17401,9 @@ function deleteSip(id) {
 }
 
 function renderSipTracker() {
-  const sips = getSips();
+  const _allSips = getSips();
+  const _sipQ = (document.getElementById('sip-search')?.value || '').trim().toUpperCase();
+  const sips = _sipQ ? _allSips.filter(s => s.sym.toUpperCase().includes(_sipQ) || (s.name||'').toUpperCase().includes(_sipQ)) : _allSips;
   const tbody = document.getElementById('sip-tbody');
   const today = new Date();
 
@@ -17436,8 +17466,10 @@ function renderSipTracker() {
     </tr>`;
   });
 
-  if (!sips.length) {
+  if (!_allSips.length) {
     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--t4)">No SIPs added yet. Click "+ Add SIP" to start tracking.</td></tr>';
+  } else if (!sips.length) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--t4)">No SIPs match <strong>"${_sipQ}"</strong></td></tr>`;
   } else {
     tbody.innerHTML = rows.join('');
   }
@@ -18847,8 +18879,13 @@ function renderJournal() {
   // Trade table
   if (!tbody) return;
   if (!trades.length) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--t4)">No trades logged. Click "+ Log Trade" to start.</td></tr>'; return; }
-  tbody.innerHTML = trades.slice().reverse().map((t,ri) => {
-    const i = trades.length - 1 - ri;
+  const _jnlQ = (document.getElementById('jnl-search')?.value || '').trim().toUpperCase();
+  const _jnlFiltered = _jnlQ
+    ? trades.filter(t => t.symbol?.toUpperCase().includes(_jnlQ) || (t.reason||'').toUpperCase().includes(_jnlQ) || (t.notes||'').toUpperCase().includes(_jnlQ))
+    : trades;
+  if (!_jnlFiltered.length) { tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--t4)">No trades match <strong>"${_jnlQ}"</strong></td></tr>`; return; }
+  tbody.innerHTML = _jnlFiltered.slice().reverse().map((t,ri) => {
+    const i = trades.indexOf(t);
     const isClosed = !!t.exitPrice;
     const plCol = t.plPct >= 0 ? 'var(--grn)' : 'var(--red)';
     const statusBadge = isClosed
