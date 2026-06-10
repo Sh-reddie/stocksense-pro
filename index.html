@@ -19105,7 +19105,7 @@ async function refreshMacro() {
     const lel = document.getElementById(m.lblId);
     if (!el) return;
     try {
-      const r = await fetch('/api/quote?sym=' + m.sym, {signal: AbortSignal.timeout(8000)});
+      const r = await fetch('/api/chart?sym=' + encodeURIComponent(m.sym) + '&range=1d&interval=1d', {signal: AbortSignal.timeout(8000)});
       if (!r.ok) throw new Error('fetch failed');
       const d = await r.json();
       const meta = d?.chart?.result?.[0]?.meta;
