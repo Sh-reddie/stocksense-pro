@@ -4153,10 +4153,11 @@ textarea.fi{resize:vertical;min-height:70px;}
               <label class="fl">Model <span style="color:var(--t4);font-weight:400;font-size:10px">— Nemotron Super 120B ⭐ recommended</span></label>
               <select class="fi" id="cfg-or-model" onchange="toggleCustomModel(this.value)">
                 <optgroup label="⚡ Recommended (fast + quality)">
-                  <option value="nvidia/nemotron-3-super-120b-a12b:free">Nemotron Super 120B ⭐ Default — fast, high quality</option>
+                  <option value="nvidia/nemotron-super-49b-v1:free">Nemotron Super 49B ⭐ Best — fast, accurate, free</option>
+                  <option value="nvidia/nemotron-3-super-120b-a12b:free">Nemotron Super 120B — high quality, slightly slower</option>
                   <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B — reliable fallback</option>
                   <option value="z-ai/glm-4.5-air:free">GLM 4.5 Air — Z.AI, reasoning-capable</option>
-                  <option value="nousresearch/hermes-3-llama-3.1-405b:free">Hermes 3 405B — large model, thorough</option>
+                  <option value="nousresearch/hermes-3-llama-3.1-405b:free">Hermes 3 405B — large, thorough</option>
                 </optgroup>
                 <optgroup label="🧠 Deep Reasoning (slow — 60–120s per reply)">
                   <option value="deepseek/deepseek-r1-0528:free">DeepSeek R1 — best reasoning, very slow</option>
@@ -9066,7 +9067,21 @@ Reply ONLY compact JSON:
       aiAction:h.aiAction, aiReasoning:h.aiReasoning, tradeType:h.tradeType,
       aiAnalysedAt:h.aiAnalysedAt, ltpAtAnalysis:h.ltpAtAnalysis, signalAt:h.signalAt, aiError:null,
     });
-  }catch(e){h.aiError=e.message||true;(window.D && D._aiErrors) && D._aiErrors.push(h.symbol+': '+(e.message||'error'));}
+  }catch(e){
+    const _rawErr = e.message || String(e);
+    // Map technical errors to actionable messages
+    const _friendlyErr = _rawErr.includes('aborted') || _rawErr.includes('abort')
+      ? 'Rate limited — wait a minute or switch model in Settings → AI Provider'
+      : _rawErr.includes('401') || _rawErr.includes('key')
+      ? 'Invalid API key — check Settings → AI Provider'
+      : _rawErr.includes('429')
+      ? 'Rate limit hit — wait a minute or select a different model in Settings'
+      : _rawErr.includes('network') || _rawErr.includes('fetch')
+      ? 'Network error — check your connection'
+      : _rawErr;
+    h.aiError = _friendlyErr;
+    (window.D && D._aiErrors) && D._aiErrors.push(h.symbol+': '+_friendlyErr);
+  }
   h.lastAnalysed=new Date().toISOString();
 }
 
@@ -13845,10 +13860,10 @@ async function claude(prompt, sys) {
   if (provider === 'openrouter') {
     const key   = localStorage.getItem('orKey') || '';
     // Resolve model — never send 'custom' literally to API
-    let model = localStorage.getItem('orModel') || 'nvidia/nemotron-3-super-120b-a12b:free';
+    let model = localStorage.getItem('orModel') || 'nvidia/nemotron-super-49b-v1:free';
     if(model === 'custom') {
       const customVal = localStorage.getItem('orCustomModel') || document.getElementById('cfg-or-custom')?.value.trim();
-      model = customVal && customVal !== 'custom' ? customVal : 'nvidia/nemotron-3-super-120b-a12b:free';
+      model = customVal && customVal !== 'custom' ? customVal : 'nvidia/nemotron-super-49b-v1:free';
     }
     if (!key) return '⚠ No OpenRouter API key. Go to Settings → AI Provider → add your free key from openrouter.ai';
     // Use a stable HTTPS referer — file:// URLs cause OpenRouter to reject the request
@@ -13955,15 +13970,19 @@ async function claudeJSON(prompt, sys) {
   if (window[_cacheKey] && (Date.now() - _cacheTs) < _cacheTTL) {
     return claude(prompt, sys);
   }
-  // Ordered list of non-reasoning free models to try (auto-skips unavailable ones)
-  // Last verified: 2026-06-06. Nemotron Super 120B leads — large, fast, no reasoning overhead.
+  // User's selected model goes first — honour their Settings choice
+  let _userModel = localStorage.getItem('orModel') || 'nvidia/nemotron-super-49b-v1:free';
+  if (_userModel === 'custom') _userModel = localStorage.getItem('orCustomModel') || 'nvidia/nemotron-super-49b-v1:free';
+  // Fallback cascade: tried in order if user's model fails / is rate-limited
   const FAST_MODELS = [
+    _userModel,
+    'nvidia/nemotron-super-49b-v1:free',
     'nvidia/nemotron-3-super-120b-a12b:free',
     'meta-llama/llama-3.3-70b-instruct:free',
     'google/gemma-3-27b-it:free',
     'mistralai/mistral-7b-instruct:free',
     'z-ai/glm-4.5-air:free'
-  ];
+  ].filter((m, i, a) => a.indexOf(m) === i); // deduplicate in case user picked one already in list
   let _rlCount = 0; // tracks consecutive 429s — drives backoff
   for (const model of FAST_MODELS) {
     try {
@@ -14015,11 +14034,12 @@ async function claudeJSON(prompt, sys) {
       continue;
     }
   }
-  // All fast models failed — cache result for 5 min and fall back to user's configured model
+  // All models failed — cache for 5 min, fall back to configured model
   window[_cacheKey] = true;
   window[_cacheKey + '_ts'] = Date.now();
-  ilog && ilog('⚠ All fast JSON models unavailable, caching for 5min and falling back to configured model', 'warn');
-  return claude(prompt, sys);
+  ilog && ilog('⚠ All AI models unavailable (rate-limited or fetch aborted). Try: Settings → AI Provider → select a different model.', 'warn');
+  // Return a user-friendly string so callers can surface it instead of a raw error
+  return '⚠ All AI models temporarily unavailable. Go to Settings → AI Provider to select a different model, or wait a few minutes and retry.';
 }
 
 // ═══════════════════════════════════════════════════
