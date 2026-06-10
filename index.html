@@ -6230,7 +6230,7 @@ function go(id) {
   if(id==='riskpro') renderRiskPro();
   if(id==='attribution') renderAttribution();
   if(id==='screener') renderScreener();
-  if(id==='market') { renderMarket(); _loadExtendedUniverse().then(()=>{ if(_extUniverseLoaded) renderMarket(); }); }
+  if(id==='market') { _loadKVPrices(); renderMarket(); _loadExtendedUniverse().then(()=>{ if(_extUniverseLoaded) renderMarket(); }); }
   if(id==='journal') renderJournal();
   if(id==='macro') renderMacro();
   if(id==='daily-brief') renderDailyBrief();
@@ -19743,6 +19743,32 @@ function _mergeUniverseExtension(arr) {
 window._mktScan   = { running:false, paused:false, queue:[], done:0, total:0, retryWait:30000, retryCount:0, _timer:null };
 window._mktPage   = 0;
 window._mktPrices = {};   // keyed by "SYM|XCH" → {ltp, chgP}
+
+// ── Load KV-cached prices (GitHub Actions writes these every 15min) ───────────
+// Pre-populates _mktPrices from /api/prices before live YF fetches arrive,
+// so rows show the last known price instantly even if the tab was just opened.
+async function _loadKVPrices() {
+  try {
+    const res = await fetch('/api/prices', { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return;
+    const { ts, prices } = await res.json();
+    if (!prices || !ts) return;
+    // Only use cache if it's < 30 minutes old (avoid stale data)
+    if (Date.now() - ts > 30 * 60 * 1000) {
+      console.log('[KV] Price cache is stale, skipping');
+      return;
+    }
+    let applied = 0;
+    Object.entries(prices).forEach(([key, val]) => {
+      // Don't overwrite fresher live data already in _mktPrices
+      if (!window._mktPrices[key]) { window._mktPrices[key] = val; applied++; }
+    });
+    if (applied > 0) {
+      console.log(`[KV] Applied ${applied} cached prices (age: ${Math.round((Date.now()-ts)/60000)}min)`);
+      renderMarket();
+    }
+  } catch(e) { /* silent — best effort */ }
+}
 const MKT_PAGE_SIZE = 50;
 
 // Load / save analysis results (stored separately from D to avoid KV bloat)
@@ -28121,26 +28147,64 @@ function scrWatchAll() {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
-      .then(reg => console.log('[SW] Registered:', reg.scope))
+      .then(reg => {
+        console.log('[SW] Registered:', reg.scope);
+
+        // ── Register Periodic Background Sync (price refresh every hour) ──
+        // Fires even when the tab is closed; SW fetches /api/prices from KV
+        // (written by GitHub Actions every 15 min during market hours)
+        if ('periodicSync' in reg) {
+          navigator.permissions.query({ name: 'periodic-background-sync' })
+            .then(status => {
+              if (status.state === 'granted') {
+                return reg.periodicSync.register('price-refresh', { minInterval: 60 * 60 * 1000 })
+                  .then(() => console.log('[SW] Periodic sync registered (1h)'))
+                  .catch(e => console.warn('[SW] periodicSync.register failed:', e.message));
+              }
+            }).catch(() => {});
+        }
+
+        // ── One-shot sync on connectivity return ──
+        if ('sync' in reg) {
+          reg.sync.register('price-sync').catch(() => {});
+        }
+      })
       .catch(err => console.warn('[SW] Registration failed:', err));
   });
 
-  // Handle push subscription renewal from SW (Chrome rotates subs every ~60 days)
+  // Handle messages from Service Worker
   navigator.serviceWorker.addEventListener('message', event => {
+    // ── KV price cache broadcast from SW background sync ──
+    if (event.data?.type === 'SS_PRICES_UPDATE') {
+      const { ts, prices } = event.data.data || {};
+      if (!prices || !ts) return;
+      if (Date.now() - ts > 30 * 60 * 1000) return; // ignore stale cache
+      let applied = 0;
+      Object.entries(prices).forEach(([key, val]) => {
+        if (!window._mktPrices[key]) { window._mktPrices[key] = val; applied++; }
+      });
+      if (applied > 0) {
+        console.log(`[SW→App] Applied ${applied} background-synced prices`);
+        // Re-render Market Scanner if it's visible
+        const mktEl = document.getElementById('tab-market');
+        if (mktEl && mktEl.style.display !== 'none') renderMarket();
+      }
+    }
+
+    // ── Push subscription renewal from SW ──
     if (event.data?.type === 'SS_PUSH_RENEWED') {
       const newSub = event.data.subscription;
       if (!newSub) return;
       localStorage.setItem('ss_push_sub', JSON.stringify(newSub));
-      // _pushSubscription may be stale — update in-memory reference
       if (typeof _pushSubscription !== 'undefined') {
         navigator.serviceWorker.ready.then(reg =>
           reg.pushManager.getSubscription().then(s => { if (s) _pushSubscription = s; })
         );
       }
-      // Flush full portfolio with new subscription to KV
       if (typeof _kv !== 'undefined' && _kv.isHosted) _kv.schedule();
       console.log('[Push] Subscription renewed and saved to KV');
     }
+
     if (event.data?.type === 'SS_ALERT_CLICK') {
       // Already handled inline elsewhere — forward to app if needed
     }

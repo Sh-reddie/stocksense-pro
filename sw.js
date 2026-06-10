@@ -80,6 +80,39 @@ self.addEventListener('notificationclick', event => {
   );
 });
 
+// ── Periodic Background Sync ─────────────────────────────────────────────────
+// Fires ~every hour when the tab is closed (browser-controlled, not guaranteed).
+// Fetches the KV price cache (written by GitHub Actions) and broadcasts to
+// any open clients so the Market Scanner is pre-populated on next open.
+self.addEventListener('periodicsync', event => {
+  if (event.tag !== 'price-refresh') return;
+  event.waitUntil(
+    fetch('/api/prices', { signal: AbortSignal.timeout(8000) })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.prices || !Object.keys(data.prices).length) return;
+        return clients.matchAll({ type: 'window', includeUncontrolled: true })
+          .then(wins => wins.forEach(w => w.postMessage({ type: 'SS_PRICES_UPDATE', data })));
+      })
+      .catch(() => {})
+  );
+});
+
+// ── One-shot Background Sync (fires when connectivity returns) ────────────────
+self.addEventListener('sync', event => {
+  if (event.tag !== 'price-sync') return;
+  event.waitUntil(
+    fetch('/api/prices', { signal: AbortSignal.timeout(8000) })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.prices || !Object.keys(data.prices).length) return;
+        return clients.matchAll({ type: 'window', includeUncontrolled: true })
+          .then(wins => wins.forEach(w => w.postMessage({ type: 'SS_PRICES_UPDATE', data })));
+      })
+      .catch(() => {})
+  );
+});
+
 // ── Push subscription renewal ────────────────────────────────────────────────
 // Chrome silently rotates push subscriptions every ~60 days. Without this
 // handler the old endpoint becomes invalid and all price alerts stop working.
