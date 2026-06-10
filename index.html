@@ -19362,7 +19362,7 @@ Reply JSON only: {"confidence":0-100,"rec":"BUY|HOLD|AVOID","reasons":["","",""]
   const _rawRes = await claudeJSON(prompt);
   const raw = (() => {
     if (_rawRes && typeof _rawRes === 'object') return _rawRes;
-    try { return JSON.parse((_rawRes||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+    return extractJSON(_rawRes) || null;
   })();
   if (!raw || !raw.rec) {
     el.innerHTML = `<div class="ai-txt">${md2h(typeof _rawRes==='string'?_rawRes:'Research unavailable.')}</div>`;
@@ -21046,7 +21046,7 @@ Write a 3-sentence executive summary for the investor. Reply JSON: {"summary":"<
     const _rawIR = await claudeJSON(prompt);
     const res = (() => {
       if (_rawIR && typeof _rawIR === 'object') return _rawIR;
-      try { return JSON.parse((_rawIR||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+      return extractJSON(_rawIR) || null;
     })();
     if (!res || !res.outlook) throw new Error('bad response');
     const olCol = res.outlook==='Positive'?'var(--grn)':res.outlook==='Negative'?'var(--red)':'var(--yel)';
@@ -21403,7 +21403,7 @@ Pick the better investment and explain. Reply JSON: {"pick":"${sA.symbol} or ${s
     const _rawCmp = await claudeJSON(prompt);
     const res = (() => {
       if (_rawCmp && typeof _rawCmp === 'object') return _rawCmp;
-      try { return JSON.parse((_rawCmp||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+      return extractJSON(_rawCmp) || null;
     })();
     if (!res || !res.pick) throw new Error('bad response');
     const pickCol = res.pick === sA.symbol ? 'var(--ac)' : 'var(--ac2)';
@@ -21562,7 +21562,7 @@ Recommend 3 specific hedging/defensive actions. Reply JSON: {"summary":"<20 word
     const _rawSt = await claudeJSON(prompt);
     const res = (() => {
       if (_rawSt && typeof _rawSt === 'object') return _rawSt;
-      try { return JSON.parse((_rawSt||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+      return extractJSON(_rawSt) || null;
     })();
     if (!res || !res.verdict) throw new Error('bad response');
     const vCol = res.verdict==='Resilient'?'var(--grn)':res.verdict==='High Risk'?'var(--red)':'var(--yel)';
@@ -21754,7 +21754,7 @@ Explain why this entry plan makes sense and key risks. Reply JSON: {"rationale":
     const _rawPb = await claudeJSON(prompt);
     const res = (() => {
       if (_rawPb && typeof _rawPb === 'object') return _rawPb;
-      try { return JSON.parse((_rawPb||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+      return extractJSON(_rawPb) || null;
     })();
     if (!res || !res.rationale) throw new Error('bad response');
     content.innerHTML = `
@@ -21996,7 +21996,7 @@ Reply JSON: {"commentary":"<20 words>","buys":[{"sym":"X","rationale":"<12 words
     const _rawAp = await claudeJSON(prompt);
     const res = (() => {
       if (_rawAp && typeof _rawAp === 'object') return _rawAp;
-      try { return JSON.parse((_rawAp||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+      return extractJSON(_rawAp) || null;
     })();
     if (!res || !res.verdict) throw new Error('bad response');
 
@@ -22396,13 +22396,19 @@ Reply JSON: {"diagnosis":"<2 sentence overall>","rx":["<prescription 1>","<presc
 
   const _raw = await claudeJSON(prompt).catch(()=>null);
   const result = (() => {
-    if (_raw && typeof _raw === 'object') return _raw;
+    if (!_raw) return null;
+    if (typeof _raw === 'object' && _raw.diagnosis) return _raw;
+    // extractJSON handles: markdown fences, reasoning blocks, trailing text
+    const parsed = extractJSON(_raw);
+    if (parsed && parsed.diagnosis) return parsed;
+    // last-resort direct parse after stripping fences
     try { return JSON.parse((_raw||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
   })();
   if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Diagnosis'; }
 
   if (!result || !result.diagnosis) {
-    if (narrativeEl) narrativeEl.innerHTML = '<div style="color:var(--red);font-size:12px">AI diagnosis failed — try again.</div>';
+    const _errDetail = (typeof _raw === 'string' && _raw.startsWith('⚠')) ? ` (${_raw.slice(0,80)})` : '';
+    if (narrativeEl) narrativeEl.innerHTML = `<div style="color:var(--red);font-size:12px">AI diagnosis failed — try again.${_errDetail}</div>`;
     return;
   }
 
@@ -22582,7 +22588,7 @@ Reply with ONE sentence: the single most important condition that, if met, would
     const _rawEt = await claudeJSON(prompt + '\nReply JSON: {"trigger":"<one sentence>"}');
     const result = (() => {
       if (_rawEt && typeof _rawEt === 'object') return _rawEt;
-      try { return JSON.parse((_rawEt||'').replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim()); } catch(e) { return null; }
+      return extractJSON(_rawEt) || null;
     })();
     const txt = (result?.trigger || await claude(prompt)).slice(0,150);
     el.innerHTML = `<div style="background:rgba(79,142,247,.08);border:1px solid rgba(79,142,247,.2);border-radius:6px;padding:6px 8px;font-size:10px;color:var(--t2);margin-top:3px;line-height:1.4">${txt}</div>`;
