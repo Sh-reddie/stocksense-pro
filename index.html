@@ -26800,11 +26800,47 @@ async function _fetchIPOs(force = false) {
   if (!_ipoData.length) {
     _ipoData = JSON.parse(localStorage.getItem('ss_ipo_manual') || '[]');
     if (!_ipoData.length) {
-      el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--t4)">
-        <div style="font-size:32px;margin-bottom:12px">📋</div>
-        <div style="font-size:13px;margin-bottom:8px">NSE IPO feed unavailable (rate-limited)</div>
-        <div style="font-size:11px;margin-bottom:16px">Add IPOs manually to track them with AI analysis</div>
-        <button class="btn btn-p" onclick="_addManualIPO()">+ Add IPO</button>
+      el.innerHTML = `
+      <div style="max-width:520px;margin:0 auto;padding:24px 16px">
+        <div style="text-align:center;margin-bottom:20px;color:var(--t3);font-size:12px">
+          Live NSE feed unavailable from browser. Add IPOs you want to track — all fields except name are optional.
+          <a href="https://www.nseindia.com/market-data/all-upcoming-issues-ipo" target="_blank"
+             style="color:var(--ac);margin-left:6px;text-decoration:none">View on NSE ↗</a>
+        </div>
+        <div style="display:grid;gap:10px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div><label class="fl">Company Name *</label><input class="fi" id="iq-name" placeholder="e.g. Reliance Industries"></div>
+            <div><label class="fl">Issue Price (₹)</label><input class="fi" id="iq-price" type="number" placeholder="e.g. 450"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div><label class="fl">Open Date</label><input class="fi" id="iq-open" type="date"></div>
+            <div><label class="fl">Close Date</label><input class="fi" id="iq-close" type="date"></div>
+            <div><label class="fl">Listing Date</label><input class="fi" id="iq-list" type="date"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div><label class="fl">Lot Size</label><input class="fi" id="iq-lot" type="number" placeholder="e.g. 30"></div>
+            <div><label class="fl">GMP (₹, optional)</label><input class="fi" id="iq-gmp" type="number" placeholder="Grey market premium"></div>
+          </div>
+          <button class="btn btn-p" style="width:100%;margin-top:4px" onclick="
+            const n=document.getElementById('iq-name').value.trim();
+            if(!n){toast('Company name required','warn');return;}
+            const price=document.getElementById('iq-price').value;
+            const open=document.getElementById('iq-open').value;
+            const close=document.getElementById('iq-close').value;
+            const list=document.getElementById('iq-list').value;
+            const lot=document.getElementById('iq-lot').value;
+            const gmp=document.getElementById('iq-gmp').value;
+            const now=new Date();
+            let status='Open';
+            if(list&&new Date(list)<now) status='Listed';
+            else if(close&&new Date(close)<now) status='Closed';
+            else if(open&&new Date(open)>now) status='Upcoming';
+            _ipoData.unshift({name:n,sym:n.split(' ')[0].toUpperCase(),price:price||'—',openDate:open||'—',closeDate:close||'—',listDate:list||'—',lotSize:lot||'—',gmp:gmp?+gmp:null,status,subscription:null,source:'Manual'});
+            const manuals=_ipoData.filter(i=>i.source==='Manual');
+            localStorage.setItem('ss_ipo_manual',JSON.stringify(manuals));
+            _renderIPOs();
+          ">+ Add IPO</button>
+        </div>
       </div>`;
       return;
     }
