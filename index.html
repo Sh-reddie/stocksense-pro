@@ -13883,6 +13883,9 @@ async function claude(prompt, sys) {
       try { d = JSON.parse(raw); } catch(e) { return '⚠ OpenRouter returned non-JSON: '+raw.slice(0,200); }
       if(d.error) {
         const errMsg = d.error.message || JSON.stringify(d.error);
+        // Rate limit — return friendly message without spamming fallbacks
+        const _is429 = r.status===429 || /rate.?limit|free-models-per-min/i.test(errMsg);
+        if(_is429) return '⚠ OpenRouter rate limit reached. You\'re on the free tier (~20 req/min). Wait 60 seconds and try again.';
         // Model not found — suggest fallback
         if(errMsg.includes('No endpoints') || errMsg.includes('not found') || errMsg.includes('not a valid model') || errMsg.includes('invalid model') || errMsg.includes('Provider returned error') || r.status===400 || r.status===404 || r.status===503) {
           // Auto-retry with fallback free models
