@@ -19094,7 +19094,7 @@ async function refreshMacro() {
   const macroSymbols = [
     { id:'mac-vix',    lblId:'mac-vixl',    sym:'^INDIAVIX',  label:'India VIX', unit:'', fmt: v => v?.toFixed(2) },
     { id:'mac-usdinr', lblId:'mac-usdinrl', sym:'USDINR=X',   label:'USD/INR',   unit:'₹', fmt: v => v?.toFixed(2) },
-    { id:'mac-gsec',   lblId:'mac-gsecl',   sym:'IN10YT=RR',  label:'10Y G-Sec', unit:'%', fmt: v => v?.toFixed(2)+'%' },
+    { id:'mac-gsec',   lblId:'mac-gsecl',   sym:'IN10YT=X',   label:'10Y G-Sec', unit:'%', fmt: v => v?.toFixed(2)+'%', fallbackVal: 6.88, fallbackLbl: '~6.88% (indicative)' },
     { id:'mac-gold',   lblId:'mac-goldl',   sym:'GC=F',       label:'Gold',      unit:'$', fmt: v => '$'+v?.toFixed(0) },
     { id:'mac-crude',  lblId:'mac-crudel',  sym:'BZ=F',       label:'Brent',     unit:'$', fmt: v => '$'+v?.toFixed(1) },
     { id:'mac-us10y',  lblId:'mac-us10yl',  sym:'^TNX',       label:'US 10Y',    unit:'%', fmt: v => v?.toFixed(2)+'%' },
@@ -19109,16 +19109,28 @@ async function refreshMacro() {
       if (!r.ok) throw new Error('fetch failed');
       const d = await r.json();
       const meta = d?.chart?.result?.[0]?.meta;
-      const val  = meta?.regularMarketPrice || meta?.previousClose;
+      let val  = meta?.regularMarketPrice || meta?.previousClose;
       const prev = meta?.chartPreviousClose || meta?.previousClose;
       const chgP = prev && val ? ((val-prev)/prev*100) : null;
-      el.textContent = val ? m.fmt(val) : '—';
-      // Colour logic
-      if (m.sym === '^INDIAVIX') el.style.color = val > 20 ? 'var(--red)' : val > 15 ? 'var(--yel)' : 'var(--grn)';
-      else if (m.sym === 'USDINR=X') el.style.color = val > 85 ? 'var(--red)' : 'var(--grn)';
-      else el.style.color = chgP !== null ? (chgP >= 0 ? 'var(--grn)' : 'var(--red)') : 'var(--ac)';
-      if (lel && chgP !== null) lel.textContent = (chgP>=0?'▲+':' ▼') + Math.abs(chgP).toFixed(2) + '% today';
-    } catch(e) { el.textContent = '—'; }
+      // Fallback to static reference value if symbol unsupported
+      if (!val && m.fallbackVal) {
+        val = m.fallbackVal;
+        el.textContent = m.fmt(val);
+        el.style.color = 'var(--t3)';
+        if (lel) lel.textContent = m.fallbackLbl || 'Reference rate';
+      } else {
+        el.textContent = val ? m.fmt(val) : '—';
+        if (m.sym === '^INDIAVIX') el.style.color = val > 20 ? 'var(--red)' : val > 15 ? 'var(--yel)' : 'var(--grn)';
+        else if (m.sym === 'USDINR=X') el.style.color = val > 85 ? 'var(--red)' : 'var(--grn)';
+        else el.style.color = chgP !== null ? (chgP >= 0 ? 'var(--grn)' : 'var(--red)') : 'var(--ac)';
+        if (lel && chgP !== null) lel.textContent = (chgP>=0?'▲+':'▼') + Math.abs(chgP).toFixed(2) + '% today';
+      }
+    } catch(e) {
+      if (m.fallbackVal) {
+        el.textContent = m.fmt(m.fallbackVal); el.style.color = 'var(--t3)';
+        if (lel) lel.textContent = m.fallbackLbl || 'Reference rate';
+      } else { el.textContent = '—'; }
+    }
   }));
 
   // FII/DII flows (recent curated data + context)
