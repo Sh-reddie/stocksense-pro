@@ -19715,7 +19715,14 @@ async function _loadExtendedUniverse() {
     const res = await fetch('/stocks.json?cb=' + Math.floor(Date.now()/86400000));
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const arr = await res.json();
-    try { localStorage.setItem('extUniverse', JSON.stringify(arr)); localStorage.setItem('extUniverseTs', String(Date.now())); } catch(e) {}
+    // Only cache if under 4 MB to avoid QuotaExceededError on large universes
+    try {
+      const serialised = JSON.stringify(arr);
+      if (serialised.length < 4 * 1024 * 1024) {
+        localStorage.setItem('extUniverse', serialised);
+        localStorage.setItem('extUniverseTs', String(Date.now()));
+      }
+    } catch(e) {}
     _mergeUniverseExtension(arr);
     _extUniverseLoaded = true;
   } catch(e) { console.warn('Extended universe load failed:', e); }
@@ -19749,8 +19756,12 @@ function _mktSave(obj) {
 // Batch-fetch live prices for a page of stocks and update cells in-place
 async function _mktFetchPrices(pageStocks) {
   if (!pageStocks || !pageStocks.length) return;
-  // Build YF symbols
-  const yfsyms = pageStocks.map(s => _symMapLookup(s.sym) || (s.xch === 'BSE' ? s.sym + '.BO' : s.sym + '.NS'));
+  // Use the stock's own xch field for suffix — do NOT use _symMapLookup here
+  // because symMap may map an NSE stock to a .BO ticker, breaking the DOM cell lookup.
+  const yfsyms = pageStocks.map(s => s.xch === 'BSE' ? s.sym + '.BO' : s.sym + '.NS');
+  // Build a reverse map: YF symbol (uppercase) → original {sym, xch}
+  const yfMap = {};
+  pageStocks.forEach((s, i) => { yfMap[yfsyms[i].toUpperCase()] = s; });
   const url = '/api/quote?symbols=' + encodeURIComponent(yfsyms.join(','));
   try {
     const res = await fetch(url);
@@ -19760,14 +19771,14 @@ async function _mktFetchPrices(pageStocks) {
     quotes.forEach(q => {
       const p   = q.regularMarketPrice || 0;
       const chg = q.regularMarketChangePercent || 0;
-      // Match back to our sym|xch key
-      const rawSym = (q.symbol || '').replace(/\.(NS|BO)$/, '');
-      const xch    = (q.symbol || '').endsWith('.BO') ? 'BSE' : 'NSE';
-      const key    = rawSym + '|' + xch;
+      // Match back using the yfMap (preserves original sym+xch, handles BSE code mismatches)
+      const orig = yfMap[(q.symbol || '').toUpperCase()];
+      if (!orig) return;
+      const key = orig.sym + '|' + orig.xch;
       window._mktPrices[key] = { ltp: p, chgP: chg };
       // Update cell in-place if visible
-      const ltpEl = document.getElementById('mkt-ltp-' + rawSym + '-' + xch);
-      const chgEl = document.getElementById('mkt-chg-' + rawSym + '-' + xch);
+      const ltpEl = document.getElementById('mkt-ltp-' + orig.sym + '-' + orig.xch);
+      const chgEl = document.getElementById('mkt-chg-' + orig.sym + '-' + orig.xch);
       if (ltpEl) ltpEl.textContent = p ? '₹' + f(p, 2) : '—';
       if (chgEl) {
         chgEl.textContent = p ? (chg >= 0 ? '+' : '') + fP(chg) : '—';
