@@ -6230,7 +6230,7 @@ function go(id) {
   if(id==='riskpro') renderRiskPro();
   if(id==='attribution') renderAttribution();
   if(id==='screener') renderScreener();
-  if(id==='market') renderMarket();
+  if(id==='market') { renderMarket(); _loadExtendedUniverse().then(()=>{ if(_extUniverseLoaded) renderMarket(); }); }
   if(id==='journal') renderJournal();
   if(id==='macro') renderMacro();
   if(id==='daily-brief') renderDailyBrief();
@@ -19694,6 +19694,43 @@ const MARKET_UNIVERSE = (function(){
     const k=sym+'|'+xch; if(seen.has(k)) return false; seen.add(k); return true;
   }).map(([sym,name,xch,sec])=>({sym,name,xch,sec}));
 })();
+
+// ── Extended universe loader (stocks.json) ──
+let _extUniverseLoaded = false;
+let _extUniverseLoading = false;
+
+async function _loadExtendedUniverse() {
+  if (_extUniverseLoaded || _extUniverseLoading) return;
+  _extUniverseLoading = true;
+  try {
+    const cached = localStorage.getItem('extUniverse');
+    const cachedTs = parseInt(localStorage.getItem('extUniverseTs') || '0');
+    const AGE_7D = 7 * 24 * 3600 * 1000;
+    if (cached && (Date.now() - cachedTs) < AGE_7D) {
+      _mergeUniverseExtension(JSON.parse(cached));
+      _extUniverseLoaded = true;
+      _extUniverseLoading = false;
+      return;
+    }
+    const res = await fetch('/stocks.json?cb=' + Math.floor(Date.now()/86400000));
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const arr = await res.json();
+    try { localStorage.setItem('extUniverse', JSON.stringify(arr)); localStorage.setItem('extUniverseTs', String(Date.now())); } catch(e) {}
+    _mergeUniverseExtension(arr);
+    _extUniverseLoaded = true;
+  } catch(e) { console.warn('Extended universe load failed:', e); }
+  _extUniverseLoading = false;
+}
+
+function _mergeUniverseExtension(arr) {
+  const existingKeys = new Set(MARKET_UNIVERSE.map(s => s.sym + '|' + s.xch));
+  let added = 0;
+  for (const s of arr) {
+    const k = s.sym + '|' + s.xch;
+    if (!existingKeys.has(k)) { MARKET_UNIVERSE.push(s); existingKeys.add(k); added++; }
+  }
+  if (added > 0) console.log('[StockSense] Extended universe: +' + added + ' stocks, total ' + MARKET_UNIVERSE.length);
+}
 
 // ── Market scanner state ──
 window._mktScan   = { running:false, paused:false, queue:[], done:0, total:0, retryWait:30000, retryCount:0, _timer:null };
