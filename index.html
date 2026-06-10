@@ -4150,7 +4150,7 @@ textarea.fi{resize:vertical;min-height:70px;}
               <div style="font-size:10px;color:var(--t4);margin-top:4px">Get free key at <strong style="color:var(--ac)">openrouter.ai</strong> → Sign up → Keys → Create. $0 cost for free models.</div>
             </div>
             <div class="fg">
-              <label class="fl">Model <span style="color:var(--t4);font-weight:400;font-size:10px">— Nemotron Super 120B ⭐ recommended</span></label>
+                            <label class="fl">Model <span style="font-size:10px;color:var(--t4)">→ Nemotron Super 49B ⭐ recommended (fastest free model)</span></label>
               <select class="fi" id="cfg-or-model" onchange="toggleCustomModel(this.value)">
                 <optgroup label="⚡ Recommended (fast + quality)">
                   <option value="nvidia/nemotron-super-49b-v1:free">Nemotron Super 49B ⭐ Best — fast, accurate, free</option>
@@ -13782,12 +13782,27 @@ function init(){
   if(savedOrKey && document.getElementById('cfg-or-key')) document.getElementById('cfg-or-key').value = savedOrKey;
   let savedOrModel = localStorage.getItem('orModel');
   // Migrate deprecated/dead models to current default
-  const _deadModels = ['meta-llama/llama-3.1-8b-instruct:free','mistralai/mistral-7b-instruct:free','google/gemma-3-27b-it:free','qwen/qwen3-8b:free','qwen/qwen3-14b:free','microsoft/phi-4-reasoning:free','deepseek/deepseek-r1-0528-qwen3-8b:free','nvidia/nemotron-3-nano-30b-a3b:free','nousresearch/hermes-3-llama-3.1-405b:free'];
+  const _deadModels = ['meta-llama/llama-3.1-8b-instruct:free','mistralai/mistral-7b-instruct:free','google/gemma-3-27b-it:free','qwen/qwen3-8b:free','qwen/qwen3-14b:free','microsoft/phi-4-reasoning:free','deepseek/deepseek-r1-0528-qwen3-8b:free','nvidia/nemotron-3-nano-30b-a3b:free','nousresearch/hermes-3-llama-3.1-405b:free','nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free','nvidia/nemotron-3-nano-30b-a3b:free'];
   if (savedOrModel && _deadModels.includes(savedOrModel)) {
-    savedOrModel = 'nvidia/nemotron-3-super-120b-a12b:free';
+    savedOrModel = 'nvidia/nemotron-super-49b-v1:free';
     localStorage.setItem('orModel', savedOrModel);
+    toast('🔄 Model auto-updated to Nemotron Super 49B (previous model retired)', 'info');
   }
-  if(savedOrModel && document.getElementById('cfg-or-model')) document.getElementById('cfg-or-model').value = savedOrModel;
+  // Set dropdown — if saved model isn't in the list, fall back to custom input
+  const _modelSel = document.getElementById('cfg-or-model');
+  if (savedOrModel && _modelSel) {
+    const _inList = [..._modelSel.options].some(o => o.value === savedOrModel);
+    if (_inList) {
+      _modelSel.value = savedOrModel;
+    } else {
+      // Unknown/custom model — show it in the custom input
+      _modelSel.value = 'custom';
+      const _customInp = document.getElementById('cfg-or-custom');
+      if (_customInp) _customInp.value = savedOrModel;
+      const _customWrap = document.getElementById('custom-model-wrap');
+      if (_customWrap) _customWrap.style.display = 'block';
+    }
+  }
   const key=localStorage.getItem('apiKey');
   if(key&&document.getElementById('cfg-key'))document.getElementById('cfg-key').value=key;
   const c=D.cfg;
