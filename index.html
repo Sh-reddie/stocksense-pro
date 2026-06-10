@@ -2182,6 +2182,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <button class="btn btn-g btn-sm" onclick="calNav(-1)">← Prev</button>
         <span id="cal-month-lbl" style="font-family:var(--mono);font-size:12px;color:var(--t2);min-width:110px;text-align:center"></span>
         <button class="btn btn-g btn-sm" onclick="calNav(1)">Next →</button>
+        <button class="btn btn-g btn-sm" onclick="autoPopulateResults()" title="Add estimated Q results dates for all holdings">📅 Populate Estimates</button>
         <button class="btn btn-red btn-sm" onclick="clearSection('calendar')">🗑 Clear</button>
         <button class="btn btn-p" onclick="openCalEventModal()">+ Add Event</button>
       </div>
@@ -16284,6 +16285,12 @@ function renderCalendar() {
   const days = new Date(yr, mo+1, 0).getDate();
   const today = new Date();
   const events = loadCalEvents();
+  // Auto-populate on first open if calendar is empty and holdings exist
+  if (!events.length && D.holdings.length && !window._calAutoPopDone) {
+    window._calAutoPopDone = true;
+    autoPopulateResults();
+    return; // autoPopulateResults calls renderCalendar() after saving
+  }
   // Build event map: key = YYYY-MM-DD
   const evMap = {};
   events.forEach(ev => { if(!evMap[ev.date]) evMap[ev.date] = []; evMap[ev.date].push(ev); });
@@ -16491,21 +16498,66 @@ function _syncEarningsToCalendar() {
 // Pre-populate with result dates for current holdings quarter
 function autoPopulateResults() {
   const events = loadCalEvents();
-  const existing = new Set(events.map(e=>e.title));
+  const existingTitles = new Set(events.map(e => e.title));
   const now = new Date();
-  const mo = now.getMonth()+1;
-  // Estimate next results month based on current month
-  const resMonth = mo<=3?'April':mo<=6?'July':mo<=9?'October':'January';
-  const resYear = (mo<=3||mo>9) ? now.getFullYear() : now.getFullYear();
-  D.holdings.forEach(h=>{
-    const title = `${h.symbol} Q Results`;
-    if(!existing.has(title)){
-      const date = `${resYear}-${String(['January','February','March','April','May','June','July','August','September','October','November','December'].indexOf(resMonth)+1).padStart(2,'0')}-15`;
-      events.push({ id: Date.now()+Math.random(), title, date, type:'res' });
-    }
+  const mo = now.getMonth() + 1; // 1-12
+  // Indian results seasons: Q4(Apr-May), Q1(Jul-Aug), Q2(Oct-Nov), Q3(Jan-Feb)
+  // Pick next upcoming season start
+  let resMonthNum, resYear;
+  if (mo <= 2)      { resMonthNum = 1;  resYear = now.getFullYear(); }  // Jan results
+  else if (mo <= 5) { resMonthNum = 4;  resYear = now.getFullYear(); }  // Apr results
+  else if (mo <= 8) { resMonthNum = 7;  resYear = now.getFullYear(); }  // Jul results
+  else if (mo <= 11){ resMonthNum = 10; resYear = now.getFullYear(); }  // Oct results
+  else              { resMonthNum = 1;  resYear = now.getFullYear()+1; } // Jan next year
+
+  // Spread results across the month: days 10–31, 3 stocks per day
+  const holdings = D.holdings.filter(h => !existingTitles.has(`${h.symbol} Q Results`));
+  holdings.forEach((h, i) => {
+    const dayOfMonth = Math.min(10 + Math.floor(i / 3) * 2, 31); // 10,10,10, 12,12,12, 14...
+    const date = `${resYear}-${String(resMonthNum).padStart(2,'0')}-${String(dayOfMonth).padStart(2,'0')}`;
+    events.push({ id: Date.now() + Math.random(), title: `${h.symbol} Q Results`, date, type: 'res', _auto: true });
   });
+
+  // Also add fixed market events for the next 12 months if not already present
+  const mktEvents = _getFixedMarketEvents();
+  const existingDates = new Set(events.filter(e=>e._mkt).map(e=>e.title+'|'+e.date));
+  mktEvents.forEach(e => { if (!existingDates.has(e.title+'|'+e.date)) events.push(e); });
+
   saveCalEvents(events);
   renderCalendar();
+  toast(`📅 Added estimates for ${holdings.length} holdings (${_monthName(resMonthNum)} ${resYear} results season)`, 'ok');
+}
+
+function _monthName(m) { return ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m]; }
+
+function _getFixedMarketEvents() {
+  const now = new Date();
+  const yr = now.getFullYear();
+  const events = [];
+  const push = (title, date, type, col) => events.push({ id: Date.now()+Math.random(), title, date, type: type||'mkt', _mkt: true, col: col||'var(--ac)' });
+
+  // F&O monthly expiry — last Thursday of each month for next 6 months
+  for (let m = 0; m < 7; m++) {
+    const d = new Date(yr, now.getMonth() + m, 1);
+    const lastThu = _lastThursdayOfMonth(d.getFullYear(), d.getMonth());
+    if (lastThu >= now) {
+      const ds = lastThu.toISOString().split('T')[0];
+      push(`F&O Monthly Expiry`, ds, 'fo', 'var(--orn)');
+    }
+  }
+  // RBI MPC dates 2026 (approx bi-monthly: Feb, Apr, Jun, Aug, Oct, Dec)
+  [2, 4, 6, 8, 10, 12].forEach(m => {
+    if (m >= now.getMonth() + 1) {
+      push('RBI MPC Decision', `${yr}-${String(m).padStart(2,'0')}-07`, 'rbi', 'var(--ac2)');
+    }
+  });
+  // Results seasons start markers
+  [[4,'Q4 Results Season Begins'],[7,'Q1 Results Season Begins'],[10,'Q2 Results Season Begins']].forEach(([m, title]) => {
+    if (m >= now.getMonth() + 1) {
+      push(title, `${yr}-${String(m).padStart(2,'0')}-10`, 'season', 'var(--grn)');
+    }
+  });
+  return events;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
