@@ -26750,40 +26750,53 @@ async function _fetchIPOs(force = false) {
 
   el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t4)"><div class="spin" style="margin:0 auto 12px"></div>Fetching IPO data from NSE…</div>';
 
+  // 1. Try server-side /api/ipo (Cloudflare Pages Function — no CORS issues)
   try {
-    // Try multiple IPO endpoints via proxy
-    const _ipoEndpoints = [
-      'https://www.nseindia.com/api/ipo-current-allotment-detail',
-      'https://www.nseindia.com/api/ipo',
-    ];
-    for (const endpoint of _ipoEndpoints) {
-      try {
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(endpoint)}`;
-        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(4000) });
-        const raw = await res.json();
-        let data; try { data = JSON.parse(raw.contents || 'null'); } catch(e2) { continue; }
-        const arr = Array.isArray(data) ? data : (data?.data || data?.result || []);
-        if (arr.length) {
-          _ipoData = arr.slice(0, 20).map(d => ({
-            name: d.companyName || d.name || '—',
-            sym: (d.symbol || (d.companyName||'').split(' ')[0] || '—').toUpperCase(),
-            openDate: d.openDate || d.ipoOpenDate || '—',
-            closeDate: d.closeDate || d.ipoCloseDate || '—',
-            price: d.issuePrice || d.price || '—',
-            lotSize: d.lotSize || '—',
-            gmp: d.gmp || null,
-            status: d.listingDate ? (new Date(d.listingDate) < new Date() ? 'Listed' : 'Upcoming') : 'Open',
-            listDate: d.listingDate || '—',
-            subscription: d.totalSubscription || d.subscriptionTimes || null,
-            source: 'Live'
-          }));
-          break;
-        }
-      } catch(e2) { continue; }
+    const r = await fetch('/api/ipo', { signal: AbortSignal.timeout(7000) });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.ok && d.ipos?.length) {
+        _ipoData = d.ipos;
+      }
     }
-  } catch(e) {}
+  } catch(e) { /* fall through to proxy */ }
 
-  // If NSE API fails, use a curated list of current/recent IPOs (updated periodically)
+  // 2. Browser-side proxy fallback (allorigins.win)
+  if (!_ipoData.length) {
+    try {
+      const _ipoEndpoints = [
+        'https://www.nseindia.com/api/ipo-current-allotment-detail',
+        'https://www.nseindia.com/api/ipo',
+      ];
+      for (const endpoint of _ipoEndpoints) {
+        try {
+          const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(endpoint)}`;
+          const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(4000) });
+          const raw = await res.json();
+          let data; try { data = JSON.parse(raw.contents || 'null'); } catch(e2) { continue; }
+          const arr = Array.isArray(data) ? data : (data?.data || data?.result || []);
+          if (arr.length) {
+            _ipoData = arr.slice(0, 20).map(d => ({
+              name: d.companyName || d.name || '—',
+              sym: (d.symbol || (d.companyName||'').split(' ')[0] || '—').toUpperCase(),
+              openDate: d.openDate || d.ipoOpenDate || '—',
+              closeDate: d.closeDate || d.ipoCloseDate || '—',
+              price: d.issuePrice || d.price || '—',
+              lotSize: d.lotSize || '—',
+              gmp: d.gmp || null,
+              status: d.listingDate ? (new Date(d.listingDate) < new Date() ? 'Listed' : 'Upcoming') : 'Open',
+              listDate: d.listingDate || '—',
+              subscription: d.totalSubscription || d.subscriptionTimes || null,
+              source: 'Live'
+            }));
+            break;
+          }
+        } catch(e2) { continue; }
+      }
+    } catch(e) {}
+  }
+
+  // 3. Manual IPOs from localStorage, then seed data
   if (!_ipoData.length) {
     _ipoData = JSON.parse(localStorage.getItem('ss_ipo_manual') || '[]');
     if (!_ipoData.length) {
