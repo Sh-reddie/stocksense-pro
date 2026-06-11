@@ -1,0 +1,10 @@
+name = "stocksense-price-sync"
+main = "price-sync.js"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "STOCKSENSE_KV"
+id = "fb8e2b5213a948618ffd4862921e9966"
+
+[triggers]
+crons = ["*/15 3-10 * * 1-5"]

@@ -5928,6 +5928,7 @@ const _kv = {
             changed = true;
           }
         }
+        if (data.alerts) { D.alerts = data.alerts; try { localStorage.setItem('ss_alerts', JSON.stringify(data.alerts)); } catch(e) {} }
         if (data.symMap) _symMapSet(data.symMap);
         if (changed) {
           renderAll();
@@ -5973,6 +5974,7 @@ const _kv = {
         dividends: D.dividends,
         cfg:       D.cfg,
         orders:    D.orders,
+        alerts:    D.alerts || [],
         symMap:    _symMapGet(),
         ...(_pushSub ? { pushSubscription: _pushSub } : {}),
         _savedAt:  new Date().toISOString(),
@@ -31397,8 +31399,8 @@ Write a 3-sentence earnings preview covering: (1) what analysts expect (EPS/reve
 // Sends real-time alerts to user's Telegram when SL breach, RSI cross, entry zone
 // ═══════════════════════════════════════════════════════════════════════════════
 async function _sendTelegramAlert(msg) {
-  const token = localStorage.getItem('tgToken');
-  const chatId = localStorage.getItem('tgChatId');
+  const token = D.cfg?.tgToken || localStorage.getItem('tgToken');
+  const chatId = D.cfg?.tgChatId || localStorage.getItem('tgChatId');
   if (!token || !chatId) return;
   try {
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
@@ -31424,8 +31426,9 @@ async function _testTelegramAlert() {
 function saveTelegramSettings() {
   const token = document.getElementById('cfg-tg-token')?.value.trim();
   const chatId = document.getElementById('cfg-tg-chatid')?.value.trim();
-  if (token) localStorage.setItem('tgToken', token);
-  if (chatId) localStorage.setItem('tgChatId', chatId);
+  if (token) { localStorage.setItem('tgToken', token); D.cfg.tgToken = token; }
+  if (chatId) { localStorage.setItem('tgChatId', chatId); D.cfg.tgChatId = chatId; }
+  if (token || chatId) save('cfg');
 }
 
 // Hook Telegram into SL breach detection (runs after every price refresh)
@@ -31664,8 +31667,9 @@ if (typeof _origSaveSettings === 'function') {
     // Telegram
     const tok = document.getElementById('cfg-tg-token')?.value.trim();
     const cid = document.getElementById('cfg-tg-chatid')?.value.trim();
-    if (tok) localStorage.setItem('tgToken', tok);
-    if (cid) localStorage.setItem('tgChatId', cid);
+    if (tok) { localStorage.setItem('tgToken', tok); D.cfg.tgToken = tok; }
+    if (cid) { localStorage.setItem('tgChatId', cid); D.cfg.tgChatId = cid; }
+    if (tok || cid) save('cfg');
     _renderAllocationGuard();
   };
 }
@@ -31682,8 +31686,8 @@ if (typeof _origRenderDailyBrief === 'function') {
 
 // Restore saved settings on load
 (function _restoreNewSettings() {
-  const tok = localStorage.getItem('tgToken');
-  const cid = localStorage.getItem('tgChatId');
+  const tok = D.cfg?.tgToken || localStorage.getItem('tgToken');
+  const cid = D.cfg?.tgChatId || localStorage.getItem('tgChatId');
   if (tok) { const el=document.getElementById('cfg-tg-token'); if(el) el.value=tok; }
   if (cid) { const el=document.getElementById('cfg-tg-chatid'); if(el) el.value=cid; }
   if (D?.cfg?.maxStockPct) { const el=document.getElementById('cfg-max-stock-pct'); if(el) el.value=D.cfg.maxStockPct; }
