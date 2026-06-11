@@ -82,7 +82,7 @@ self.addEventListener('notificationclick', event => {
 
 // ── Periodic Background Sync ─────────────────────────────────────────────────
 // Fires ~every hour when the tab is closed (browser-controlled, not guaranteed).
-// Fetches the KV price cache (written by GitHub Actions) and broadcasts to
+// Fetches the KV price cache (written by Cloudflare Worker cron every 15min) and broadcasts to
 // any open clients so the Market Scanner is pre-populated on next open.
 self.addEventListener('periodicsync', event => {
   if (event.tag !== 'price-refresh') return;

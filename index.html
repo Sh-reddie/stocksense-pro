@@ -19744,7 +19744,7 @@ window._mktScan   = { running:false, paused:false, queue:[], done:0, total:0, re
 window._mktPage   = 0;
 window._mktPrices = {};   // keyed by "SYM|XCH" → {ltp, chgP}
 
-// ── Load KV-cached prices (GitHub Actions writes these every 15min) ───────────
+// ── Load KV-cached prices (Cloudflare Worker cron writes these every 15min) ──────
 // Pre-populates _mktPrices from /api/prices before live YF fetches arrive,
 // so rows show the last known price instantly even if the tab was just opened.
 async function _loadKVPrices() {
@@ -28152,7 +28152,7 @@ if ('serviceWorker' in navigator) {
 
         // ── Register Periodic Background Sync (price refresh every hour) ──
         // Fires even when the tab is closed; SW fetches /api/prices from KV
-        // (written by GitHub Actions every 15 min during market hours)
+        // (written by Cloudflare Worker cron every 15 min during market hours)
         if ('periodicSync' in reg) {
           navigator.permissions.query({ name: 'periodic-background-sync' })
             .then(status => {
