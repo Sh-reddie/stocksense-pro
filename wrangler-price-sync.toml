@@ -1,0 +1,8 @@
+name = "stocksense-price-sync"
+main = "price-sync-v10.js"
+compatibility_date = "2024-01-01"
+account_id = "41c97ea0c974f951982f87a7bfa4a767"
+
+[[kv_namespaces]]
+binding = "STOCKSENSE_KV"
+id = "fb8e2b5213a948618ffd4862921e9966"
