@@ -13,6 +13,6 @@ jobs:
       - name: Deploy via Wrangler
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: 41c97ea0c974f951982f87a7bfa4a767
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
           command: deploy price-sync-v10.js --name stocksense-price-sync --compatibility-date 2024-01-01
