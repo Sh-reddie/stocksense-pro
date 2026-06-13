@@ -1,0 +1,12 @@
+name: Deploy Worker v10
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy price-sync-v10 to Cloudflare Workers
+        run: |
+          HTTP=$(curl -s -o /tmp/r.txt -w "%{http_code}" -X PUT "https://api.cloudflare.com/client/v4/accounts/41c97ea0c974f951982f87a7bfa4a767/workers/services/stocksense-price-sync/environments/production/content" -H "Authorization: Bearer 1781418503-ATOK253d4b641a3d9d7acae76912d640ffce44c9ad341d75ff07" -F "metadata={\"main_module\":\"worker.js\",\"bindings\":[],\"compatibility_date\":\"2024-01-01\"};type=application/json" -F "worker.js=@price-sync-v10.js;type=application/javascript+module")
+          echo "STATUS=$HTTP"; cat /tmp/r.txt
