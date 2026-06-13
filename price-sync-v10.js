@@ -1,6 +1,6 @@
 // ── StockSense Price Sync Worker v10 ──────────────────────────────────────────
-// New in v10: /news uses Yahoo Finance API; /watchlist HTML-escaped wlDecision
-New in v9: /notes /earnings /news /ipo /watchlist /sell /sector + inline keyboard buttons
+// New in v10: /news uses Yahoo Finance API; /watchlist limited+escaped; v11 watchlist paging
+// New in v9: /notes /earnings /news /ipo /watchlist /sell /sector + inline keyboard buttons
 // ─────────────────────────────────────────────────────────────────────────────
 
 const NSE_STOCKS=['RELIANCE','TCS','HDFCBANK','BHARTIARTL','ICICIBANK','SBIN','INFY','LICI','HINDUNILVR','ITC','LT','KOTAKBANK','BAJFINANCE','HCLTECH','SUNPHARMA','NTPC','ONGC','ULTRACEMCO','MARUTI','WIPRO','BAJAJFINSV','TITAN','POWERGRID','ADANIENT','COALINDIA','ASIANPAINT','NESTLEIND','INDUSINDBK','AXISBANK','ADANIPORTS','JSWSTEEL','HINDALCO','GRASIM','TECHM','TATAMOTORS','DRREDDY','CIPLA','DIVISLAB','APOLLOHOSP','EICHERMOT','TATACONSUM','SBILIFE','HDFCLIFE','ICICIPRULI','BAJAJ-AUTO','BRITANNIA','HEROMOTOCO','M&M','TATASTEEL','BPCL','ADANIGREEN','ADANITRANS','SIEMENS','ABB','PIDILITIND','HAVELLS','BERGEPAINT','MARICO','GODREJCP','COLPAL','DABUR','EMAMILTD','MUTHOOTFIN','CHOLAFIN','BAJAJHLDNG','BOSCHLTD','TORNTPHARM','AUROPHARMA','LUPIN','BIOCON','DMART','TRENT','IRCTC','INDIGO','JUBLFOOD','MCDOWELL-N','UNITDSPR','SHREECEM','AMBUJACEM','ACCLTD','SAIL','NMDC','NATIONALUM','HINDZINC','VEDL','JINDALSTEL','JSWENERGY','TATAPOWER','RECLTD','PFC','IRFC','RVNL','CONCOR','TIINDIA','VOLTAS','BLUEDART','DELHIVERY','NAUKRI','AFFLE','PERSISTENT','MPHASIS','LTIM','COFORGE','TATAELXSI','KPITTECH','CYIENT','ZENSAR','OFSS','NEWGEN','NETWEB','KAYNES','DIXON','AMBER','HAPPSTMNDS','RATEGAIN','MASTEK','INTELLECT','BANKBARODA','CANARABANK','UNIONBANK','INDIANB','PNB','FEDERALBNK','IDFCFIRSTB','YESBANK','RBLBANK','DCBBANK','UJJIVANSFB','KTKBANK','MANAPPURAM','IIFL','CANFINHOME','AAVAS','REPCO','HOMEFIRST','ANGELONE','MOTILALOFS','SBICARDS','ICICIGI','STARHEALTH','GICRE','NIACL','ZYDUSLIFE','ALKEM','NATCOPHARM','IPCA','AJANTPHARMA','GRANULES','LAURUSLABS','GLAXO','PFIZER','ASTRAZEN','SANOFI','ABBOT','ESCORTS','FORCEMOT','ENDURANCE','EXIDEIND','SUNDRMFAST','TIMKEN','SCHAEFFLER','SKF','CRAFTSMAN','RAMCOCEM','JKCEMENT','DALBHARAT','KNRCON','PNCINFRA','NBCC','NCC','IRCON','RAILTEL','TITAGARH','GPPL','CESC','TORNTPOWER','NLCLINDIA','NHPC','SJVN','GIPCL','ADANIPOWER','RADICO','BALRAMCHIN','TRIVENI','VBL','BIKAJI','VENKEYS','WESTLIFE','DEVYANI','SULA','DLF','LODHA','GODREJPROP','PRESTIGE','BRIGADE','SOBHA','PHOENIXLTD','OBEROIRLTY','SUNTECK','KOLTEPATIL','TATACOMM','HFCL','ROUTE','TEJASNET','DEEPAKNITRITE','AARTI','PIIND','SUMCHEM','FINEORG','GALAXYSURF','TATACHEM','CHAMBALFERT','COROMANDEL','GNFC','NOCIL','BHEL','HAL','BEL','BEML','COCHINSHIP','GRSE','MAZAGON','CUMMINSIND','THERMAX','RAMKRISHNA','RATNAMANI','WELCORP','V2RETAIL','SHOPERSTOP','BATAINDIA','VMART','MANYAVAR','METRO','KALYANKJIL','SENCO','RAJESHEXPO','GMRINFRA','ADANIGAS','NYKAA','ZOMATO','PAYTM','POLICYBZR','HDFCSEC','CRISIL','ICRA','CARERATINGS','UIICL','GABRIEL','NAM-INDIA','KEI'];
@@ -415,27 +415,35 @@ async function sendIPO(env,chatId,token){
 
 async function sendWatchlist(env,chatId,token){
   let pf=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
-  const wl=pf&&Array.isArray(pf.watchlist)?pf.watchlist:[];
-  if(!wl.length){await tgSend(token,chatId,'Your watchlist is empty.\n\nAdd stocks via the StockSense web app to track them here.');return;}
+  const wlAll=pf&&Array.isArray(pf.watchlist)?pf.watchlist:[];
+  if(!wlAll.length){await tgSend(token,chatId,'Your watchlist is empty.\n\nAdd stocks via the StockSense web app to track them here.');return;}
+  // Sort: BUY first, then by entryScore desc, limit to 25 to stay under Telegram 4096-char limit
+  const sorted=[...wlAll].sort((a,b)=>{
+    const aIsBuy=(a.signal||'').toUpperCase().includes('BUY')?1:0;
+    const bIsBuy=(b.signal||'').toUpperCase().includes('BUY')?1:0;
+    if(bIsBuy!==aIsBuy)return bIsBuy-aIsBuy;
+    return (b.entryScore||0)-(a.entryScore||0);
+  });
+  const wl=sorted.slice(0,25);
   let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}
-  let msg='👁 <b>Watchlist</b>\n--------------------\n';
+  let msg='👁 <b>Watchlist Top Picks</b> ('+wl.length+' of '+wlAll.length+')\n--------------------\n';
   for(const w of wl){
     if(!w.symbol)continue;
     const c=prices[w.symbol+'|NSE']||prices[w.symbol+'|BSE'];
     const ltp=c?c.ltp:(w.ltp||0);
     const cp=c?c.chgP:0;
     const s=cp>=0?'+':'';
-    msg+='\n<b>'+w.symbol+'</b>';
+    msg+='\n<b>'+escHtml(w.symbol)+'</b>';
     if(ltp)msg+=' ₹'+ltp.toFixed(0)+' ('+s+cp.toFixed(1)+'%)';
     if(w.signal)msg+=' | '+escHtml(w.signal);
     if(w.entryScore)msg+=' | Score: '+w.entryScore+'/10';
     if(w.ltpAtAdd&&ltp){
       const chgSince=((ltp-w.ltpAtAdd)/w.ltpAtAdd*100);
-      msg+=' | Since watch: '+(chgSince>=0?'+':'')+chgSince.toFixed(1)+'%';
+      msg+=' | Since: '+(chgSince>=0?'+':'')+chgSince.toFixed(1)+'%';
     }
     if(w.wlDecision)msg+='\n<i>'+escHtml(w.wlDecision)+'</i>';
   }
-  // If HTML parse fails (e.g. bad chars in AI fields), retry as plain text
+  // If HTML parse fails, retry as plain text
   const ok=await tgSend(token,chatId,msg);
   if(!ok){
     const plain=msg.replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
