@@ -13039,6 +13039,12 @@ function saveSettings(){
     pt:   parseFloat(document.getElementById('cfg-pt')?.value)||20,
     sl:   parseFloat(document.getElementById('cfg-sl')?.value)||12,
     ref:  parseInt(document.getElementById('cfg-ref')?.value)||60,
+    // Preserve allocation guards
+    ...(D.cfg?.maxStockPct ? {maxStockPct: D.cfg.maxStockPct} : {}),
+    ...(D.cfg?.maxSectorPct ? {maxSectorPct: D.cfg.maxSectorPct} : {}),
+    // Preserve Telegram credentials (never wipe on settings save)
+    ...(D.cfg?.tgToken ? {tgToken: D.cfg.tgToken} : (localStorage.getItem('tgToken') ? {tgToken: localStorage.getItem('tgToken')} : {})),
+    ...(D.cfg?.tgChatId ? {tgChatId: D.cfg.tgChatId} : (localStorage.getItem('tgChatId') ? {tgChatId: localStorage.getItem('tgChatId')} : {})),
     // Sync orKey to KV so Telegram AI chat agent can use it
     ...(orKey ? {orKey} : (D.cfg?.orKey ? {orKey: D.cfg.orKey} : {})),
   };
