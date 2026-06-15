@@ -755,7 +755,7 @@ async function checkAndSendAlerts(env,prices,prevPrices){
 
 // ── AI CHAT AGENT ─────────────────────────────────────────────────────────────
 
-const AI_MODELS=[
+const AI_MODELS_FALLBACK=[
   'meta-llama/llama-3.3-70b-instruct',
   'mistralai/mistral-small-3.2-24b-instruct',
   'qwen/qwen3-14b',
@@ -766,7 +766,17 @@ const AI_MODELS=[
   'google/gemma-3-12b-it:free',
 ];
 
-async function callAI(orKey,messages,maxTokens=1500){
+// Build model cascade: user's chosen model first, then standard fallbacks
+function getAIModels(userModel){
+  const base=AI_MODELS_FALLBACK;
+  if(!userModel)return base;
+  // Strip :free suffix if present (free tier often unavailable)
+  const preferred=userModel.endsWith(':free')?userModel.replace(/:free$/,''):userModel;
+  return[preferred,...base.filter(m=>m!==preferred&&m!==userModel)];
+}
+
+async function callAI(orKey,messages,maxTokens=1500,userModel=null){
+  const AI_MODELS=getAIModels(userModel);
   for(const model of AI_MODELS){
     try{
       const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
@@ -956,8 +966,8 @@ async function handleChatAgent(msg,env){
   if(!chatId||!userText)return;
 
   // Load creds
-  let token=null,orKey=null,pf={holdings:[],watchlist:[],realised:[],cfg:{}};
-  try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw){pf=JSON.parse(raw);token=pf.cfg?.tgToken;orKey=pf.cfg?.orKey;}}catch(e){}
+  let token=null,orKey=null,orModel=null,pf={holdings:[],watchlist:[],realised:[],cfg:{}};
+  try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw){pf=JSON.parse(raw);token=pf.cfg?.tgToken;orKey=pf.cfg?.orKey;orModel=pf.cfg?.orModel||null;}}catch(e){}
   if(!token)return;
 
   // No OpenRouter key → guide user
@@ -986,8 +996,8 @@ async function handleChatAgent(msg,env){
     {role:'user',content:userText},
   ];
 
-  // Call AI
-  const aiRaw=await callAI(orKey,messages,1500);
+  // Call AI — use user's configured model from Settings as primary
+  const aiRaw=await callAI(orKey,messages,1500,orModel);
   if(!aiRaw){
     await tgSend(token,chatId,'⚠️ AI is temporarily unavailable (OpenRouter rate limit or timeout).\nTry again in ~60 seconds, or use /portfolio, /price, /brief for quick info.');
     return;
@@ -1026,7 +1036,7 @@ async function sendAnalyze(env,chatId,token,sym){
   const base=sym.toUpperCase().replace(/\.(NS|BO)$/i,'');
   let pf={holdings:[],watchlist:[]};
   try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw){pf=JSON.parse(raw);}}catch(e){}
-  const orKey=pf.cfg?.orKey;
+  const orKey=pf.cfg?.orKey;const orModel=pf.cfg?.orModel||null;
   if(!orKey){await tgSend(token,chatId,'⚠️ OpenRouter API key not configured. Set it in StockSense Settings → AI Provider.');return;}
 
   // Fetch live price
@@ -1061,7 +1071,7 @@ Analyze and respond with these sections:
 
 Keep it under 350 words. Be direct — no disclaimers.`;
 
-  const resp=await callAI(orKey,[{role:'user',content:prompt}],1500);
+  const resp=await callAI(orKey,[{role:'user',content:prompt}],1500,orModel);
   if(!resp){await tgSend(token,chatId,'⚠️ AI analysis failed. Try /price '+base+' for live price, or try again later.');return;}
   await tgSend(token,chatId,'📊 <b>'+escHtml(base)+' Analysis</b>\n\n'+resp);
 }
@@ -1071,7 +1081,7 @@ Keep it under 350 words. Be direct — no disclaimers.`;
 async function sendRecommend(env,chatId,token,args){
   let pf={holdings:[],watchlist:[],cfg:{}};
   try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
-  const orKey=pf.cfg?.orKey;
+  const orKey=pf.cfg?.orKey;const orModel=pf.cfg?.orModel||null;
   if(!orKey){await tgSend(token,chatId,'⚠️ OpenRouter API key not configured. Set it in StockSense Settings → AI Provider.');return;}
 
   await tgSend(token,chatId,'🧠 Generating recommendations... (15-25 sec)');
@@ -1115,7 +1125,7 @@ Base your advice on:
 
 Be specific. Give stock names, price levels, and clear rationale. No generic advice. Under 300 words.`;
 
-  const resp=await callAI(orKey,[{role:'user',content:prompt}],1200);
+  const resp=await callAI(orKey,[{role:'user',content:prompt}],1200,orModel);
   if(!resp){await tgSend(token,chatId,'⚠️ AI recommendation failed. Try again in a moment.');return;}
   await tgSend(token,chatId,'🧠 <b>AI Recommendations</b>\n\n'+resp);
 }

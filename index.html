@@ -13056,8 +13056,9 @@ function saveSettings(){
     // Preserve Telegram credentials (never wipe on settings save)
     ...(D.cfg?.tgToken ? {tgToken: D.cfg.tgToken} : (localStorage.getItem('tgToken') ? {tgToken: localStorage.getItem('tgToken')} : {})),
     ...(D.cfg?.tgChatId ? {tgChatId: D.cfg.tgChatId} : (localStorage.getItem('tgChatId') ? {tgChatId: localStorage.getItem('tgChatId')} : {})),
-    // Sync orKey to KV so Telegram AI chat agent can use it
+    // Sync orKey + orModel to KV so Telegram AI chat agent uses same key & model
     ...(orKey ? {orKey} : (D.cfg?.orKey ? {orKey: D.cfg.orKey} : {})),
+    ...(orModel ? {orModel} : (D.cfg?.orModel ? {orModel: D.cfg.orModel} : {})),
   };
   save('cfg');
   setupRefresh();
