@@ -1241,7 +1241,7 @@ async function handleTelegram(request,env){
 export default{
   async fetch(request,env,ctx){
     const url=new URL(request.url);
-    if(url.pathname==='/telegram'){if(request.method==='POST')return handleTelegram(request,env);return new Response('StockSense Telegram webhook v10',{status:200});}
+    if(url.pathname==='/telegram'){if(request.method==='POST')return handleTelegram(request,env);return new Response('StockSense Telegram webhook v11',{status:200});}
     if(url.pathname==='/sync'){const{fetched,prices,prevPrices}=await syncPrices(env);ctx.waitUntil(checkAndSendAlerts(env,prices,prevPrices));return new Response(JSON.stringify({fetched}),{headers:{'Content-Type':'application/json'}});}
     if(url.pathname==='/brief'){ctx.waitUntil(sendMorningBrief(env));return new Response('{"ok":true}',{headers:{'Content-Type':'application/json'}});}
     if(url.pathname==='/evening'){ctx.waitUntil(sendEveningWrap(env));return new Response('{"ok":true}',{headers:{'Content-Type':'application/json'}});}
