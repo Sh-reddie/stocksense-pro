@@ -212,7 +212,7 @@ async function addOrUpdateHolding(env,chatId,token,args){
     await env.STOCKSENSE_KV.put('portfolio',JSON.stringify(pf));
     await tgSend(token,chatId,'✅ <b>Updated:</b> '+base+' × '+qty+' @ ₹'+avg.toFixed(2)+' ('+exchange+')\nPortfolio saved.');
   }else{
-    pf.holdings.push({id:Date.now().toString(36),symbol:base,exchange,qty,avgPrice:avg,ltp:0,buyDate:new Date().toISOString().slice(0,10)});
+    pf.holdings.push({id:Date.now()+Math.random(),symbol:base,exchange,qty,avgPrice:avg,ltp:0,buyDate:new Date().toISOString().slice(0,10)});
     await env.STOCKSENSE_KV.put('portfolio',JSON.stringify(pf));
     await tgSend(token,chatId,'✅ <b>Added:</b> '+base+' × '+qty+' @ ₹'+avg.toFixed(2)+' ('+exchange+')\nTotal holdings: '+pf.holdings.length);
   }

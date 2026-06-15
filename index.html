@@ -5735,6 +5735,15 @@ function _pfLoad(k, fb) {
 // Backfill missing IDs on any watchlist array loaded from storage.
 // Older items were added before the id field existed — without this they all
 // render onclick="_wlAnalyseSingle(undefined)" and click the wrong stock.
+function _normalizeHoldingIds(arr) {
+  if (!Array.isArray(arr)) return arr;
+  return arr.map(h => {
+    if (typeof h.id !== 'number' || isNaN(h.id)) {
+      return Object.assign({}, h, { id: Date.now() + Math.random() });
+    }
+    return h;
+  });
+}
 function _backfillWlIds(arr) {
   if (!Array.isArray(arr)) return arr;
   let changed = false;
@@ -5923,7 +5932,7 @@ const _kv = {
         let changed = false;
         for (const k of keys) {
           if (data[k] !== undefined) {
-            D[k] = k === 'watchlist' ? _backfillWlIds(data[k]) : data[k];
+            D[k] = k === 'watchlist' ? _backfillWlIds(data[k]) : k === 'holdings' ? _normalizeHoldingIds(data[k]) : data[k];
             try { localStorage.setItem(k, JSON.stringify(D[k])); } catch(e) {}
             changed = true;
           }
