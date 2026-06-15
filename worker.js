@@ -756,11 +756,14 @@ async function checkAndSendAlerts(env,prices,prevPrices){
 // ── AI CHAT AGENT ─────────────────────────────────────────────────────────────
 
 const AI_MODELS=[
+  'meta-llama/llama-3.3-70b-instruct',
+  'mistralai/mistral-small-3.2-24b-instruct',
+  'qwen/qwen3-14b',
+  'microsoft/phi-4-mini-instruct',
+  'deepseek/deepseek-chat-v3-0324',
+  // Free tier fallbacks (may be unavailable)
   'meta-llama/llama-3.3-70b-instruct:free',
   'google/gemma-3-12b-it:free',
-  'mistralai/mistral-small-3.2-24b-instruct:free',
-  'deepseek/deepseek-chat-v3-0324:free',
-  'z-ai/glm-4.5-air:free',
 ];
 
 async function callAI(orKey,messages,maxTokens=1500){
