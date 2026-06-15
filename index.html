@@ -725,6 +725,8 @@ textarea.fi{resize:vertical;min-height:70px;}
 .ab-chip.done{border-color:rgba(45,211,111,.35);color:var(--grn);background:rgba(45,211,111,.07);}
 .ab-chip.active{border-color:rgba(79,142,247,.45);color:var(--ac);background:rgba(79,142,247,.1);animation:ab-pulse 1.4s infinite;}
 .ab-chip.wait{color:var(--t4);border-color:var(--b1);}
+.ab-chip.failed{border-color:rgba(240,82,82,.45);color:var(--red);background:rgba(240,82,82,.08);}
+.ab-chip.retrying{border-color:rgba(250,173,20,.55);color:var(--yel);background:rgba(250,173,20,.1);animation:ab-pulse 1.4s infinite;}
 
 /* ── STOCK DETAIL MODAL ───────────────────────────── */
 #m-stockdetail .md{width:900px;max-width:97vw;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;}
@@ -9000,6 +9002,63 @@ async function runAllAI() {
     if (i + BATCH < D.watchlist.length) await new Promise(r => setTimeout(r, BATCH_DELAY));
   }
   save('watchlist');
+
+  // ── Phase 3.5: Retry rate-limited stocks (up to 3 rounds, 60s wait) ──
+  const _isRLError = e => e && /⚠|rate.?limit|temporarily unavailable/i.test(e);
+  for (let _retryRound = 1; _retryRound <= 3; _retryRound++) {
+    const _failedH = D.holdings.filter(h => _isRLError(h.aiError));
+    const _failedW = D.watchlist.filter(w => _isRLError(w.aiError));
+    if (!_failedH.length && !_failedW.length) break;
+    const _failCount = _failedH.length + _failedW.length;
+    // Mark failed chips
+    _failedH.forEach(h => { chipStates[h.symbol] = 'failed'; });
+    _failedW.forEach(w => { chipStates[w.symbol] = 'failed'; });
+    // Countdown
+    for (let _sec = 60; _sec > 0; _sec--) {
+      const _doneSoFar = total - _failCount;
+      updBatch(`Rate limited — retry ${_retryRound}/3 in ${_sec}s…`, _doneSoFar,
+        Math.round(80 + _retryRound * 3),
+        `⏳ ${_failCount} stock(s) hit rate limits — retrying in ${_sec}s (round ${_retryRound}/3)…`);
+      if(briefEl) {
+        const _chipHtml = allSymbols.map(s=>`<span class="ab-chip ${chipStates[s.sym]}">${s.sym}${s.type==='W'?'<sup style="font-size:7px;opacity:.6"> W</sup>':''}</span>`).join('');
+        const _batchCard = briefEl.querySelector('.ai-batch-card');
+        if (_batchCard) {
+          const _chipsEl = _batchCard.querySelector('.ai-batch-chips');
+          if (_chipsEl) _chipsEl.innerHTML = _chipHtml;
+        }
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    window._claudeJSONFastFailed = false;
+    // Remove old errors for stocks being retried
+    D._aiErrors = (D._aiErrors||[]).filter(e => ![..._failedH, ..._failedW].some(s => e.startsWith((s.symbol||''))));
+    // Retry failed holdings
+    for (let _ri = 0; _ri < _failedH.length; _ri += BATCH) {
+      window._claudeJSONFastFailed = false;
+      const _rBatch = _failedH.slice(_ri, _ri + BATCH);
+      _rBatch.forEach(h => { h.aiError = null; chipStates[h.symbol] = 'retrying'; });
+      updBatch(`Retrying holdings (round ${_retryRound}/3)…`, total - _failCount + _ri,
+        Math.round(82 + _retryRound * 3),
+        `Retry ${_retryRound}: ${_rBatch.map(h=>h.symbol).join(', ')}…`);
+      await Promise.all(_rBatch.map(h => analyseHolding(h, ctx)));
+      _rBatch.forEach(h => { chipStates[h.symbol] = _isRLError(h.aiError) ? 'failed' : 'done'; });
+      if (_ri + BATCH < _failedH.length) await new Promise(r => setTimeout(r, BATCH_DELAY));
+    }
+    // Retry failed watchlist
+    for (let _ri = 0; _ri < _failedW.length; _ri += BATCH) {
+      window._claudeJSONFastFailed = false;
+      const _rBatch = _failedW.slice(_ri, _ri + BATCH);
+      _rBatch.forEach(w => { w.aiError = null; chipStates[w.symbol] = 'retrying'; });
+      updBatch(`Retrying watchlist (round ${_retryRound}/3)…`, total - _failCount + _failedH.length + _ri,
+        Math.round(84 + _retryRound * 3),
+        `Retry ${_retryRound}: ${_rBatch.map(w=>w.symbol).join(', ')}…`);
+      await Promise.all(_rBatch.map(w => analyseWatchStock(w, ctx)));
+      _rBatch.forEach(w => { chipStates[w.symbol] = _isRLError(w.aiError) ? 'failed' : 'done'; });
+      if (_ri + BATCH < _failedW.length) await new Promise(r => setTimeout(r, BATCH_DELAY));
+    }
+    if (_failedH.length) save('holdings');
+    if (_failedW.length) save('watchlist');
+  }
 
   // ── Phase 4: Portfolio health ────────────────────────────────────────
   updBatch('Portfolio health check…', total, 97, 'Running portfolio health check…');
