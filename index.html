@@ -9233,6 +9233,7 @@ Reply ONLY compact JSON:
     // Capture price at analysis time for Signal Accuracy Tracker
     if(h.ltp) h.ltpAtAnalysis = h.ltp;
     h.signalAt = new Date().toISOString(); // separate from lastAnalysed for accuracy tracking
+    h.aiModel = window._lastClaudeJSONModel || null; // watermark: model that produced this analysis
     // Save to 6-hour cache so runAllAI() skips fresh holdings next time
     h.aiAnalysedAt = new Date().toISOString();
     _aiCacheSet(h.symbol, {
@@ -9241,6 +9242,7 @@ Reply ONLY compact JSON:
       bullCase:h.bullCase, bearCase:h.bearCase, redFlags:h.redFlags,
       aiAction:h.aiAction, aiReasoning:h.aiReasoning, tradeType:h.tradeType,
       aiAnalysedAt:h.aiAnalysedAt, ltpAtAnalysis:h.ltpAtAnalysis, signalAt:h.signalAt, aiError:null,
+      aiModel:h.aiModel,
     });
   }catch(e){
     const _rawErr = e.message || String(e);
@@ -9350,6 +9352,7 @@ Reply ONLY compact JSON no markdown: {"decision":"ENTER NOW|WAIT|AVOID","entrySc
     w.scoreBreakdown = j.scoreBreakdown || null;
     w.target       = w.target1;
     w.signal       = dec === 'ENTER NOW' ? 'BUY' : dec === 'AVOID' ? 'SELL' : 'HOLD';
+    w.aiModel      = window._lastClaudeJSONModel || null; // watermark
     w.lastAnalysed = new Date().toISOString();
   } catch(e) {
     w.aiError    = e.message || 'Analysis failed — check AI key / network';
@@ -9488,7 +9491,7 @@ function renderExitPlannerV4() {
         <div><div style="color:var(--yel);font-weight:600;margin-bottom:4px">📋 Trade Info</div>
           <div style="color:var(--t3)">Type: ${h.tradeType||'—'} | Tax: ${tt}</div>
           <div style="color:var(--t3)">T1: ${h.t1Timeline||'—'} | T2: ${h.t2Timeline||'—'}</div>
-          <div style="color:var(--t3)">Analysed: ${h.lastAnalysed?new Date(h.lastAnalysed).toLocaleTimeString('en-IN'):'Never'}</div>
+          <div style="color:var(--t3)">Analysed: ${h.lastAnalysed?new Date(h.lastAnalysed).toLocaleTimeString('en-IN'):'Never'}${h.aiModel?' · 🤖 '+h.aiModel.split('/').pop():''}</div>
         </div>
       </div>
     </td></tr>`;
@@ -12440,6 +12443,7 @@ function _sdAiContent(h) {
     <span style="font-size:10.5px;padding:4px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:20px;color:var(--t3)">${taxLabel}</span>
     ${portWt!=='—'?`<span style="font-size:10.5px;padding:4px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:20px;color:var(--t3)">⚖ ${portWt}% of portfolio</span>`:''}
     ${h.pe?`<span style="font-size:10.5px;padding:4px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:20px;color:var(--t3)">PE ${h.pe.toFixed(1)}</span>`:''}
+    ${h.aiModel?`<span style="font-size:9.5px;padding:3px 9px;background:rgba(79,142,247,.07);border:1px solid rgba(79,142,247,.2);border-radius:20px;color:var(--t4)" title="AI model that generated this analysis">🤖 ${h.aiModel.split('/').pop()}</span>`:''}
   </div>
 
   <!-- ⑦ ACTIONS -->
@@ -14455,6 +14459,7 @@ async function claudeJSON(prompt, sys) {
         continue;
       }
       ilog && ilog('✅ claudeJSON used model: ' + model, 'info');
+      window._lastClaudeJSONModel = model; // expose for watermark
       return content;
     } catch(e) {
       // Timeout or network error — try next model
