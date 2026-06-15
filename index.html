@@ -13038,7 +13038,9 @@ function saveSettings(){
     hor:  document.getElementById('cfg-hor')?.value||'medium',
     pt:   parseFloat(document.getElementById('cfg-pt')?.value)||20,
     sl:   parseFloat(document.getElementById('cfg-sl')?.value)||12,
-    ref:  parseInt(document.getElementById('cfg-ref')?.value)||60
+    ref:  parseInt(document.getElementById('cfg-ref')?.value)||60,
+    // Sync orKey to KV so Telegram AI chat agent can use it
+    ...(orKey ? {orKey} : (D.cfg?.orKey ? {orKey: D.cfg.orKey} : {})),
   };
   save('cfg');
   setupRefresh();
