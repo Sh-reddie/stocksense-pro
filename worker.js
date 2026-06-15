@@ -788,7 +788,7 @@ async function callAI(orKey,messages,maxTokens=1500,userModel=null){
       const d=await r.json();
       if(d.error){console.warn('AI err ('+model+'):',d.error.message);continue;}
       const txt=d.choices?.[0]?.message?.content;
-      if(txt&&txt.length>10)return txt;
+      if(txt&&txt.length>10)return {text:txt,model};
     }catch(e){console.warn('AI call fail ('+model+'):',e.message);}
   }
   return null;
@@ -997,11 +997,13 @@ async function handleChatAgent(msg,env){
   ];
 
   // Call AI — use user's configured model from Settings as primary
-  const aiRaw=await callAI(orKey,messages,1500,orModel);
-  if(!aiRaw){
+  const aiResult=await callAI(orKey,messages,1500,orModel);
+  if(!aiResult){
     await tgSend(token,chatId,'⚠️ AI is temporarily unavailable (OpenRouter rate limit or timeout).\nTry again in ~60 seconds, or use /portfolio, /price, /brief for quick info.');
     return;
   }
+  const aiRaw=aiResult.text;
+  const aiModelUsed=aiResult.model;
 
   // Parse actions + execute
   const actions=extractActionBlocks(aiRaw);
@@ -1017,6 +1019,7 @@ async function handleChatAgent(msg,env){
   // Send response
   let finalText=cleanResponse;
   if(actionResults.length>0)finalText+='\n\n<i>'+actionResults.join('\n')+'</i>';
+  finalText+='\n\n<i>🤖 '+aiModelUsed.split('/').pop()+'</i>';
 
   // Split if > 3800 chars (Telegram 4096 limit)
   if(finalText.length>3800){
@@ -1073,7 +1076,7 @@ Keep it under 350 words. Be direct — no disclaimers.`;
 
   const resp=await callAI(orKey,[{role:'user',content:prompt}],1500,orModel);
   if(!resp){await tgSend(token,chatId,'⚠️ AI analysis failed. Try /price '+base+' for live price, or try again later.');return;}
-  await tgSend(token,chatId,'📊 <b>'+escHtml(base)+' Analysis</b>\n\n'+resp);
+  await tgSend(token,chatId,'📊 <b>'+escHtml(base)+' Analysis</b>\n\n'+resp.text+'\n\n<i>🤖 '+resp.model.split('/').pop()+'</i>');
 }
 
 // ── /recommend — AI portfolio recommendations ────────────────────────────────
@@ -1127,7 +1130,7 @@ Be specific. Give stock names, price levels, and clear rationale. No generic adv
 
   const resp=await callAI(orKey,[{role:'user',content:prompt}],1200,orModel);
   if(!resp){await tgSend(token,chatId,'⚠️ AI recommendation failed. Try again in a moment.');return;}
-  await tgSend(token,chatId,'🧠 <b>AI Recommendations</b>\n\n'+resp);
+  await tgSend(token,chatId,'🧠 <b>AI Recommendations</b>\n\n'+resp.text+'\n\n<i>🤖 '+resp.model.split('/').pop()+'</i>');
 }
 
 // ── Telegram router ───────────────────────────────────────────────────────────
