@@ -6660,8 +6660,10 @@ If unsure, reply: UNKNOWN`;
   try {
     let ticker = null;
     if (provider === 'openrouter') {
-      let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct:free';
-      if (model === 'custom') model = localStorage.getItem('orCustomModel') || 'meta-llama/llama-3.3-70b-instruct:free';
+      let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct';
+      if (model === 'custom') model = localStorage.getItem('orCustomModel') || 'meta-llama/llama-3.3-70b-instruct';
+      // If user has a free model configured, prefer paid version for reliability
+      if (model.endsWith(':free')) model = model.replace(/:free$/, '');
       const _ref = (location.protocol === 'http:' || location.protocol === 'https:') ? location.href : 'https://stocksense.local';
       const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method:'POST', signal: AbortSignal.timeout(15000),
@@ -14215,10 +14217,10 @@ async function claude(prompt, sys) {
   if (provider === 'openrouter') {
     const key   = localStorage.getItem('orKey') || '';
     // Resolve model — never send 'custom' literally to API
-    let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct:free';
+    let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct';
     if(model === 'custom') {
       const customVal = localStorage.getItem('orCustomModel') || document.getElementById('cfg-or-custom')?.value.trim();
-      model = customVal && customVal !== 'custom' ? customVal : 'meta-llama/llama-3.3-70b-instruct:free';
+      model = customVal && customVal !== 'custom' ? customVal : 'meta-llama/llama-3.3-70b-instruct';
     }
     if (!key) return '⚠ No OpenRouter API key. Go to Settings → AI Provider → add your free key from openrouter.ai';
     // Use a stable HTTPS referer — file:// URLs cause OpenRouter to reject the request
@@ -14283,7 +14285,7 @@ async function claude(prompt, sys) {
         const r3 = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method:'POST',
           headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro'},
-          body:JSON.stringify({model:'meta-llama/llama-3.3-70b-instruct:free',max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
+          body:JSON.stringify({model:'meta-llama/llama-3.3-70b-instruct',max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
           signal: AbortSignal.timeout(30000)
         });
         const d3 = await r3.json();
@@ -14329,11 +14331,20 @@ async function claudeJSON(prompt, sys) {
     return claude(prompt, sys);
   }
   // User's selected model goes first — honour their Settings choice
-  let _userModel = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct:free';
-  if (_userModel === 'custom') _userModel = localStorage.getItem('orCustomModel') || 'meta-llama/llama-3.3-70b-instruct:free';
+  let _userModel = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct';
+  if (_userModel === 'custom') _userModel = localStorage.getItem('orCustomModel') || 'meta-llama/llama-3.3-70b-instruct';
+  // If user has a stale free-tier model saved, auto-upgrade to paid for reliability
+  if (_userModel.endsWith(':free')) _userModel = _userModel.replace(/:free$/, '');
   // Fallback cascade: tried in order if user's model fails / is rate-limited
+  // Paid models first (reliable), then free-tier fallbacks
   const FAST_MODELS = [
     _userModel,
+    'meta-llama/llama-3.3-70b-instruct',
+    'mistralai/mistral-small-3.2-24b-instruct',
+    'google/gemma-3-12b-it',
+    'qwen/qwen3-14b',
+    'microsoft/phi-4-mini-instruct',
+    // Free tier fallbacks (may be unavailable)
     'meta-llama/llama-3.3-70b-instruct:free',
     'google/gemma-3-12b-it:free',
     'mistralai/mistral-small-3.2-24b-instruct:free',
@@ -25937,16 +25948,18 @@ async function _chatCallAI(sysPrompt, messages) {
   const key = (localStorage.getItem('orKey') || '').trim();
   if (!key) throw new Error('No OpenRouter key. Go to Settings → AI Provider.');
 
-  // Default model — Nemotron Super 120B (large, fast, no reasoning overhead)
-  const CHAT_DEFAULT = 'meta-llama/llama-3.3-70b-instruct:free';
+  // Default model — paid models first for reliability, free tier as fallback
+  const CHAT_DEFAULT = 'meta-llama/llama-3.3-70b-instruct';
   // Fallback cascade tried automatically if primary is unavailable
   const CHAT_FALLBACKS = [
-    'meta-llama/llama-3.3-70b-instruct:free',
+    'meta-llama/llama-3.3-70b-instruct',
+    'mistralai/mistral-small-3.2-24b-instruct',
+    'google/gemma-3-12b-it',
+    'qwen/qwen3-14b',
+    // Free tier fallbacks (may be unavailable)
     'meta-llama/llama-3.3-70b-instruct:free',
     'z-ai/glm-4.5-air:free',
-    'google/gemma-3-27b-it:free',
-    'mistralai/mistral-7b-instruct:free',
-    'nousresearch/hermes-3-llama-3.1-405b:free'
+    'google/gemma-3-27b-it:free'
   ];
 
   let model = localStorage.getItem('orModel') || CHAT_DEFAULT;
