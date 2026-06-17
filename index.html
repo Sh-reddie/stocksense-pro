@@ -21858,7 +21858,9 @@ Reply JSON (no markdown):
 {"opps":["<stock + ₹level + action>","<stock + ₹level + action>","<stock + ₹level + action>"],"risks":["<stock + trigger + consequence>","<stock + trigger + consequence>","<stock + trigger + consequence>"],"actions":["<today action 1>","<today action 2>","<today action 3>"],"narrative":"<3 sentences>"}`)
   ]);
 
-  const bd = briefData.status==='fulfilled'&&typeof briefData.value==='object'?briefData.value:null;
+  const _rawBd = briefData.status==='fulfilled' ? briefData.value : null;
+  const bd = (typeof _rawBd === 'object' && _rawBd !== null) ? _rawBd
+           : (typeof _rawBd === 'string' && !_rawBd.startsWith('⚠')) ? extractJSON(_rawBd) : null;
 
   const li = (arr,col) => arr?.length
     ? arr.map(x=>`<div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:7px"><span style="color:${col};font-size:14px;flex-shrink:0">•</span><span style="font-size:12px;color:var(--t2);line-height:1.4">${x}</span></div>`).join('')
