@@ -14294,16 +14294,7 @@ function init(){
   const savedOrKey = localStorage.getItem('orKey');
   if(savedOrKey && document.getElementById('cfg-or-key')) document.getElementById('cfg-or-key').value = savedOrKey;
   let savedOrModel = localStorage.getItem('orModel');
-  // Migrate deprecated/dead/content-safety models to current default
-  const _deadModels = ['meta-llama/llama-3.1-8b-instruct:free','mistralai/mistral-7b-instruct:free','google/gemma-3-27b-it:free','qwen/qwen3-8b:free','qwen/qwen3-14b:free','microsoft/phi-4-reasoning:free','deepseek/deepseek-r1-0528-qwen3-8b:free','nvidia/nemotron-3-nano-30b-a3b:free','nousresearch/hermes-3-llama-3.1-405b:free','nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free','nvidia/nemotron-3-nano-30b-a3b:free','nvidia/nemotron-super-49b-v1:free',
-    'nvidia/nemotron-3.5-content-safety:free', // content-safety model — not a chat model
-    'openrouter/free' // OpenRouter meta-router — routes to content-safety classifier, not usable
-  ];
-  if (savedOrModel && _deadModels.includes(savedOrModel)) {
-    savedOrModel = 'nvidia/nemotron-3-ultra-550b-a55b:free';
-    localStorage.setItem('orModel', savedOrModel);
-    toast('🔄 AI model updated to Nemotron Ultra 550B (previous selection was a content-safety classifier, not a chat model)', 'info');
-  }
+  // No dead-model migration — user manages model selection via Settings
   if (!savedOrModel) {
     savedOrModel = 'nvidia/nemotron-3-ultra-550b-a55b:free';
     localStorage.setItem('orModel', savedOrModel);
