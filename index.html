@@ -14570,10 +14570,16 @@ async function claudeJSON(prompt, sys) {
   if (_userModel === 'nvidia/nemotron-3.5-content-safety:free') _userModel = 'nvidia/nemotron-3-ultra-550b-a55b:free';
   // Keep free-tier model as-is (user explicitly chose it)
   // Fallback cascade: tried in order if user's model fails / is rate-limited
+  // IMPORTANT: Exclude slow/reasoning models (nemotron-ultra, glm) — they have 90s timeouts
+  // and make the cascade take 10+ minutes. claudeJSON needs fast structured-data models only.
+  const _slowModelsForJSON = [
+    'nvidia/nemotron-3-ultra-550b-a55b:free', // 550B — way too slow on free tier
+    'z-ai/glm-4.5-air:free',                  // "glm" triggers 90s reasoning timeout
+    'nvidia/nemotron-3.5-content-safety:free'  // content-safety classifier, not a chat model
+  ];
   const FAST_MODELS = [
     _userModel,
     // New models added
-    'nvidia/nemotron-3-ultra-550b-a55b:free',
     'nex-agi/nex-n2-pro:free',
     'qwen/qwen3-coder:free',
     'google/gemma-4-26b-a4b-it:free',
@@ -14582,8 +14588,7 @@ async function claudeJSON(prompt, sys) {
     'google/gemma-3-12b-it:free',
     'mistralai/mistral-small-3.2-24b-instruct:free',
     'deepseek/deepseek-chat-v3-0324:free',
-    'z-ai/glm-4.5-air:free'
-  ].filter((m, i, a) => a.indexOf(m) === i && m !== 'nvidia/nemotron-3.5-content-safety:free'); // deduplicate, exclude content-safety
+  ].filter((m, i, a) => a.indexOf(m) === i && !_slowModelsForJSON.includes(m)); // deduplicate, exclude slow models
   let _rlCount = 0; // tracks consecutive 429s — drives backoff
   for (const model of FAST_MODELS) {
     // Skip models that are in per-model rate-limit cooldown
