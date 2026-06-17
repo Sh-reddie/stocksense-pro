@@ -97,9 +97,26 @@
 [data-theme="light"] .chat-bubble.ai{background:#f1f5f9;border-color:#e2e8f0;}
 
 /* ── LOCK SCREEN ─────────────────────────────── */
-body.app-locked>*:not(#lock-screen){filter:blur(14px) brightness(.55) saturate(.4);pointer-events:none;user-select:none;transition:filter .3s;}
+body.app-locked>*:not(#lock-screen):not(#profile-screen){filter:blur(14px) brightness(.55) saturate(.4);pointer-events:none;user-select:none;transition:filter .3s;}
 #lock-screen{position:fixed;inset:0;z-index:19999;display:flex;align-items:center;justify-content:center;background:rgba(6,8,18,.5);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);transition:opacity .3s;}
 #lock-screen.hidden{opacity:0;pointer-events:none;}
+/* ── PROFILE SCREEN ──────────────────────────── */
+#profile-screen{position:fixed;inset:0;z-index:19998;display:none;align-items:center;justify-content:center;background:rgba(6,8,18,.95);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
+#profile-screen.visible{display:flex;}
+.prof-grid{display:flex;flex-wrap:wrap;gap:18px;justify-content:center;max-width:680px;padding:0 16px;}
+.prof-card{display:flex;flex-direction:column;align-items:center;gap:10px;cursor:pointer;padding:20px 16px;border-radius:18px;border:2px solid transparent;transition:all .18s;min-width:110px;position:relative;}
+.prof-card:hover{background:rgba(79,142,247,.08);border-color:rgba(79,142,247,.3);transform:translateY(-3px);}
+.prof-avatar{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:34px;transition:all .18s;}
+.prof-card:hover .prof-avatar{transform:scale(1.06);}
+.prof-name{font-size:13px;font-weight:600;color:var(--t2);text-align:center;max-width:100px;word-break:break-word;}
+.prof-lock-icon{position:absolute;top:14px;right:14px;font-size:11px;opacity:.6;}
+.prof-add .prof-avatar{background:rgba(255,255,255,.04)!important;border:2px dashed rgba(255,255,255,.15)!important;}
+.prof-add:hover .prof-avatar{border-color:rgba(79,142,247,.5)!important;}
+.prof-card .prof-ctx-btn{position:absolute;top:8px;left:8px;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.08);border:none;color:var(--t4);font-size:13px;display:none;cursor:pointer;align-items:center;justify-content:center;}
+.prof-card:hover .prof-ctx-btn{display:flex;}
+/* ── AI WATERMARK ─────────────────────────────── */
+.ai-watermark{display:inline-flex;align-items:center;gap:4px;margin-top:8px;padding:3px 8px;background:rgba(79,142,247,.07);border:1px solid rgba(79,142,247,.15);border-radius:20px;font-size:10px;color:var(--t4);font-style:italic;user-select:none;}
+.ai-watermark .ai-wm-model{color:var(--ac);font-weight:600;}
 .lk-card{background:rgba(18,22,40,.92);border:1px solid rgba(79,142,247,.2);border-radius:24px;padding:36px 32px 28px;width:340px;max-width:calc(100vw - 32px);box-shadow:0 24px 80px rgba(0,0,0,.7),0 0 0 1px rgba(79,142,247,.08);display:flex;flex-direction:column;align-items:center;gap:0;backdrop-filter:blur(24px);}
 .lk-logo{font-size:42px;margin-bottom:8px;filter:drop-shadow(0 0 12px rgba(79,142,247,.5));}
 .lk-title{font-family:var(--display);font-weight:800;font-size:20px;color:#fff;letter-spacing:-.3px;}
@@ -897,6 +914,16 @@ textarea.fi{resize:vertical;min-height:70px;}
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
+
+<!-- ══ PROFILE SELECTOR ══════════════════════════════════════ -->
+<div id="profile-screen">
+  <div style="text-align:center;width:100%">
+    <div style="font-size:44px;margin-bottom:8px;filter:drop-shadow(0 0 16px rgba(79,142,247,.5))">📈</div>
+    <div style="font-size:24px;font-weight:800;color:#fff;letter-spacing:-.4px;margin-bottom:4px">StockSense Pro</div>
+    <div style="font-size:13px;color:rgba(255,255,255,.4);margin-bottom:36px">Who's investing today?</div>
+    <div class="prof-grid" id="profile-cards"></div>
+  </div>
+</div>
 
 <!-- ══ LOCK SCREEN ══════════════════════════════════════════ -->
 <div id="lock-screen" style="display:none">
@@ -4251,10 +4278,16 @@ textarea.fi{resize:vertical;min-height:70px;}
               <div style="font-size:10px;color:var(--t4);margin-top:4px">Get free key at <strong style="color:var(--ac)">openrouter.ai</strong> → Sign up → Keys → Create. $0 cost for free models.</div>
             </div>
             <div class="fg">
-                            <label class="fl">Model <span style="font-size:10px;color:var(--t4)">→ Llama 3.3 70B ⭐ recommended (fast, free, reliable)</span></label>
+              <label class="fl">Model <span style="font-size:10px;color:var(--t4)">→ Nemotron Ultra 550B ⭐ recommended (flagship, free)</span></label>
               <select class="fi" id="cfg-or-model" onchange="toggleCustomModel(this.value)">
-                <optgroup label="⚡ Recommended (fast + quality)">
-                  <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B ⭐ Best — fast, accurate, free</option>
+                <optgroup label="🏆 Flagship (best quality, free)">
+                  <option value="nvidia/nemotron-3-ultra-550b-a55b:free">Nemotron Ultra 550B ⭐ Default — flagship, highest quality</option>
+                  <option value="nex-agi/nex-n2-pro:free">Nex N2 Pro — NexAGI, powerful reasoning</option>
+                  <option value="qwen/qwen3-coder:free">Qwen3 Coder — Alibaba, excellent analysis</option>
+                  <option value="google/gemma-4-26b-a4b-it:free">Gemma 4 26B — Google, latest generation</option>
+                </optgroup>
+                <optgroup label="⚡ Fast &amp; Reliable (free)">
+                  <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B — Meta, fast, accurate</option>
                   <option value="google/gemma-3-12b-it:free">Gemma 3 12B — Google, fast and capable</option>
                   <option value="mistralai/mistral-small-3.2-24b-instruct:free">Mistral Small 3.2 24B — reliable, balanced</option>
                   <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek Chat V3 — strong for analysis</option>
@@ -4399,6 +4432,77 @@ textarea.fi{resize:vertical;min-height:70px;}
           <button class="btn btn-red btn-sm" onclick="if(confirm('Delete ALL data?')){localStorage.clear();location.reload()}">🗑 Clear All Data</button>
         </div>
       </div></div>
+
+      <!-- ── Help & Guide ──────────────────────────────────── -->
+      <div class="pn"><div class="pn-h"><div class="pn-t">❓ Help &amp; Guide</div></div><div class="pn-b" style="font-size:12px;color:var(--t2);line-height:1.7">
+        <div style="display:flex;flex-direction:column;gap:16px">
+
+          <div style="background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:14px">
+            <div style="font-weight:700;color:var(--t1);margin-bottom:8px;font-size:13px">🚀 Getting Started</div>
+            <ol style="padding-left:18px;color:var(--t3);line-height:2">
+              <li><strong style="color:var(--t1)">Add Holdings</strong> — Go to Portfolio → Holdings → "+ Add Stock". Enter symbol, qty, avg price, buy date.</li>
+              <li><strong style="color:var(--t1)">Set OpenRouter Key</strong> — Settings → AI Provider → paste your free key from openrouter.ai. All AI features need this.</li>
+              <li><strong style="color:var(--t1)">Run AI Analysis</strong> — Dashboard → "⚡ Full AI Analysis". Analyses all your holdings with AI signals.</li>
+              <li><strong style="color:var(--t1)">Set Stop Losses</strong> — In Holdings, click any stock's ▼ to expand → set Stop Loss & Targets.</li>
+              <li><strong style="color:var(--t1)">Add to Watchlist</strong> — Portfolio → Watchlist → "+ Watch". AI scores entry quality.</li>
+            </ol>
+          </div>
+
+          <div style="background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:14px">
+            <div style="font-weight:700;color:var(--t1);margin-bottom:8px;font-size:13px">🤖 AI Features</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11.5px">
+              <div style="padding:8px;background:rgba(79,142,247,.06);border-radius:8px;border:1px solid rgba(79,142,247,.15)"><strong style="color:var(--ac)">⚡ Full AI Analysis</strong><br><span style="color:var(--t3)">Dashboard button. Runs AI on every holding — signals, stop-loss, targets. Takes 2–5 min for 30+ stocks.</span></div>
+              <div style="padding:8px;background:rgba(79,142,247,.06);border-radius:8px;border:1px solid rgba(79,142,247,.15)"><strong style="color:var(--ac)">☀ Morning Brief</strong><br><span style="color:var(--t3)">Dashboard → Morning Brief. 4-bullet daily AI brief covering market pulse, alerts, risks, LTCG reminders.</span></div>
+              <div style="padding:8px;background:rgba(79,142,247,.06);border-radius:8px;border:1px solid rgba(79,142,247,.15)"><strong style="color:var(--ac)">🩺 Portfolio Doctor</strong><br><span style="color:var(--t3)">AI → Doctor. Full diagnosis with sector concentration, fair value gaps, prescriptive rebalance actions.</span></div>
+              <div style="padding:8px;background:rgba(79,142,247,.06);border-radius:8px;border:1px solid rgba(79,142,247,.15)"><strong style="color:var(--ac)">🌅 Daily Brief</strong><br><span style="color:var(--t3)">AI → Daily Brief. Detailed daily view: portfolio health, market pulse, opportunities, risks, and AI commentary.</span></div>
+              <div style="padding:8px;background:rgba(79,142,247,.06);border-radius:8px;border:1px solid rgba(79,142,247,.15)"><strong style="color:var(--ac)">🏆 Opportunity Ranker</strong><br><span style="color:var(--t3)">AI → Opportunity. Ranks all watchlist stocks by AI entry conviction score to find the best entry now.</span></div>
+              <div style="padding:8px;background:rgba(79,142,247,.06);border-radius:8px;border:1px solid rgba(79,142,247,.15)"><strong style="color:var(--ac)">📋 Weekly Action Plan</strong><br><span style="color:var(--t3)">AI → Action Plan. AI generates a personalised 7-day plan: what to buy, hold, trim, and exit this week.</span></div>
+              <div style="padding:8px;background:rgba(79,142,247,.06);border-radius:8px;border:1px solid rgba(79,142,247,.15)"><strong style="color:var(--ac)">🔍 Stock Deep Dive</strong><br><span style="color:var(--t3)">Research → Stock Analysis. Full fundamental + technical deep dive on any NSE/BSE stock with AI commentary.</span></div>
+              <div style="padding:8px;background:rgba(79,142,247,.06);border-radius:8px;border:1px solid rgba(79,142,247,.15)"><strong style="color:var(--ac)">📣 Earnings Preview</strong><br><span style="color:var(--t3)">AI → Earnings Preview. AI preview of upcoming earnings for holdings in the next 30 days.</span></div>
+            </div>
+          </div>
+
+          <div style="background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:14px">
+            <div style="font-weight:700;color:var(--t1);margin-bottom:8px;font-size:13px">📊 Key Screens</div>
+            <div style="color:var(--t3);line-height:2;font-size:11.5px">
+              <strong style="color:var(--t1)">Dashboard</strong> — Portfolio overview, AI brief, movers, alerts, and quick actions.<br>
+              <strong style="color:var(--t1)">Holdings</strong> — Full holdings table with P&amp;L, signals, AI targets, and stop losses. Click a row to expand.<br>
+              <strong style="color:var(--t1)">Momentum Board</strong> — Ranks holdings by momentum score across 1D/1W/1M/3M timeframes.<br>
+              <strong style="color:var(--t1)">Risk Console</strong> — Max drawdown, beta, Sharpe ratio, correlation, and tail risk scenarios.<br>
+              <strong style="color:var(--t1)">Action Center</strong> — AI-flagged stocks needing action today: exits, adds, SL changes.<br>
+              <strong style="color:var(--t1)">Screener</strong> — Scan Nifty 500 by sector, market cap, fundamentals, and momentum.<br>
+              <strong style="color:var(--t1)">FII/DII Tracker</strong> — Track institutional money flow and net buying/selling by FIIs and DIIs.<br>
+              <strong style="color:var(--t1)">Trade Journal</strong> — Log trade rationale, review past decisions, track win rate.<br>
+            </div>
+          </div>
+
+          <div style="background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:14px">
+            <div style="font-weight:700;color:var(--t1);margin-bottom:8px;font-size:13px">⌨ Keyboard Shortcuts</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11.5px;color:var(--t3)">
+              <div><kbd style="background:var(--s1);border:1px solid var(--b2);border-radius:4px;padding:1px 6px;color:var(--t2);font-size:10px">/</kbd> · Open search</div>
+              <div><kbd style="background:var(--s1);border:1px solid var(--b2);border-radius:4px;padding:1px 6px;color:var(--t2);font-size:10px">Esc</kbd> · Close modals</div>
+              <div><kbd style="background:var(--s1);border:1px solid var(--b2);border-radius:4px;padding:1px 6px;color:var(--t2);font-size:10px">Ctrl+K</kbd> · Command palette</div>
+              <div><kbd style="background:var(--s1);border:1px solid var(--b2);border-radius:4px;padding:1px 6px;color:var(--t2);font-size:10px">0–9</kbd> · Enter PIN digits</div>
+            </div>
+          </div>
+
+          <div style="background:rgba(240,82,82,.05);border:1px solid rgba(240,82,82,.15);border-radius:10px;padding:14px">
+            <div style="font-weight:700;color:var(--red);margin-bottom:6px;font-size:13px">⚠ Common Issues</div>
+            <div style="color:var(--t3);line-height:2;font-size:11.5px">
+              <strong style="color:var(--t1)">AI shows "User Safety: safe"</strong> — Wrong model selected. Go to Settings → AI Provider → change to Nemotron Ultra 550B or Llama 3.3 70B.<br>
+              <strong style="color:var(--t1)">Rate limit errors</strong> — OpenRouter free tier allows ~20 req/min. Wait 60 seconds. The app auto-switches models during rate limits.<br>
+              <strong style="color:var(--t1)">Prices not updating</strong> — Yahoo Finance rate-limits free requests. Try refreshing in 30-60 seconds. Use "↻" buttons to retry.<br>
+              <strong style="color:var(--t1)">Blank morning brief</strong> — Click "Force Refresh" link in the brief. If persists, check OpenRouter key in Settings.<br>
+              <strong style="color:var(--t1)">Symbol not found</strong> — Use NSE symbol without exchange suffix. E.g. RELIANCE, not RELIANCE.NS. App auto-resolves exchange.<br>
+            </div>
+          </div>
+
+          <div style="text-align:center;color:var(--t4);font-size:11px;padding-top:4px">
+            StockSense Pro · Made with ❤ for Indian equity investors · Not SEBI-registered advice
+          </div>
+        </div>
+      </div></div>
+
     </div>
   </div>
 
@@ -14187,12 +14291,18 @@ function init(){
   const savedOrKey = localStorage.getItem('orKey');
   if(savedOrKey && document.getElementById('cfg-or-key')) document.getElementById('cfg-or-key').value = savedOrKey;
   let savedOrModel = localStorage.getItem('orModel');
-  // Migrate deprecated/dead models to current default
-  const _deadModels = ['meta-llama/llama-3.1-8b-instruct:free','mistralai/mistral-7b-instruct:free','google/gemma-3-27b-it:free','qwen/qwen3-8b:free','qwen/qwen3-14b:free','microsoft/phi-4-reasoning:free','deepseek/deepseek-r1-0528-qwen3-8b:free','nvidia/nemotron-3-nano-30b-a3b:free','nousresearch/hermes-3-llama-3.1-405b:free','nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free','nvidia/nemotron-3-nano-30b-a3b:free','nvidia/nemotron-super-49b-v1:free','nvidia/nemotron-3-super-120b-a12b:free'];
+  // Migrate deprecated/dead/content-safety models to current default
+  const _deadModels = ['meta-llama/llama-3.1-8b-instruct:free','mistralai/mistral-7b-instruct:free','google/gemma-3-27b-it:free','qwen/qwen3-8b:free','qwen/qwen3-14b:free','microsoft/phi-4-reasoning:free','deepseek/deepseek-r1-0528-qwen3-8b:free','nvidia/nemotron-3-nano-30b-a3b:free','nousresearch/hermes-3-llama-3.1-405b:free','nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free','nvidia/nemotron-3-nano-30b-a3b:free','nvidia/nemotron-super-49b-v1:free','nvidia/nemotron-3-super-120b-a12b:free',
+    'nvidia/nemotron-3.5-content-safety:free' // content-safety model — not suitable as chat model
+  ];
   if (savedOrModel && _deadModels.includes(savedOrModel)) {
-    savedOrModel = 'meta-llama/llama-3.3-70b-instruct:free';
+    savedOrModel = 'nvidia/nemotron-3-ultra-550b-a55b:free';
     localStorage.setItem('orModel', savedOrModel);
-    toast('🔄 Model auto-updated to Nemotron Super 49B (previous model retired)', 'info');
+    toast('🔄 AI model updated to Nemotron Ultra 550B (previous selection was a content-safety classifier, not a chat model)', 'info');
+  }
+  if (!savedOrModel) {
+    savedOrModel = 'nvidia/nemotron-3-ultra-550b-a55b:free';
+    localStorage.setItem('orModel', savedOrModel);
   }
   // Set dropdown — if saved model isn't in the list, fall back to custom input
   const _modelSel = document.getElementById('cfg-or-model');
@@ -14274,6 +14384,28 @@ function toggleProviderFields() {
   if(document.getElementById('ant-fields')) document.getElementById('ant-fields').style.display = p==='anthropic' ?'block':'none';
 }
 
+// ── Per-model rate-limit cooldown tracker ────────────────────────
+// Tracks which models hit 429 and when, so we skip them for 60s and then return.
+window._rlCooldowns = window._rlCooldowns || {}; // { [model]: expiryTimestamp }
+function _isModelRateLimited(m) {
+  const exp = window._rlCooldowns[m];
+  if (!exp) return false;
+  if (Date.now() < exp) return true;
+  delete window._rlCooldowns[m]; // expired — clear
+  return false;
+}
+function _setModelRateLimit(m, ms) {
+  window._rlCooldowns[m] = Date.now() + (ms || 60000);
+  ilog && ilog('⏳ Rate-limited: "' + m + '" — skipping for 60s, will restore automatically', 'warn');
+}
+
+// ── Watermark helper ─────────────────────────────────────────────
+function _aiWatermarkHtml(model) {
+  if (!model) return '';
+  const display = model.replace(':free','').split('/').pop();
+  return `<div class="ai-watermark">🤖 Generated by <span class="ai-wm-model">${display}</span></div>`;
+}
+
 // Unified claude() — routes to OpenRouter or Anthropic based on saved provider
 async function claude(prompt, sys) {
   const provider = localStorage.getItem('aiProvider') || 'openrouter';
@@ -14281,14 +14413,26 @@ async function claude(prompt, sys) {
   if (provider === 'openrouter') {
     const key   = localStorage.getItem('orKey') || '';
     // Resolve model — never send 'custom' literally to API
-    let model = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct';
+    // Default to Nemotron Ultra 550B (new flagship default)
+    let model = localStorage.getItem('orModel') || 'nvidia/nemotron-3-ultra-550b-a55b:free';
     if(model === 'custom') {
       const customVal = localStorage.getItem('orCustomModel') || document.getElementById('cfg-or-custom')?.value.trim();
-      model = customVal && customVal !== 'custom' ? customVal : 'meta-llama/llama-3.3-70b-instruct';
+      model = customVal && customVal !== 'custom' ? customVal : 'nvidia/nemotron-3-ultra-550b-a55b:free';
+    }
+    // Guard: content-safety model is not a chat model — auto-switch
+    if (model === 'nvidia/nemotron-3.5-content-safety:free') {
+      model = 'nvidia/nemotron-3-ultra-550b-a55b:free';
     }
     if (!key) return '⚠ No OpenRouter API key. Go to Settings → AI Provider → add your free key from openrouter.ai';
     // Use a stable HTTPS referer — file:// URLs cause OpenRouter to reject the request
     const _ref = (location.protocol === 'http:' || location.protocol === 'https:') ? location.href : 'https://stocksense.local';
+    // If primary model is rate-limited, use a fallback immediately
+    let _activeModel = model;
+    if (_isModelRateLimited(model)) {
+      const _fallbacks = ['meta-llama/llama-3.3-70b-instruct:free','google/gemma-3-12b-it:free','mistralai/mistral-small-3.2-24b-instruct:free','deepseek/deepseek-chat-v3-0324:free'];
+      _activeModel = _fallbacks.find(f => !_isModelRateLimited(f)) || model;
+      ilog && ilog('🔄 Primary model rate-limited, using fallback: ' + _activeModel, 'info');
+    }
     try {
       const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method:'POST',
@@ -14300,7 +14444,7 @@ async function claude(prompt, sys) {
           'X-Requested-With':'XMLHttpRequest'
         },
         body:JSON.stringify({
-          model,
+          model: _activeModel,
           max_tokens:2048,
           temperature:0.7,
           messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]
@@ -14312,16 +14456,34 @@ async function claude(prompt, sys) {
       try { d = JSON.parse(raw); } catch(e) { return '⚠ OpenRouter returned non-JSON: '+raw.slice(0,200); }
       if(d.error) {
         const errMsg = d.error.message || JSON.stringify(d.error);
-        // Rate limit — return friendly message without spamming fallbacks
+        // Rate limit — switch model and retry once
         const _is429 = r.status===429 || /rate.?limit|free-models-per-min/i.test(errMsg);
-        if(_is429) return '⚠ OpenRouter rate limit reached. You\'re on the free tier (~20 req/min). Wait 60 seconds and try again.';
+        if(_is429) {
+          _setModelRateLimit(_activeModel, 60000);
+          // Retry with a fallback model
+          const _fb2 = ['meta-llama/llama-3.3-70b-instruct:free','nvidia/nemotron-3-ultra-550b-a55b:free','google/gemma-3-12b-it:free','mistralai/mistral-small-3.2-24b-instruct:free','deepseek/deepseek-chat-v3-0324:free','z-ai/glm-4.5-air:free'].find(f => f !== _activeModel && !_isModelRateLimited(f));
+          if (_fb2) {
+            ilog && ilog('⚡ Rate limit on "'+_activeModel+'", switching to "'+_fb2+'"', 'info');
+            try {
+              const r4 = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro'},body:JSON.stringify({model:_fb2,max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),signal:AbortSignal.timeout(60000)});
+              const d4 = await r4.json();
+              if(!d4.error) {
+                window._lastClaudeModel = _fb2;
+                const _m4=d4.choices?.[0]?.message;
+                let c4 = (_m4?.content||_m4?.reasoning||'').replace(/<think>[\s\S]*?<\/think>/gi,'').trim();
+                return c4 || 'Analysis unavailable.';
+              }
+            } catch(e4) {}
+          }
+          return '⚠ OpenRouter rate limit reached. You\'re on the free tier (~20 req/min). Wait 60 seconds and try again. The app will automatically restore your primary model.';
+        }
         // Model not found — suggest fallback
         if(errMsg.includes('No endpoints') || errMsg.includes('not found') || errMsg.includes('not a valid model') || errMsg.includes('invalid model') || errMsg.includes('Provider returned error') || r.status===400 || r.status===404 || r.status===503) {
           // Auto-retry with fallback free models
           const fallbacks = ['meta-llama/llama-3.3-70b-instruct:free','google/gemma-3-12b-it:free','mistralai/mistral-small-3.2-24b-instruct:free','deepseek/deepseek-chat-v3-0324:free'];
           for(const fb of fallbacks) {
-            if(fb === model) continue;
-            ilog && ilog('⚠ Model "'+model+'" unavailable, retrying with '+fb+'...','warn');
+            if(fb === _activeModel) continue;
+            ilog && ilog('⚠ Model "'+_activeModel+'" unavailable, retrying with '+fb+'...','warn');
             try {
               const r2 = await fetch('https://openrouter.ai/api/v1/chat/completions',{
                 method:'POST',
@@ -14330,7 +14492,11 @@ async function claude(prompt, sys) {
                 signal: AbortSignal.timeout(60000)
               });
               const d2 = await r2.json();
-              if(!d2.error) { const _m2=d2.choices?.[0]?.message; return (_m2?.content||_m2?.reasoning||'').replace(/<think>[\s\S]*?<\/think>/gi,'').trim() || 'Analysis unavailable.'; }
+              if(!d2.error) {
+                window._lastClaudeModel = fb;
+                const _m2=d2.choices?.[0]?.message;
+                return (_m2?.content||_m2?.reasoning||'').replace(/<think>[\s\S]*?<\/think>/gi,'').trim() || 'Analysis unavailable.';
+              }
             } catch(e2) { /* try next */ }
           }
           return '⚠ All AI models are temporarily unavailable on OpenRouter. Please try again in a few minutes.';
@@ -14345,11 +14511,12 @@ async function claude(prompt, sys) {
       // Reasoning model burned all tokens in <think> block — content is empty, finish_reason is "length"
       // Auto-retry with a fast non-reasoning model
       if((!content || content.length === 0) && (finishReason === 'length' || finishReason === 'stop')) {
-        ilog && ilog('⚠ Model returned empty content (finish_reason='+finishReason+'), retrying with Nemotron Super 120B...','warn');
+        const _retryModel = 'meta-llama/llama-3.3-70b-instruct:free';
+        ilog && ilog('⚠ Model returned empty content (finish_reason='+finishReason+'), retrying with '+_retryModel+'...','warn');
         const r3 = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method:'POST',
           headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro'},
-          body:JSON.stringify({model:'meta-llama/llama-3.3-70b-instruct',max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
+          body:JSON.stringify({model:_retryModel,max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
           signal: AbortSignal.timeout(30000)
         });
         const d3 = await r3.json();
@@ -14357,9 +14524,10 @@ async function claude(prompt, sys) {
           const _m3 = d3.choices?.[0]?.message;
           let c3 = (_m3?.content || _m3?.reasoning || '');
           c3 = c3.replace(/<think>[\s\S]*?<\/think>/gi,'').trim();
-          return c3 || 'Analysis unavailable.';
+          if (c3) { window._lastClaudeModel = _retryModel; return c3; }
         }
       }
+      window._lastClaudeModel = _activeModel;
       return content || 'Analysis unavailable.';
     } catch(e){return 'OpenRouter error: '+e.message;}
   } else {
@@ -14371,6 +14539,7 @@ async function claude(prompt, sys) {
       let d; try { d = JSON.parse(raw); } catch(e) { return '⚠ Anthropic returned non-JSON ['+r.status+']: '+raw.slice(0,200); }
       if(d.error) return '⚠ Anthropic error ['+r.status+']: '+(d.error.message||JSON.stringify(d.error));
       if(!r.ok) return '⚠ Anthropic HTTP '+r.status+': '+(d.message||raw.slice(0,200));
+      window._lastClaudeModel = 'claude-sonnet-4-20250514';
       return d.content?.[0]?.text||'Analysis unavailable.';
     } catch(e){
       const hint = (location.protocol==='file:') ? ' (Tip: opening this file directly via file:// can trigger CORS errors. Try serving it from a local web server.)' : '';
@@ -14395,28 +14564,33 @@ async function claudeJSON(prompt, sys) {
     return claude(prompt, sys);
   }
   // User's selected model goes first — honour their Settings choice
-  let _userModel = localStorage.getItem('orModel') || 'meta-llama/llama-3.3-70b-instruct';
-  if (_userModel === 'custom') _userModel = localStorage.getItem('orCustomModel') || 'meta-llama/llama-3.3-70b-instruct';
-  // If user has a stale free-tier model saved, auto-upgrade to paid for reliability
-  if (_userModel.endsWith(':free')) _userModel = _userModel.replace(/:free$/, '');
+  let _userModel = localStorage.getItem('orModel') || 'nvidia/nemotron-3-ultra-550b-a55b:free';
+  if (_userModel === 'custom') _userModel = localStorage.getItem('orCustomModel') || 'nvidia/nemotron-3-ultra-550b-a55b:free';
+  // Guard: content-safety model is not a chat model
+  if (_userModel === 'nvidia/nemotron-3.5-content-safety:free') _userModel = 'nvidia/nemotron-3-ultra-550b-a55b:free';
+  // Keep free-tier model as-is (user explicitly chose it)
   // Fallback cascade: tried in order if user's model fails / is rate-limited
-  // Paid models first (reliable), then free-tier fallbacks
   const FAST_MODELS = [
     _userModel,
-    'meta-llama/llama-3.3-70b-instruct',
-    'mistralai/mistral-small-3.2-24b-instruct',
-    'google/gemma-3-12b-it',
-    'qwen/qwen3-14b',
-    'microsoft/phi-4-mini-instruct',
-    // Free tier fallbacks (may be unavailable)
+    // New models added
+    'nvidia/nemotron-3-ultra-550b-a55b:free',
+    'nex-agi/nex-n2-pro:free',
+    'qwen/qwen3-coder:free',
+    'google/gemma-4-26b-a4b-it:free',
+    // Reliable fallbacks
     'meta-llama/llama-3.3-70b-instruct:free',
     'google/gemma-3-12b-it:free',
     'mistralai/mistral-small-3.2-24b-instruct:free',
     'deepseek/deepseek-chat-v3-0324:free',
     'z-ai/glm-4.5-air:free'
-  ].filter((m, i, a) => a.indexOf(m) === i); // deduplicate in case user picked one already in list
+  ].filter((m, i, a) => a.indexOf(m) === i && m !== 'nvidia/nemotron-3.5-content-safety:free'); // deduplicate, exclude content-safety
   let _rlCount = 0; // tracks consecutive 429s — drives backoff
   for (const model of FAST_MODELS) {
+    // Skip models that are in per-model rate-limit cooldown
+    if (_isModelRateLimited(model)) {
+      ilog && ilog('⏭ Skipping rate-limited model: '+model, 'info');
+      continue;
+    }
     try {
       const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -14441,8 +14615,9 @@ async function claudeJSON(prompt, sys) {
           || _errMsg.includes('429') || /rate.?limit/i.test(_errMsg);
         if (_is429) {
           _rlCount++;
-          const _wait = Math.min(_rlCount * 2000, 6000); // 2s → 4s → 6s cap
-          ilog && ilog(`⚠ claudeJSON: "${model}" rate-limited, waiting ${_wait}ms before next…`, 'warn');
+          _setModelRateLimit(model, 60000); // track per-model, restore after 60s
+          const _wait = Math.min(_rlCount * 1000, 3000); // brief wait, then try next
+          ilog && ilog(`⚠ claudeJSON: "${model}" rate-limited (cooldown 60s), trying next…`, 'warn');
           await new Promise(res => setTimeout(res, _wait));
         } else {
           ilog && ilog('⚠ claudeJSON: "'+model+'" failed ('+_errMsg.slice(0,40)+'), trying next...', 'warn');
@@ -25379,28 +25554,188 @@ function toggleTheme() {
   localStorage.setItem('ss_theme', html.dataset.theme);
 }
 // ═══════════════════════════════════════════════════
+// PROFILE SYSTEM — Multi-profile with shared data
+// ═══════════════════════════════════════════════════
+const PROFS = {
+  // Default profile id for backward compat (uses existing ss_* keys)
+  DEFAULT_ID: 'main',
+
+  getAll() {
+    let ps = [];
+    try { ps = JSON.parse(localStorage.getItem('ss_profiles') || '[]'); } catch(e) {}
+    if (!ps.length) {
+      ps = [{ id: 'main', name: 'My Portfolio', emoji: '📈', color: '#4f8ef7' }];
+      this.saveAll(ps);
+    }
+    return ps;
+  },
+
+  saveAll(ps) { localStorage.setItem('ss_profiles', JSON.stringify(ps)); },
+
+  getActiveId() { return sessionStorage.getItem('ss_active_profile') || ''; },
+
+  setActiveId(id) { sessionStorage.setItem('ss_active_profile', id); },
+
+  // Per-profile storage keys — main profile uses existing keys for backward compat
+  _pinKey(id)  { return id === 'main' ? 'ss_pin_hash'     : 'ss_pin_hash_'     + id; },
+  _saltKey(id) { return id === 'main' ? 'ss_pin_salt'     : 'ss_pin_salt_'     + id; },
+  _rcvKey(id)  { return id === 'main' ? 'ss_recovery_hash': 'ss_recovery_hash_'+ id; },
+  _keyKey(id)  { return id === 'main' ? 'orKey'            : 'ss_prf_orKey_'   + id; },
+
+  isPINSet(id) { return !!localStorage.getItem(this._pinKey(id)); },
+
+  // Returns the OpenRouter key for the given profile.
+  // Non-main profiles without their own key fall back to the main shared key.
+  getORKey(id) {
+    const prof = (this.getAll().find(p => p.id === id) || {});
+    if (prof.useOwnKey) {
+      return localStorage.getItem(this._keyKey(id)) || localStorage.getItem('orKey') || '';
+    }
+    return localStorage.getItem('orKey') || ''; // shared key (hidden to non-main profiles)
+  },
+
+  showSelector() {
+    const ps = document.getElementById('profile-screen');
+    const ls = document.getElementById('lock-screen');
+    if (ls) ls.style.display = 'none';
+    if (ps) { ps.classList.add('visible'); this.renderCards(); }
+  },
+
+  hideSelector() {
+    const ps = document.getElementById('profile-screen');
+    if (ps) ps.classList.remove('visible');
+  },
+
+  renderCards() {
+    const container = document.getElementById('profile-cards');
+    if (!container) return;
+    const profiles = this.getAll();
+    container.innerHTML = profiles.map(p => `
+      <div class="prof-card" onclick="PROFS.selectProfile('${p.id}')">
+        <button class="prof-ctx-btn" onclick="event.stopPropagation();PROFS._ctxMenu('${p.id}')" title="Options">⋯</button>
+        <div class="prof-avatar" style="background:${p.color||'#4f8ef7'}22;border:2px solid ${p.color||'#4f8ef7'}55">
+          <span>${p.emoji||'👤'}</span>
+        </div>
+        <div class="prof-name">${p.name}</div>
+        ${this.isPINSet(p.id) ? '<div class="prof-lock-icon">🔒</div>' : ''}
+      </div>
+    `).join('') + `
+      <div class="prof-card prof-add" onclick="PROFS.addProfile()">
+        <div class="prof-avatar"><span style="font-size:28px;color:var(--t4)">+</span></div>
+        <div class="prof-name" style="color:var(--t4)">Add Profile</div>
+      </div>`;
+  },
+
+  selectProfile(id) {
+    this.setActiveId(id);
+    this.hideSelector();
+    // Set LK's profile id so PIN uses the right keys
+    LK._profileId = id;
+    LK.init();
+  },
+
+  addProfile() {
+    const name = prompt('Profile name (e.g. "Spouse", "Child", "Work"):');
+    if (!name || !name.trim()) return;
+    const emojis = ['👤','👩','👨','🧑','👴','👵','🧒','💼','🌟','🏃','😎','🦸'];
+    const colors = ['#4f8ef7','#22c55e','#f97316','#ec4899','#22d3ee','#8b5cf6','#fbbf24'];
+    const id = 'prf_' + Date.now();
+    const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const ps = this.getAll();
+    ps.push({ id, name: name.trim(), emoji, color, useOwnKey: false });
+    this.saveAll(ps);
+    this.renderCards();
+  },
+
+  _ctxMenu(id) {
+    const prof = this.getAll().find(p => p.id === id);
+    if (!prof) return;
+    const isMain = id === 'main';
+    const menu = [
+      ['Rename', () => {
+        const n = prompt('New name:', prof.name);
+        if (n && n.trim()) {
+          const ps = this.getAll(); const p = ps.find(x=>x.id===id); if(p) p.name=n.trim();
+          this.saveAll(ps); this.renderCards();
+        }
+      }],
+      ['Change emoji', () => {
+        const e = prompt('Emoji for profile:', prof.emoji||'👤');
+        if (e) {
+          const ps = this.getAll(); const p = ps.find(x=>x.id===id); if(p) p.emoji=e.trim().slice(0,2);
+          this.saveAll(ps); this.renderCards();
+        }
+      }],
+      !isMain && ['Use own OpenRouter key', () => {
+        const k = prompt('Your OpenRouter key (leave blank to use shared key):');
+        if (k !== null) {
+          const ps = this.getAll(); const p = ps.find(x=>x.id===id);
+          if(p) { p.useOwnKey = !!k.trim(); if(k.trim()) localStorage.setItem(this._keyKey(id), k.trim()); }
+          this.saveAll(ps); toast(k.trim() ? '✅ Using own key for this profile' : '✅ Using shared key', 'ok');
+        }
+      }],
+      !isMain && ['Delete profile', () => {
+        if (confirm('Delete "' + prof.name + '"? PIN and settings will be removed.')) {
+          localStorage.removeItem(this._pinKey(id)); localStorage.removeItem(this._saltKey(id)); localStorage.removeItem(this._rcvKey(id));
+          this.saveAll(this.getAll().filter(p=>p.id!==id)); this.renderCards();
+        }
+      }],
+    ].filter(Boolean);
+    const choice = prompt(menu.map((m,i)=>(i+1)+'. '+m[0]).join('\n') + '\n\nEnter number (or cancel):');
+    const idx = parseInt(choice) - 1;
+    if (!isNaN(idx) && menu[idx]) menu[idx][1]();
+  },
+
+  switchProfile() {
+    sessionStorage.removeItem('ss_active_profile');
+    sessionStorage.removeItem('ss_unlocked');
+    LK._mode = 'locked';
+    LK._profileId = null;
+    this.showSelector();
+  },
+
+  init() {
+    const activeId = this.getActiveId();
+    if (!activeId) {
+      this.showSelector();
+    } else {
+      LK._profileId = activeId;
+      LK.init();
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════
 // LOCK SCREEN  — 4-digit PIN, 30-min auto-lock
 // ═══════════════════════════════════════════════════
 const LK = {
   INACTIVITY_MS: 30 * 60 * 1000,   // 30 minutes
   PIN_LEN: 4,
   _buf: '',                          // digits entered so far
+  _profileId: null,                  // set by PROFS.selectProfile()
   _mode: 'locked',                   // 'locked' | 'setup1' | 'setup2' | 'recovery' | 'unlocked'
   _setupPIN: '',                     // first entry during setup
   _timer: null,
   _lastActivity: Date.now(),
 
+  // ── Profile key helpers ──────────────────────────────────────
+  _pid()     { return this._profileId || PROFS.DEFAULT_ID; },
+  _pinKey()  { return PROFS._pinKey(this._pid()); },
+  _saltKey() { return PROFS._saltKey(this._pid()); },
+  _rcvKey()  { return PROFS._rcvKey(this._pid()); },
+
   // ── Helpers ────────────────────────────────────────────────
   async _hash(str) {
     try {
-      const salt = localStorage.getItem('ss_pin_salt') || '';
+      const salt = localStorage.getItem(this._saltKey()) || '';
       const enc = new TextEncoder().encode('stocksense:' + salt + ':' + str);
       const buf = await crypto.subtle.digest('SHA-256', enc);
       return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
     } catch(e) {
       // Fallback simple hash (when crypto.subtle unavailable, e.g. file://)
       let h = 5381;
-      const s = 'stocksense:' + (localStorage.getItem('ss_pin_salt')||'') + ':' + str;
+      const s = 'stocksense:' + (localStorage.getItem(this._saltKey())||'') + ':' + str;
       for (let i = 0; i < s.length; i++) h = ((h << 5) + h) ^ s.charCodeAt(i);
       return (h >>> 0).toString(16).padStart(8,'0');
     }
@@ -25419,7 +25754,7 @@ const LK = {
     return `${pick()}-${num()}-${pick()}`;
   },
 
-  isPINSet() { return !!localStorage.getItem('ss_pin_hash'); },
+  isPINSet() { return !!localStorage.getItem(this._pinKey()); },
 
   // ── Render modes ──────────────────────────────────────────
   render() {
@@ -25436,9 +25771,14 @@ const LK = {
 
   _renderLocked() {
     const card = document.getElementById('lk-card');
+    // Show active profile info
+    const pid = this._pid();
+    const prof = (PROFS.getAll().find(p=>p.id===pid)) || { name:'My Portfolio', emoji:'📈' };
+    const profiles = PROFS.getAll();
+    const multiProfile = profiles.length > 1;
     card.innerHTML = `
-      <div class="lk-logo">📈</div>
-      <div class="lk-title">StockSense Pro</div>
+      <div class="lk-logo">${prof.emoji}</div>
+      <div class="lk-title">${prof.name}</div>
       <div class="lk-subtitle">Enter your PIN to unlock<br><span style="font-size:10px;opacity:.6">Your portfolio data is safely stored</span></div>
       <div class="lk-pin-dots" id="lk-dots">
         <div class="lk-pd" id="lkd0"></div>
@@ -25450,6 +25790,7 @@ const LK = {
       ${this._numpadHTML()}
       <div class="lk-actions">
         <button class="lk-link" onclick="LK._startRecovery()">Forgot PIN?</button>
+        ${multiProfile ? `<button class="lk-link" onclick="PROFS.switchProfile()" style="margin-top:4px">↩ Switch Profile</button>` : ''}
       </div>`;
   },
 
@@ -25544,7 +25885,7 @@ const LK = {
   async _submit() {
     if (this._mode === 'locked') {
       const hash = await this._hash(this._buf);
-      if (hash === localStorage.getItem('ss_pin_hash')) {
+      if (hash === localStorage.getItem(this._pinKey())) {
         this._unlock();
       } else {
         this._buf = '';
@@ -25569,14 +25910,14 @@ const LK = {
 
   async _saveNewPIN(pin) {
     const salt = this._genSalt();
-    localStorage.setItem('ss_pin_salt', salt);
+    localStorage.setItem(this._saltKey(), salt);
     const hash = await this._hash(pin);
-    localStorage.setItem('ss_pin_hash', hash);
+    localStorage.setItem(this._pinKey(), hash);
     // Generate + store recovery phrase
     const phrase = this._genPhrase();
     sessionStorage.setItem('_lk_phrase_tmp', phrase);
     const phraseHash = await this._hashPhrase(phrase);
-    localStorage.setItem('ss_recovery_hash', phraseHash);
+    localStorage.setItem(this._rcvKey(), phraseHash);
     this._mode = 'phrase';
     this.render();
   },
@@ -25611,11 +25952,11 @@ const LK = {
     const val   = (input?.value || '').toUpperCase().trim();
     if (!val) { document.getElementById('lk-err').textContent = 'Enter your recovery phrase.'; return; }
     const hash = await this._hashPhrase(val);
-    if (hash === localStorage.getItem('ss_recovery_hash')) {
+    if (hash === localStorage.getItem(this._rcvKey())) {
       // Correct — let them set a new PIN
-      localStorage.removeItem('ss_pin_hash');
-      localStorage.removeItem('ss_pin_salt');
-      localStorage.removeItem('ss_recovery_hash');
+      localStorage.removeItem(this._pinKey());
+      localStorage.removeItem(this._saltKey());
+      localStorage.removeItem(this._rcvKey());
       this._buf = '';
       this._setupPIN = '';
       this._mode = 'setup1';
@@ -25635,9 +25976,9 @@ const LK = {
 
   _startPINChange() {
     // Show lock screen in setup mode to let user set a new PIN
-    localStorage.removeItem('ss_pin_hash');
-    localStorage.removeItem('ss_pin_salt');
-    localStorage.removeItem('ss_recovery_hash');
+    localStorage.removeItem(this._pinKey());
+    localStorage.removeItem(this._saltKey());
+    localStorage.removeItem(this._rcvKey());
     sessionStorage.removeItem('ss_unlocked');
     this._buf = '';
     this._setupPIN = '';
@@ -25690,30 +26031,35 @@ const LK = {
   },
 
   // ── Bootstrap ─────────────────────────────────────────────
+  // Called by PROFS.selectProfile() after a profile is chosen.
+  // Also called directly on re-entry (ss_active_profile already in sessionStorage).
   init() {
-    // Handle keyboard input on lock screen
-    document.addEventListener('keydown', e => {
-      const ls = document.getElementById('lock-screen');
-      if (!ls || ls.style.display === 'none') return;
-      if (['locked','setup1','setup2'].includes(this._mode)) {
-        if (e.key >= '0' && e.key <= '9') this._press(e.key);
-        else if (e.key === 'Backspace') this._del();
-      }
-    });
+    // Register keyboard handler only once
+    if (!this._keyHandlerRegistered) {
+      this._keyHandlerRegistered = true;
+      document.addEventListener('keydown', e => {
+        const ls = document.getElementById('lock-screen');
+        if (!ls || ls.style.display === 'none') return;
+        if (['locked','setup1','setup2'].includes(this._mode)) {
+          if (e.key >= '0' && e.key <= '9') this._press(e.key);
+          else if (e.key === 'Backspace') this._del();
+        }
+      });
+    }
 
     if (!this.isPINSet()) {
-      // No PIN configured — hide lock screen and proceed normally
-      // PIN setup is only triggered explicitly from Settings
+      // No PIN configured for this profile — unlock directly
       const ls = document.getElementById('lock-screen');
       if (ls) ls.style.display = 'none';
       this._mode = 'unlocked';
     } else if (sessionStorage.getItem('ss_unlocked') === '1') {
       // Tab was already unlocked in this session
-      document.getElementById('lock-screen').style.display = 'none';
+      const ls = document.getElementById('lock-screen');
+      if (ls) ls.style.display = 'none';
       this._mode = 'unlocked';
       this._startInactivityTimer();
     } else {
-      // Locked — show PIN entry
+      // Locked — show PIN entry for this profile
       document.body.classList.add('app-locked');
       this._mode = 'locked';
       const ls = document.getElementById('lock-screen');
@@ -26111,8 +26457,33 @@ document.addEventListener('DOMContentLoaded', function(){
   const saved = localStorage.getItem('ss_theme');
   const btn = document.getElementById('theme-toggle');
   if(btn) btn.textContent = saved === 'light' ? '☀️' : '🌙';
-  // Boot lock screen
-  LK.init();
+  // Boot profile selector → PIN → app
+  PROFS.init();
+
+  // ── AI Watermark Observer ─────────────────────────────────────────
+  // Auto-appends model watermark to any .ai-txt that doesn't have one yet
+  const _wmObserver = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mut) {
+      mut.addedNodes.forEach(function(node) {
+        if (!node.querySelectorAll) return;
+        // Check the node itself and all descendants for .ai-txt
+        const targets = [];
+        if (node.classList && node.classList.contains('ai-txt')) targets.push(node);
+        node.querySelectorAll('.ai-txt').forEach(function(n){ targets.push(n); });
+        targets.forEach(function(el) {
+          if (el.querySelector('.ai-watermark')) return; // already has watermark
+          const m = window._lastClaudeModel || window._lastClaudeJSONModel || '';
+          if (!m || m === 'nvidia/nemotron-3.5-content-safety:free') return;
+          const display = m.replace(':free','').split('/').pop();
+          const wm = document.createElement('div');
+          wm.className = 'ai-watermark';
+          wm.innerHTML = '🤖 Generated by <span class="ai-wm-model">' + display + '</span>';
+          el.appendChild(wm);
+        });
+      });
+    });
+  });
+  _wmObserver.observe(document.body, { childList: true, subtree: true });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -27102,7 +27473,14 @@ Reply ONLY with valid compact JSON:
     if (!forceRefresh) {
       try {
         const cached = localStorage.getItem(cacheKey);
-        if (cached) {
+        // Validate cached content — reject content-safety model outputs and junk
+        const _isInvalidBrief = (s) => !s || s.length < 40
+          || /^user\s+safety:/i.test(s.trim())
+          || /^\s*\{.*"safe"\s*:/i.test(s)
+          || s.trim() === 'safe'
+          || /^openrouter error:/i.test(s)
+          || s.startsWith('⚠');
+        if (cached && !_isInvalidBrief(cached)) {
           if (briefBody) briefBody.innerHTML = `<div class="ai-txt">${md2h(cached)}</div>
             <div style="font-size:10px;color:var(--t4);margin-top:6px;text-align:right">
               Cached for today · <a href="#" onclick="genMorningBrief(true);return false" style="color:var(--ac)">Force Refresh</a>
@@ -27110,6 +27488,8 @@ Reply ONLY with valid compact JSON:
           if (briefTime) briefTime.textContent = 'Today\'s brief (cached)';
           return;
         }
+        // Invalid cached content — clear it and regenerate
+        if (cached) { localStorage.removeItem(cacheKey); }
       } catch(e) {}
     }
     // Run original with live Nifty injected via prompt enrichment
@@ -27140,13 +27520,17 @@ Write a crisp morning brief in exactly 4 bullets. Each bullet = one tight senten
 
 Format as exactly 4 bullets starting with •. Under 100 words total. Be specific and direct.`;
     const r = await claude(prompt);
-    const html = `<div class="ai-txt">${md2h(r)}</div>
+    const _modelUsed = window._lastClaudeModel || '';
+    const _wmHtml = _modelUsed ? `<div class="ai-watermark">🤖 Generated by <span class="ai-wm-model">${_modelUsed.replace(':free','').split('/').pop()}</span></div>` : '';
+    const html = `<div class="ai-txt">${md2h(r)}${_wmHtml}</div>
       <div style="font-size:10px;color:var(--t4);margin-top:6px;text-align:right">
         Generated ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})} · <a href="#" onclick="genMorningBrief(true);return false" style="color:var(--ac)">Force Refresh</a>
       </div>`;
     if (briefBody) briefBody.innerHTML = html;
     if (briefTime) briefTime.textContent = 'Updated ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
-    try { localStorage.setItem(cacheKey, r); } catch(e) {}
+    // Only cache valid responses
+    const _isGoodBrief = r && r.length > 40 && !r.startsWith('⚠') && !/^user\s+safety:/i.test(r.trim());
+    if (_isGoodBrief) { try { localStorage.setItem(cacheKey, r); } catch(e) {} }
   };
 })();
 
