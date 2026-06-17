@@ -21833,9 +21833,8 @@ async function refreshDailyBrief() {
   const holdSummary = scoredH.map(h=>`${h.symbol}(${h._scores.overall}/100,${h._scores.rec})`).join(', ');
 
   // AI: Opportunities + Risks + Actions + Narrative (parallel)
-  const totalVal=holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0);
-  const totalInv=holdings.reduce((s,h)=>s+h.avgPrice*h.qty,0);
-  const portPnlPct=totalInv>0?((totalVal-totalInv)/totalInv*100).toFixed(1):'0';
+  // Note: totalVal and totalCost already declared above — reuse them
+  const portPnlPct=totalCost>0?((totalVal-totalCost)/totalCost*100).toFixed(1):'0';
   const topBuySyms=topBuy.slice(0,3);
   const topAvoidSyms=topAvoid.slice(0,3);
   const [briefData] = await Promise.allSettled([
