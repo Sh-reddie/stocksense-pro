@@ -14477,8 +14477,8 @@ async function claude(prompt, sys, overrideModel) {
           }
           return '⚠ OpenRouter rate limit reached. You\'re on the free tier (~20 req/min). Wait 60 seconds and try again. The app will automatically restore your primary model.';
         }
-        // Model not found — suggest fallback
-        if(errMsg.includes('No endpoints') || errMsg.includes('not found') || errMsg.includes('not a valid model') || errMsg.includes('invalid model') || errMsg.includes('Provider returned error') || r.status===400 || r.status===404 || r.status===503) {
+        // Any non-rate-limit error — try fallback models
+        if(true) {
           // Auto-retry with fallback free models
           const fallbacks = ['meta-llama/llama-3.3-70b-instruct:free','google/gemma-3-12b-it:free','mistralai/mistral-small-3.2-24b-instruct:free','deepseek/deepseek-chat-v3-0324:free'];
           for(const fb of fallbacks) {
