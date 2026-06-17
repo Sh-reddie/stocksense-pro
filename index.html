@@ -23059,31 +23059,42 @@ Write a 3-sentence executive summary for the investor. Reply JSON: {"summary":"<
 
   try {
     const _rawIR = await claudeJSON(prompt);
+    // Detect "all models failed" fallback string from claudeJSON
+    if (typeof _rawIR === 'string' && (_rawIR.startsWith('⚠') || _rawIR.includes('temporarily unavailable'))) {
+      content.innerHTML = '<div style="color:var(--yel);font-size:12px">AI models temporarily unavailable — wait a minute and retry, or go to Settings → AI Provider to select a different model.</div>';
+      if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Executive Summary'; }
+      return;
+    }
     const res = (() => {
       if (_rawIR && typeof _rawIR === 'object') return _rawIR;
       return extractJSON(_rawIR) || null;
     })();
-    if (!res || !res.outlook) throw new Error('bad response');
-    const olCol = res.outlook==='Positive'?'var(--grn)':res.outlook==='Negative'?'var(--red)':'var(--yel)';
+    if (!res) throw new Error('Could not parse AI response — raw: ' + String(_rawIR).slice(0, 80));
+    // Be lenient: infer missing fields with sensible defaults
+    const outlook = res.outlook || res.Outlook || (pnlPct > 5 ? 'Positive' : pnlPct < -5 ? 'Negative' : 'Cautious');
+    const summary = res.summary || res.Summary || res.text || res.message || 'Executive summary not available.';
+    const strength = res.strength || res.Strength || res.strengths || '—';
+    const concern = res.concern || res.Concern || res.concerns || res.weakness || '—';
+    const olCol = outlook==='Positive'?'var(--grn)':outlook==='Negative'?'var(--red)':'var(--yel)';
     const now = new Date().toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'});
     document.getElementById('ir-generated-at').textContent = `Generated ${now}`;
     content.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-        <span style="font-size:12px;font-weight:700;color:${olCol};background:${olCol}18;border:1px solid ${olCol}44;border-radius:10px;padding:3px 12px">${res.outlook} Outlook</span>
+        <span style="font-size:12px;font-weight:700;color:${olCol};background:${olCol}18;border:1px solid ${olCol}44;border-radius:10px;padding:3px 12px">${outlook} Outlook</span>
       </div>
-      <p style="margin:0 0 14px;color:var(--t1);font-size:13px;line-height:1.7">${res.summary}</p>
+      <p style="margin:0 0 14px;color:var(--t1);font-size:13px;line-height:1.7">${summary}</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <div style="flex:1;min-width:160px;background:var(--grn)11;border:1px solid var(--grn)33;border-radius:8px;padding:10px 14px">
           <div style="font-size:10px;color:var(--t4);margin-bottom:3px">PORTFOLIO STRENGTH</div>
-          <div style="font-size:12px;color:var(--grn)">${res.strength}</div>
+          <div style="font-size:12px;color:var(--grn)">${strength}</div>
         </div>
         <div style="flex:1;min-width:160px;background:var(--yel)11;border:1px solid var(--yel)33;border-radius:8px;padding:10px 14px">
           <div style="font-size:10px;color:var(--t4);margin-bottom:3px">KEY CONCERN</div>
-          <div style="font-size:12px;color:var(--yel)">${res.concern}</div>
+          <div style="font-size:12px;color:var(--yel)">${concern}</div>
         </div>
       </div>`;
   } catch(e) {
-    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed — check your OpenRouter key in Settings.</div>';
+    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed: ' + (e.message||'unknown error') + '</div>';
   }
   if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Executive Summary'; }
 }
@@ -23420,7 +23431,8 @@ Pick the better investment and explain. Reply JSON: {"pick":"${sA.symbol} or ${s
       if (_rawCmp && typeof _rawCmp === 'object') return _rawCmp;
       return extractJSON(_rawCmp) || null;
     })();
-    if (!res || !res.pick) throw new Error('bad response');
+    if (!res) throw new Error('Could not parse AI response — raw: ' + String(_rawCmp).slice(0,80));
+    if (!res.pick) throw new Error('Missing "pick" field in AI response');
     const pickCol = res.pick === sA.symbol ? 'var(--ac)' : 'var(--ac2)';
     content.innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
@@ -23442,7 +23454,7 @@ Pick the better investment and explain. Reply JSON: {"pick":"${sA.symbol} or ${s
         </div>
       </div>`;
   } catch(e) {
-    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed — check your OpenRouter key in Settings.</div>';
+    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed: ' + (e.message||'unknown error') + '</div>';
   }
   if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Verdict'; }
 }
@@ -23579,8 +23591,9 @@ Recommend 3 specific hedging/defensive actions. Reply JSON: {"summary":"<20 word
       if (_rawSt && typeof _rawSt === 'object') return _rawSt;
       return extractJSON(_rawSt) || null;
     })();
-    if (!res || !res.verdict) throw new Error('bad response');
-    const vCol = res.verdict==='Resilient'?'var(--grn)':res.verdict==='High Risk'?'var(--red)':'var(--yel)';
+    if (!res) throw new Error('Could not parse AI response — raw: ' + String(_rawSt).slice(0,80));
+    const verdict = res.verdict || 'Moderate Risk';
+    const vCol = verdict==='Resilient'?'var(--grn)':verdict==='High Risk'?'var(--red)':'var(--yel)';
     const actionCards = (res.actions||[]).map((a,i)=>`<div style="flex:1;min-width:180px;background:var(--b2);border-radius:8px;padding:10px 14px">
       <div style="font-size:10px;color:var(--t4);margin-bottom:3px">ACTION ${i+1}</div>
       <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:3px">${a.action}</div>
@@ -23589,12 +23602,12 @@ Recommend 3 specific hedging/defensive actions. Reply JSON: {"summary":"<20 word
 
     content.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-        <span style="font-size:12px;font-weight:700;color:${vCol};background:${vCol}18;border:1px solid ${vCol}44;border-radius:10px;padding:3px 12px">${res.verdict}</span>
-        <span style="font-size:13px;color:var(--t2);font-style:italic">"${res.summary}"</span>
+        <span style="font-size:12px;font-weight:700;color:${vCol};background:${vCol}18;border:1px solid ${vCol}44;border-radius:10px;padding:3px 12px">${verdict}</span>
+        <span style="font-size:13px;color:var(--t2);font-style:italic">"${res.summary||''}"</span>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">${actionCards}</div>`;
   } catch(e) {
-    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed — check your OpenRouter key in Settings.</div>';
+    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed: ' + (e.message||'unknown error') + '</div>';
   }
   if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Hedge Advice'; }
 }
@@ -23771,7 +23784,8 @@ Explain why this entry plan makes sense and key risks. Reply JSON: {"rationale":
       if (_rawPb && typeof _rawPb === 'object') return _rawPb;
       return extractJSON(_rawPb) || null;
     })();
-    if (!res || !res.rationale) throw new Error('bad response');
+    if (!res) throw new Error('Could not parse AI response — raw: ' + String(_rawPb).slice(0,80));
+    if (!res.rationale) throw new Error('Missing "rationale" field in AI response');
     content.innerHTML = `
       <div style="font-size:13px;color:var(--t2);margin-bottom:12px">${res.rationale}</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -23789,7 +23803,7 @@ Explain why this entry plan makes sense and key risks. Reply JSON: {"rationale":
         </div>
       </div>`;
   } catch(e) {
-    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed — check your OpenRouter key in Settings.</div>';
+    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed: ' + (e.message||'unknown error') + '</div>';
   }
   if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Rationale'; }
 }
@@ -24013,9 +24027,9 @@ Reply JSON: {"commentary":"<20 words>","buys":[{"sym":"X","rationale":"<12 words
       if (_rawAp && typeof _rawAp === 'object') return _rawAp;
       return extractJSON(_rawAp) || null;
     })();
-    if (!res || !res.verdict) throw new Error('bad response');
-
-    const vCol = res.verdict==='Aggressive'?'var(--grn)':res.verdict==='Defensive'?'var(--red)':'var(--yel)';
+    if (!res) throw new Error('Could not parse AI response — raw: ' + String(_rawAp).slice(0,80));
+    const apVerdict = res.verdict || 'Balanced';
+    const vCol = apVerdict==='Aggressive'?'var(--grn)':apVerdict==='Defensive'?'var(--red)':'var(--yel)';
     const buyCards = (res.buys||[]).map(b=>`<div style="background:var(--grn)11;border:1px solid var(--grn)33;border-radius:8px;padding:10px 14px;min-width:160px;flex:1">
       <div style="font-size:10px;color:var(--t4);margin-bottom:3px">BUY / ACCUMULATE</div>
       <div style="font-weight:700;font-size:14px;color:var(--grn)">${b.sym||'—'}</div>
@@ -24029,14 +24043,14 @@ Reply JSON: {"commentary":"<20 words>","buys":[{"sym":"X","rationale":"<12 words
 
     content.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-        <span style="font-size:12px;font-weight:700;color:${vCol};background:${vCol}18;border:1px solid ${vCol}44;border-radius:10px;padding:3px 12px">${res.verdict} Stance</span>
+        <span style="font-size:12px;font-weight:700;color:${vCol};background:${vCol}18;border:1px solid ${vCol}44;border-radius:10px;padding:3px 12px">${apVerdict} Stance</span>
         <span style="font-size:13px;color:var(--t2);font-style:italic">"${res.commentary||''}"</span>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         ${buyCards}${trimCard}
       </div>`;
   } catch(e) {
-    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed — check your OpenRouter key in Settings.</div>';
+    content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed: ' + (e.message||'unknown error') + '</div>';
   }
 
   if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Weekly Call'; }
