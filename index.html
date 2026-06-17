@@ -13582,19 +13582,22 @@ async function genMorningBrief() {
 
   const contextBlock = alerts.length ? `\nToday's specific alerts:\n${alerts.map(a=>'• '+a).join('\n')}` : '';
 
-  const prompt = `You are a senior Indian equity research analyst writing a morning brief. Today: ${todayStr}.
-Portfolio: ₹${fI(cv)} current value (invested ₹${fI(inv)}), ${D.holdings.length} stocks across ${new Set(D.holdings.map(h=>h.sector)).size} sectors.
-Today's movers: ${topMovers||'No data yet'}
-Stop-loss breaches: ${breaches||'None — all clear'}
-Stocks needing action: ${actToday||'None flagged'}${contextBlock}
+  const prompt = `You are a SEBI-registered research analyst with 20 years NSE/BSE experience writing a pre-market morning brief. Today: ${todayStr}.
 
-Write a crisp morning brief in exactly 4 bullet points, each one tight sentence. NO generic advice.
-• Market pulse: what Indian market is doing and what it means for this portfolio specifically
-• Portfolio alert: most important holding to watch/act on TODAY (name the stock and why)
-• Risk flag: biggest portfolio risk right now (be specific — name stocks/sectors)
-• Action: one concrete thing to do or monitor today
+PORTFOLIO SNAPSHOT:
+- Current value: ₹${fI(cv)} | Invested: ₹${fI(inv)} | ${D.holdings.length} stocks across ${new Set(D.holdings.map(h=>h.sector)).size} sectors
+- Top movers today: ${topMovers||'Awaiting price data'}
+- Stop-loss breaches: ${breaches||'None — all clear'}
+- Stocks needing action: ${actToday||'None flagged'}${contextBlock}
 
-Keep under 100 words. Direct and specific. Reference the specific alert context if relevant.`;
+Write a razor-sharp morning brief in exactly 4 bullet points. Each bullet = ONE crisp, specific sentence. NO generic market commentary. Every sentence must reference actual stock names or ₹ numbers.
+
+• 📊 MARKET PULSE: Nifty/Sensex direction today and ONE specific impact on this portfolio (name the sector/stock most affected)
+• 🎯 PRIORITY ACTION: Single most important stock to act on TODAY — name it, state the trigger, give the price level to watch (e.g., "RELIANCE — watch ₹2,850 support; break means reduce 25%")
+• ⚠ RISK FLAG: Biggest portfolio risk THIS SESSION with specific stock names and why it matters now
+• ✅ TODAY'S TASK: One concrete, executable action (buy/sell/set alert) with the exact price or condition
+
+Max 110 words total. Be the analyst who gives you the edge, not the one who states the obvious.`;
 
   const r = await claude(prompt);
   const alertsHtml = alerts.length
@@ -16876,12 +16879,21 @@ async function runFiiAI() {
   const totalDii = _fiiData.reduce((s, d) => s + d.diiNet, 0);
   const fiiBuyDays = _fiiData.filter(d => d.fiiNet > 0).length;
   const last5Fii = _fiiData.slice(0, 5).reduce((s, d) => s + d.fiiNet, 0);
-  const prompt = `You are an Indian market analyst. Analyse this FII/DII flow data for the last ${days} trading days:
-- FII Net Total: ₹${(totalFii/100).toFixed(0)} Cr (${fiiBuyDays} buying days out of ${days})
-- DII Net Total: ₹${(totalDii/100).toFixed(0)} Cr
-- Last 5 days FII Net: ₹${(last5Fii/100).toFixed(0)} Cr
-- Recent pattern: ${last5Fii > 0 ? 'FII net buyers in last 5 days' : 'FII net sellers in last 5 days'}
-Provide: 1) Overall market sentiment reading 2) What this means for Nifty 50 direction 3) Sectors FIIs typically favour/exit in this pattern 4) One actionable insight for a retail investor. Keep it concise and specific to Indian markets.`;
+  const prompt = `You are a top FII flow analyst at a leading Indian institutional desk. Analyse this institutional flow data:
+
+FII/DII FLOW DATA (last ${days} trading days):
+- FII Net: ₹${(totalFii/100).toFixed(0)} Cr total | ${fiiBuyDays} buy days out of ${days} (${((fiiBuyDays/days)*100).toFixed(0)}% buy-day ratio)
+- DII Net: ₹${(totalDii/100).toFixed(0)} Cr total
+- Last 5 days FII trend: ₹${(last5Fii/100).toFixed(0)} Cr (${last5Fii > 0 ? '🟢 ACCUMULATING' : '🔴 DISTRIBUTING'})
+
+Provide a sharp, actionable analysis covering:
+1. **FLOW VERDICT**: Bullish/Bearish/Neutral — what FII vs DII divergence signals for Nifty 50 in next 5-10 sessions
+2. **SECTOR ROTATION**: Which 2-3 sectors are FIIs likely buying/dumping based on this pattern? Name specific NSE sectors.
+3. **RETAIL PLAY**: One specific NSE stock or sector ETF a retail investor should watch given this flow pattern — with entry range and stop-loss
+4. **KEY RISK**: What could reverse this flow trend (global trigger, RBI, INR)?
+5. **NIFTY TARGET**: 7-10 day Nifty 50 direction call with support/resistance levels
+
+Be direct and specific. No hedging. Treat this like a Bloomberg terminal alert.`;
   try {
     const raw = await claudeJSON(prompt, 800);
     const txt = (typeof raw === 'string' ? raw : JSON.stringify(raw)).replace(/```json|```/g, '').trim();
@@ -18287,26 +18299,28 @@ async function runRegimeAI() {
   const oversold  = D.holdings.filter(h => h.h52&&h.l52&&h.ltp && (h.ltp-h.l52)/(h.h52-h.l52) <= 0.25).map(h=>h.symbol);
   const overbought = D.holdings.filter(h => h.h52&&h.l52&&h.ltp && (h.ltp-h.l52)/(h.h52-h.l52) >= 0.80).map(h=>h.symbol);
 
-  const prompt = `You are a professional Indian equity strategist. Analyse the current market regime and give actionable strategy.
+  const prompt = `You are the Chief Market Strategist at a top Indian asset management firm. Deliver a regime-based trading briefing with exact price levels.
 
-REGIME: ${reg?.regime||'Unknown'} | Sentiment: ${ctx.sentimentScore}/100 (${ctx.sentimentLabel})
-NIFTY OUTLOOK: ${ctx.niftyOutlook}
-FII/DII: ${ctx.fiiDii} | Sector Bias: Hot=${ctx.hotSectors?.join(',')} Weak=${ctx.weakSectors?.join(',')}
-TOP RISKS: ${ctx.topRisks?.join(', ')}
-STRATEGY BIAS: ${reg?.bias||ctx.actionBias}
+CURRENT MARKET REGIME DATA:
+- Regime: ${reg?.regime||'Unknown'} | Sentiment: ${ctx.sentimentScore}/100 (${ctx.sentimentLabel})
+- Nifty Outlook: ${ctx.niftyOutlook}
+- FII/DII Dynamic: ${ctx.fiiDii}
+- Hot Sectors: ${ctx.hotSectors?.join(', ')||'N/A'} | Weak Sectors: ${ctx.weakSectors?.join(', ')||'N/A'}
+- Top Risks: ${ctx.topRisks?.join(', ')||'N/A'}
+- Strategy Bias: ${reg?.bias||ctx.actionBias}
 
-RSI SIGNALS FROM PORTFOLIO:
-- Oversold (buy zone, <25% from 52W low): ${oversold.join(', ')||'None'}
-- Overbought (risky, >80% from 52W low): ${overbought.join(', ')||'None'}
+PORTFOLIO TECHNICAL POSITIONING:
+- Oversold (bottom 25% of 52W range — buy zone): ${oversold.join(', ')||'None currently'}
+- Overbought (top 80%+ of 52W range — take profits): ${overbought.join(', ')||'None currently'}
 
-Write a 200-word regime briefing covering:
-1. Current market phase and what it means for Indian retail investors
-2. Top 2-3 stocks from the oversold list to accumulate NOW (with reasoning)
-3. Top 1-2 overbought positions to book partial profits
-4. This week's key risk to watch
-5. Recommended portfolio stance (% in equity vs cash)
+Write a 220-word regime briefing with SPECIFIC NUMBERS:
+1. **REGIME READING**: Phase name + what it historically means for Nifty (rally/consolidation/correction) — give a 4-week directional call
+2. **BUY LIST**: For each oversold stock — entry price zone, SL (below recent low), target (previous high or 52W high), conviction (High/Med/Low)
+3. **PROFIT BOOKING**: For each overbought stock — at what price to book 50% and where final exit, tax note if held <12 months
+4. **THIS WEEK'S RISK**: Single most important event/level that could change everything — be specific
+5. **CASH/EQUITY MIX**: Exact % recommendation for this regime (e.g., "75% equity, 25% cash") and which sectors to allocate new capital first
 
-Be specific, direct, India-market-focused. No generic advice.`;
+Be the analyst who gives specific entry/exit numbers, not opinions.`;
 
   const r = await claude(prompt);
   el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
@@ -18445,21 +18459,23 @@ async function runFactorAI() {
   const bottom3 = scored.slice(-3).map(x => `${x.sym}(${x.score.total})`).join(', ');
   const ctx = D._marketCtx || {sentimentLabel:'Neutral', actionBias:'HOLD'};
 
-  const prompt = `You are a quant-driven Indian equity portfolio manager. Based on multi-factor scores, give specific BUY/HOLD/EXIT recommendations.
+  const prompt = `You are a quantitative portfolio manager running a multi-factor model for Indian equities. Translate factor scores into precise trade recommendations.
 
-TOP RANKED (add more): ${top3}
-BOTTOM RANKED (review): ${bottom3}
-MARKET BIAS: ${ctx.actionBias} | ${ctx.sentimentLabel}
-PORTFOLIO: ${D.holdings.length} holdings, ₹${fI(D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0))} current value
+FACTOR SCORE RANKINGS:
+- TOP RANKED — high quality, add to these: ${top3}
+- BOTTOM RANKED — review or exit: ${bottom3}
+- Portfolio: ${D.holdings.length} holdings | ₹${fI(D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0))} | Market: ${ctx.sentimentLabel} | Bias: ${ctx.actionBias}
 
-Factor scoring: Value (PE/PB), Momentum (52W position+trend), Quality (Beta+signals), Growth (PEG proxy), RSI opportunity.
+Factor model dimensions: Value (PE/PB vs sector avg), Momentum (52W % position + price trend), Quality (ROE + beta + F-Score proxy), Growth (EPS/Rev growth proxy), RSI opportunity (oversold/overbought).
 
-Give a 200-word factor-based action plan:
-1. Top 2 stocks to ADD positions to (and approximate % to add)
-2. Top 1-2 stocks to EXIT or REDUCE (and why they rank poorly)
-3. Sector rotation: which sectors score high vs low overall
-4. One contrarian pick from bottom-ranked that might be a turnaround
-Be direct, specific, and India-market-focused.`;
+Give a 220-word factor-based action plan with SPECIFIC TRADE SETUPS:
+
+1. **TOP 2 ADD CANDIDATES** (from high-ranked): For each — why the factor score is compelling, optimal entry range (₹X–Y), SL (₹Z), target (₹T), % of portfolio to allocate
+2. **TOP 2 EXITS/REDUCES** (from low-ranked): For each — which factors are failing (weak value AND weak momentum?), at what price to exit, STCG/LTCG note
+3. **SECTOR ROTATION SIGNAL**: Based on factor rankings — which 2 sectors to rotate INTO and which 1-2 to rotate OUT OF this quarter
+4. **CONTRARIAN WATCH**: Pick 1 bottom-ranked stock that could be a turnaround — what catalyst would flip the factor score? Entry on breakout above ₹X.
+
+Close with: single most important factor-driven decision this week.`;
 
   const r = await claude(prompt);
   el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
@@ -18549,24 +18565,27 @@ async function runOptimiseAI() {
   const sharpe = ((portRet - rfRate) / (portBeta * mktStd)).toFixed(2);
   const ctx = D._marketCtx || {sentimentLabel:'Neutral'};
 
-  const prompt = `You are a portfolio optimiser for Indian equities using Modern Portfolio Theory principles.
+  const prompt = `You are a quantitative portfolio manager applying Modern Portfolio Theory and Sharpe optimisation for Indian retail portfolios.
 
-PORTFOLIO METRICS:
+PORTFOLIO RISK-RETURN METRICS:
 - Total value: ₹${fI(totalVal)} | Invested: ₹${fI(totalInv)} | Return: ${portRet}%
-- Portfolio Beta: ${portBeta} | Sharpe Ratio: ${sharpe} | Risk-free rate: 6.5%
+- Portfolio Beta: ${portBeta} | Approximate Sharpe Ratio: ${sharpe}
+- Risk-free rate (10Y G-Sec): 6.5% | Equity risk premium benchmark: 5%
 - Top 5 holdings by weight: ${topHoldings}
-- Holdings count: ${D.holdings.length} (ideal: 12-15 for ₹5L portfolio)
-- Market: ${ctx.sentimentLabel} | Bias: ${ctx.actionBias||'HOLD'}
+- Holdings count: ${D.holdings.length} (ideal: 12-18 for ₹5L-20L portfolio; over-diversification kills alpha)
+- Market: ${ctx.sentimentLabel} | Recommended bias: ${ctx.actionBias||'HOLD'}
 
-OBJECTIVE: Improve Sharpe ratio by optimising allocation weights.
+Target: Improve Sharpe ratio toward 1.0+ while keeping beta appropriate for current regime.
 
-Write a 200-word optimisation plan:
-1. Assessment of current Sharpe (good/needs improvement) and why
-2. Top 3 specific rebalancing actions with rupee amounts (e.g., "Sell ₹15,000 of X, buy ₹10,000 of Y and ₹5,000 of Z")
-3. Target beta for current market regime (should it be higher or lower?)
-4. One structural change to improve diversification
-5. Expected Sharpe improvement if plan is followed
-Be quantitative, specific, and actionable.`;
+Write a 220-word quantitative optimisation plan with SPECIFIC ₹ AMOUNTS:
+
+1. **SHARPE ASSESSMENT**: Is ${sharpe} good/average/poor? What's the main drag — low return or high volatility? Name the specific stock causing it.
+2. **TOP 3 REBALANCING TRADES**: Exact rupee amounts (e.g., "Trim ₹20,000 of HDFCBANK → add ₹12,000 ITBEES + ₹8,000 COALINDIA"). Focus on improving return/risk.
+3. **BETA TARGET**: For ${ctx.sentimentLabel} market — should beta be above/below 1.0? Name 1 high-beta stock to reduce and 1 low-beta to add.
+4. **CONCENTRATION FIX**: If any stock >20% or sector >30% — specific trim amount and redeployment.
+5. **PROJECTED IMPROVEMENT**: Expected new Sharpe after executing the plan (quantify).
+
+Close with: one structural portfolio change that would have the biggest risk-adjusted impact.`;
 
   const r = await claude(prompt);
   el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
@@ -18668,21 +18687,33 @@ async function runOptionsAI() {
     .slice(0,6)
     .map(h => `${h.symbol}(qty:${h.qty},LTP:${fC(h.ltp)},signal:${h.signal||'HOLD'},52Wpos:${h.h52&&h.l52&&h.ltp?Math.round((h.ltp-h.l52)/(h.h52-h.l52)*100):50}%)`);
 
-  const prompt = `You are an options strategist for Indian equity markets (NSE). The investor holds Indian stocks and wants to use options for income generation and hedging.
+  const prompt = `You are an NSE-certified options strategist with 15 years of F&O trading experience. Design a practical options overlay for an Indian retail equity portfolio.
 
-PORTFOLIO POSITIONS (eligible for options, >₹50K):
+ELIGIBLE POSITIONS (market value >₹10,000):
 ${largePosns.join('\n')}
 
-MARKET: ${ctx.sentimentLabel} (${ctx.sentimentScore}/100) | Bias: ${ctx.actionBias||'HOLD'}
-India VIX context: ${ctx.sentimentScore > 60 ? 'Low VIX — good for selling premium' : 'Elevated VIX — buying puts makes sense'}
+MARKET CONDITIONS: ${ctx.sentimentLabel} (score: ${ctx.sentimentScore}/100) | Bias: ${ctx.actionBias||'HOLD'}
+India VIX signal: ${ctx.sentimentScore > 65 ? '🟢 LOW VIX (<14) — excellent for selling premium (covered calls)' : ctx.sentimentScore < 35 ? '🔴 HIGH VIX (>20) — expensive to sell, better to buy protective puts' : '🟡 NORMAL VIX — balanced premium selling vs buying'}
+Current month: NSE F&O monthly expiry is last Thursday of the month.
 
-Give a 200-word options strategy plan:
-1. Top 2 covered call setups (stock, strike, expiry month, expected premium %)
-2. Top 1 protective put recommendation (for highest-risk holding)
-3. Whether to use monthly or weekly options for this portfolio
-4. Risk warning specific to Indian options market (lot size, F&O margin requirements)
-5. Net premium income vs hedging cost estimate
-Keep it practical for a retail investor with ₹5L portfolio.`;
+Design a specific options strategy covering:
+
+1. **COVERED CALL SETUPS** (income generation — best for HOLD/REDUCE signals near 52W highs):
+   For each eligible stock: Strike (5-8% OTM), Expiry (monthly/weekly), est. premium ₹/lot, expected monthly yield %
+
+2. **PROTECTIVE PUT** (hedge for highest-risk or largest position):
+   Stock, Strike (5-8% OTM put), Expiry, cost ₹/lot, max protection provided
+
+3. **COLLAR STRATEGY** (if one position is very large): Zero-cost collar setup
+
+4. **TIMING**: Should this portfolio be selling premium now (low VIX) or buying protection (high VIX)?
+
+5. **PRACTICAL NOTES for Indian retail**:
+   - F&O lot sizes matter (most stocks: 250-500 shares per lot)
+   - Margin required for short calls: ~30% of position value
+   - Net P&L estimate: premium income minus hedging cost = net ₹X/month
+
+Max 220 words. Give actual ₹ estimates, not just percentages.`;
 
   const r = await claude(prompt);
   el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
@@ -19017,8 +19048,27 @@ async function runRiskProAI() {
   const highRisk = D.holdings.filter(h => h.h52 && (h.ltp||h.avgPrice) < h.h52*0.8).map(h=>h.symbol).join(',')||'none';
   const top3 = D.holdings.sort((a,b)=>b.qty*(b.ltp||b.avgPrice)-a.qty*(a.ltp||a.avgPrice)).slice(0,3).map(h=>h.symbol).join(',');
   const ctx = D._marketCtx || {sentimentLabel:'Neutral'};
-  const prompt = `Indian equity risk analyst. Portfolio: ₹${Math.round(totalVal/1000)}K, return ${portRet}%, beta ${portBeta}, Sharpe ${sharpe}, maxDD ${maxDD}. Top3: ${top3}. High-risk: ${highRisk}. Market: ${ctx.sentimentLabel}.
-Give 3 specific risk actions (one sentence each): biggest concentration risk, worst drawdown holding action, and one hedge recommendation. Then one-line verdict on risk level.`;
+  const prompt = `You are the Chief Risk Officer at a top Indian PMS firm. Conduct a comprehensive risk audit for this retail portfolio.
+
+RISK METRICS:
+- Portfolio: ₹${Math.round(totalVal/1000)}K | Return: ${portRet}% | Beta: ${portBeta} | Sharpe: ${sharpe} | Max Drawdown: ${maxDD}
+- Top 3 positions (concentration risk): ${top3}
+- High-risk positions (>20% below 52W high): ${highRisk||'None — good'}
+- Market: ${ctx.sentimentLabel}
+
+Run a 5-point risk assessment:
+
+1. **CONCENTRATION RISK**: Is any stock >20% of portfolio? Any sector >30%? Specific remediation with ₹ trim amount.
+
+2. **DRAWDOWN RISK**: For stocks significantly below 52W highs — are these value opportunities or ongoing deterioration? For each high-risk name: hold with SL at ₹X, or cut now?
+
+3. **BETA MANAGEMENT**: At portfolio beta ${portBeta} — is this appropriate for current ${ctx.sentimentLabel} market? Target beta recommendation with specific trades to achieve it.
+
+4. **SHARPE IMPROVEMENT**: Sharpe ${sharpe} — what's the single biggest drag (low-return position or high-volatility one)? Specific fix.
+
+5. **HEDGE RECOMMENDATION**: Given current market risk, should this portfolio hedge? If yes: which instrument (Nifty Put, Gold ETF, short F&O, switch to defensives) and approximate size.
+
+Close with: RISK VERDICT (Low/Medium/High/Critical) and the single most important risk action to take THIS WEEK.`;
   const r = await claude(prompt);
   el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
   switchRpTab('metrics');
@@ -20707,8 +20757,27 @@ async function runScreenerAI() {
   el.innerHTML = '<span style="color:var(--t4)">⏳ Getting AI picks…</span>';
   const top = _scrResults.slice(0,8).map(s=>`${s.sym}(${s.sector},PE:${s.pe?s.pe.toFixed(0):'?'},ROE:${s.roe?s.roe.toFixed(0)+'%':'?'},52Wpos:${s.pos52!==null?s.pos52+'%':'?'})`).join(', ');
   const ctx = D._marketCtx || {sentimentLabel:'Neutral', hotSectors:[]};
-  const prompt = `Indian equity analyst. Screener results: ${top}. Market: ${ctx.sentimentLabel}. Hot sectors: ${(ctx.hotSectors||[]).slice(0,2).join(',')||'None'}.
-Pick top 2 buy candidates. For each: symbol, one-sentence thesis, key risk, entry range. Keep it brief.`;
+  const prompt = `You are a quant-fundamental analyst running systematic stock screening for Indian equities (NSE). Identify the top actionable ideas from these screener results.
+
+SCREENER OUTPUT (top results):
+${top}
+
+MARKET CONTEXT: ${ctx.sentimentLabel} | Hot sectors: ${(ctx.hotSectors||[]).slice(0,2).join(',')||'None'} | Weak sectors: ${(ctx.weakSectors||[]).slice(0,2).join(',')||'None'}
+
+From these screened stocks, identify the top 2-3 best investment ideas with complete trade setups:
+
+For each pick provide:
+1. **THESIS**: Single most compelling reason to buy now (specific catalyst or valuation gap)
+2. **ENTRY RANGE**: ₹X–Y (near current market price, specific levels)
+3. **STOP-LOSS**: ₹Z (technical support level or % below entry)
+4. **TARGET 1**: ₹T1 (6-month target, conservative)
+5. **TARGET 2**: ₹T2 (12-month target, base case)
+6. **R:R**: Risk-reward ratio
+7. **KEY RISK**: Single biggest risk that could invalidate the thesis
+
+Also flag any screener result that looks like a VALUE TRAP (cheap but deteriorating) — avoid list.
+
+Be the analyst who gives you trade setups, not just opinions.`;
   const r = await claude(prompt);
   el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
 }
@@ -20875,8 +20944,37 @@ async function runJournalAI() {
   closed.forEach(t=>{if(!byReason[t.reason])byReason[t.reason]={c:0,pl:0};byReason[t.reason].c++;byReason[t.reason].pl+=t.plAbs||0;});
   const bestReason = Object.entries(byReason).sort((a,b)=>b[1].pl-a[1].pl)[0];
   const recent3 = trades.slice(-3).map(t=>`${t.symbol}(${t.reason},${t.plPct?t.plPct.toFixed(1)+'%':'open'})`).join(', ');
-  const prompt = `Trading coach for Indian retail investor. Journal: ${trades.length} trades, win rate ${winRate}, P&L ₹${totalPL}. Best strategy: ${bestReason?bestReason[0]+'(₹'+Math.round(bestReason[1].pl)+')':'N/A'}. Recent: ${recent3}.
-Give 3 specific coaching points (one sentence each): best edge to double down on, worst habit to fix, and one process improvement. Then a one-line verdict.`;
+  // Richer stats
+  const avgWin = wins.length ? (wins.reduce((s,t)=>s+(t.plPct||0),0)/wins.length).toFixed(1) : 'N/A';
+  const losses = closed.filter(t=>t.plPct<=0);
+  const avgLoss = losses.length ? (losses.reduce((s,t)=>s+Math.abs(t.plPct||0),0)/losses.length).toFixed(1) : 'N/A';
+  const rrRatio = (avgWin !== 'N/A' && avgLoss !== 'N/A' && parseFloat(avgLoss) > 0) ? (parseFloat(avgWin)/parseFloat(avgLoss)).toFixed(2) : 'N/A';
+  const avgHoldDays = closed.length ? (closed.reduce((s,t)=>s+(t.holdDays||0),0)/closed.length).toFixed(0) : 'N/A';
+  const byReason2 = Object.entries(byReason).map(([r,v])=>`${r}:${v.c}trades,₹${Math.round(v.pl)}`).join('; ');
+  const recentDetail = trades.slice(-5).map(t=>`${t.symbol}(${t.reason||'?'},${t.plPct!=null?t.plPct.toFixed(1)+'%':'open'},${t.holdDays||'?'}d)`).join(', ');
+  const prompt = `You are a professional trading coach specializing in Indian equity markets, reviewing a trader's journal to provide deep, actionable feedback.
+
+TRADING JOURNAL DATA:
+- Total Trades: ${trades.length} (${closed.length} closed, ${trades.length-closed.length} open)
+- Win Rate: ${winRate} | Total P&L: ₹${fI(totalPL)}
+- Avg Win: +${avgWin}% | Avg Loss: -${avgLoss}% | R:R Ratio: ${rrRatio}
+- Avg Holding Period: ${avgHoldDays} days
+- Strategy Breakdown: ${byReason2 || 'N/A'}
+- Recent 5 Trades: ${recentDetail}
+
+Provide a comprehensive trading audit with specific, actionable feedback:
+
+1. **EDGE ANALYSIS**: What is this trader's strongest pattern? Give the specific setup/strategy showing highest win rate or P&L and say exactly how to scale it (position size suggestion, frequency, sectors to focus on).
+
+2. **BIGGEST MISTAKE**: The single most costly behavior pattern in the data. Be direct — is it cutting winners too early, holding losers too long, wrong entry timing? Give a rule to fix it: e.g., "Never exit a trade that's up less than X% unless it's a SL breach."
+
+3. **R:R IMPROVEMENT**: The current R:R is ${rrRatio}. For a sustainable trading career in Indian markets you need 2.0+. What specific adjustment — to entry discipline, stop placement, or target setting — would most improve this ratio?
+
+4. **PROCESS FIX**: One workflow or journaling habit they're missing that would catch their biggest mistake earlier. Be specific about WHEN and HOW to do it.
+
+5. **WEEKLY CHALLENGE**: Give one specific exercise to do this week — e.g., "Review all losing trades >7 days old and set hard SLs on each", "Calculate average days-to-peak for winning trades and set partial profit rules." Make it achievable.
+
+Verdict line at the end: "Your edge is ___ but your leak is ___. Focus on ___ this month."`;
   const r = await claude(prompt);
   el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
 }
@@ -21006,28 +21104,39 @@ async function findMyEdge() {
   const top3WStr = top3W.map(t=>`${t.symbol} (+${t.plPct.toFixed(1)}%, ${t.holdDays}d)`).join(', ');
   const top3LStr = top3L.map(t=>`${t.symbol} (${t.plPct.toFixed(1)}%, ${t.holdDays}d)`).join(', ');
 
-  const prompt = `You are a trading performance coach analysing an Indian retail equity investor's complete trade history.
+  const rrRatioEdge = avgLoss > 0 ? (avgWin/avgLoss).toFixed(2) : 'N/A';
+  const prompt = `You are a world-class trading performance coach analysing an Indian equity investor's complete historical trade data to identify their true statistical edge.
 
-Stats: ${allTrades.length} trades · Win rate ${winRate}% · Avg win ${avgWin.toFixed(1)}% · Avg loss ${avgLoss.toFixed(1)}% · Expectancy ${fPct(expectancy)} per trade
-Hold days: Winners avg ${winHold.toFixed(0)}d, Losers avg ${loseHold.toFixed(0)}d
-Sector performance: ${sectorContext || 'insufficient data'}
-${holdContext}
-Best trades: ${top3WStr || 'none'}
-Worst trades: ${top3LStr || 'none'}
+COMPLETE TRADE STATISTICS:
+- Total Trades: ${allTrades.length} (${winners.length} wins, ${losers.length} losses)
+- Win Rate: ${winRate}% | R:R Ratio: ${rrRatioEdge} | Expectancy: ${fPct(expectancy)} per trade
+- Avg Winning Trade: +${avgWin.toFixed(1)}% over ${winHold.toFixed(0)} days
+- Avg Losing Trade: -${avgLoss.toFixed(1)}% over ${loseHold.toFixed(0)} days
+- Sector Performance: ${sectorContext || 'insufficient data'}
+- Hold Period: ${holdContext || 'insufficient data'}
+- Best 3 Trades: ${top3WStr || 'none'}
+- Worst 3 Trades: ${top3LStr || 'none'}
 
-Based on these numbers, write a specific "Find My Edge" report with exactly 4 sections:
-1. **My Edge** — one sentence stating the statistical edge (e.g. "Your edge is in holding quality stocks through earnings; your 47+ day trades have a 71% win rate vs 34% for shorter holds.")
-2. **Strongest Pattern** — the single most consistent pattern in winning trades (cite specific numbers)
-3. **Biggest Leak** — the single most consistent pattern in losing trades, with the specific cost
-4. **3 Rules to Follow** — three concrete, specific trading rules derived from this data (not generic advice)
+Write a data-driven "Find My Edge" analysis with these 5 sections:
 
-Be brutally honest and specific. Use the actual numbers. No generic advice.`;
+**1. THE EDGE STATEMENT** (2 sentences): What is this trader's clearest statistical edge? Be specific — cite win rates, sectors, or time frames where they consistently outperform. Compare winners vs losers by the most differentiating factor (hold period, sector, or R:R).
+
+**2. STRONGEST PATTERN** (3-4 sentences): Drill into the single most consistent winning pattern. What sector/setup/time frame shows the highest win rate or expectancy? Why does this work for Indian markets specifically? How should they exploit it more (position sizing, frequency)?
+
+**3. THE LEAK** (3-4 sentences): The single costliest behavior pattern. Is it holding losers too long (loseHold > winHold is a classic sign)? Cutting winners too early (low R:R despite good win rate)? Over-trading in weak sectors? Quantify what fixing it would add per trade.
+
+**4. POSITION SIZING INSIGHT** (2-3 sentences): Based on the expectancy and current win rate, what position sizing approach (fixed %, Kelly fraction, or volatility-adjusted) would maximize long-term compounding for this specific trading profile?
+
+**5. THREE NON-NEGOTIABLE RULES** (numbered list): Derive 3 rules specifically calibrated to this trader's data. Each rule must cite a specific number from their history (e.g., "Never hold a losing position beyond ${(loseHold*0.6).toFixed(0)} days — your average losing trade that went to full loss held for ${loseHold.toFixed(0)} days."). No generic advice.
+
+End with: **Verdict**: "Your statistical edge is ___ (${winRate}% WR with ${rrRatioEdge} R:R). Your biggest leak costs you ___. If you fix just ___, your expectancy goes from ${fPct(expectancy)} to estimated ___."`;
+
 
   try {
     const result = await claude(prompt);
     el.innerHTML = statsHtml + `<div class="ai-txt" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--b2)">${md2h(result)}</div>`;
   } catch(e) {
-    el.innerHTML = statsHtml + `<div style="color:var(--t4);font-size:12px;margin-top:12px">Could not generate AI synthesis — check your AI provider settings.</div>`;
+    el.innerHTML = statsHtml + `<div style="color:var(--red);font-size:12px;margin-top:12px">AI analysis failed: ${e.message||'unknown error'}</div>`;
   }
 }
 
@@ -21162,8 +21271,22 @@ async function runMacroAI() {
   const crude  = document.getElementById('mac-crude')?.textContent || '—';
   const ctx    = D._marketCtx || {sentimentLabel:'Neutral', sentimentScore:50};
   const sectors = [...new Set(D.holdings.map(h=>h.sector).filter(Boolean))].slice(0,5).join(', ');
-  const prompt = `Indian macro analyst. Data: VIX ${vix}, USD/INR ${usdinr}, 10Y ${gsec}, Brent ${crude}, sentiment ${ctx.sentimentLabel}. Portfolio sectors: ${sectors}.
-Give 3 macro signals (one sentence each): VIX risk reading, USD/INR impact on these sectors, rate+crude combined verdict. End with: bullish or bearish for this portfolio and why in one line.`;
+  const prompt = `You are a macro strategist at an elite Mumbai hedge fund who translates global macro into specific Indian equity trades.
+
+MACRO DATA SNAPSHOT:
+- India VIX: ${vix} (${parseFloat(vix||0) > 20 ? '⚠ HIGH — fear elevated, options expensive' : parseFloat(vix||0) < 12 ? '🟢 LOW — complacency, good for selling puts' : '🟡 NORMAL range'})
+- USD/INR: ${usdinr} (${parseFloat(usdinr||0) > 84 ? '⚠ INR weak — IT exporters benefit, importers hurt' : '🟢 INR stable/strong'})
+- 10Y G-Sec Yield: ${gsec}% (${parseFloat(gsec||0) > 7.2 ? '⚠ Rising yields — rate-sensitives under pressure' : '🟢 Benign — growth stocks favoured'})
+- Brent Crude: $${crude}/bbl (${parseFloat(crude||0) > 90 ? '⚠ HIGH crude — OMCs, paints, logistics hurt' : '🟢 Manageable crude — margin relief for energy users'})
+- Market Sentiment: ${ctx.sentimentLabel} (${ctx.sentimentScore}/100)
+- Portfolio Sectors: ${sectors}
+
+Give a precise macro-to-portfolio impact analysis:
+1. **VIX SIGNAL**: What current VIX implies for portfolio risk — should hedge ratio go up/down? Specific action.
+2. **CURRENCY IMPACT**: Direct ₹/$ impact on each portfolio sector (IT, FMCG, Pharma, Auto, Energy — name which sectors in this portfolio benefit/suffer)
+3. **RATES + CRUDE COMBINED**: Net verdict — bull/bear for this specific portfolio with the key sector to overweight/underweight
+4. **TRADE IDEA**: One specific NSE stock trade based purely on macro setup — entry range, SL, target, catalyst
+5. **PORTFOLIO VERDICT**: One-line bull/bear call with the single most important macro risk to watch this week`;
   const r = await claude(prompt);
   el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
 }
@@ -21372,8 +21495,19 @@ async function runStockScoreAI(sym) {
   const ltp = h._ltp||h.avgPrice||0;
   const ret  = ltp&&h.avgPrice?(ltp-h.avgPrice)/h.avgPrice*100:0;
   const ctx  = D._marketCtx||{sentimentLabel:'Neutral'};
-  const prompt = `Indian equity research analyst. Stock: ${sym}, sector: ${h.sector||'—'}, CMP ₹${Math.round(ltp)}, PE ${h._pe?.toFixed(0)||'—'}, ROE ${h._roe?+(h._roe*100).toFixed(0)+'%':'—'}, beta ${h._beta?.toFixed(2)||'—'}, return-since-buy ${ret.toFixed(1)}%, market: ${ctx.sentimentLabel}.
-Reply JSON only: {"confidence":0-100,"rec":"BUY|HOLD|AVOID","reasons":["","",""],"entry":"₹X-Y","sl":"₹Z","target":"₹W","horizon":"3-6M or 6-12M or 1-3Y","thesis":"one sentence"}`;
+  const prompt = `You are a top-tier equity research analyst at a leading Indian brokerage. Do a deep-dive research report on ${sym}.
+
+STOCK FUNDAMENTALS:
+- Symbol: ${sym} | Sector: ${h.sector||'—'} | CMP: ₹${Math.round(ltp)}
+- PE: ${h._pe?.toFixed(1)||'—'} (${h.sector?'sector avg: '+(SECTOR_PE?.[h.sector]||28):'—'}) | ROE: ${h._roe?+(h._roe*100).toFixed(1)+'%':'—'}
+- Beta: ${h._beta?.toFixed(2)||'—'} | Return since buy: ${ret.toFixed(1)}%
+- 52W position: ${h._h52&&h._l52&&ltp?Math.round((ltp-h._l52)/(h._h52-h._l52)*100)+'% of range':'—'}
+- Market context: ${ctx.sentimentLabel}
+
+Perform a complete BUY/HOLD/AVOID analysis. Consider: valuation (PE vs sector), return quality (ROE), technical position (52W range), momentum (return since buy), market regime.
+
+Reply JSON only (no markdown):
+{"confidence":<0-100>,"rec":"BUY|HOLD|AVOID","reasons":["<fundamental reason with number>","<technical reason with price level>","<risk factor specific to this stock>"],"entry":"₹<X-Y range>","sl":"₹<stop-loss — technical support level>","target1":"₹<6M target>","target2":"₹<12M target>","rr_ratio":"<e.g. 1:2.5>","horizon":"3-6M|6-12M|1-3Y","piotroski_hint":"<quick F-Score comment if data allows>","tax_note":"<STCG or LTCG consideration>","thesis":"<2 crisp sentences: bull case + main risk>"}`;
   const _rawRes = await claudeJSON(prompt);
   const raw = (() => {
     if (_rawRes && typeof _rawRes === 'object') return _rawRes;
@@ -21460,8 +21594,22 @@ async function runFairValueAI() {
     return `${h.symbol}(CMP:${Math.round(ltp)},FV:${fv.fair},${fv.mos>0?'MoS'+fv.mos+'%':'Prem'+Math.abs(fv.mos)+'%'})`;
   }).join(', ');
   const ctx = D._marketCtx||{sentimentLabel:'Neutral'};
-  const prompt = `Indian valuation analyst. Holdings vs fair value: ${vals}. Market: ${ctx.sentimentLabel}.
-Give 3 specific actions (one sentence each): most undervalued pick, most overvalued to reduce, and one portfolio-wide valuation observation. End with one-line verdict.`;
+  const prompt = `You are a Chartered Financial Analyst (CFA) specialising in Indian equity valuation. Review this portfolio's valuation scorecard.
+
+VALUATION MATRIX (CMP vs Model Fair Value, Margin of Safety):
+${vals}
+
+Market context: ${ctx.sentimentLabel}
+
+Analyse the valuation gaps and give a precise valuation-driven action plan. For each recommendation include the specific price levels.
+
+Valuation assessment:
+1. **DEEP VALUE PICK**: Most undervalued stock (highest MoS%) — entry range, SL (if thesis breaks), 12M target, conviction reasoning
+2. **OVERVALUATION ALERT**: Most premium-priced stock — at what price to start trimming, full exit target, tax note
+3. **REVERSION OPPORTUNITY**: Stock closest to fair value moving in right direction — is it worth adding at current levels?
+4. **PORTFOLIO VALUATION VERDICT**: Overall portfolio vs intrinsic value — aggregate MoS%, bull/bear case for the portfolio as a whole
+
+End with: one-line verdict on whether the portfolio is cheap, fairly valued, or expensive at current levels.`;
   const r = await claude(prompt);
   el.innerHTML = `<div class="ai-txt">${md2h(r)}</div>`;
 }
@@ -21685,9 +21833,30 @@ async function refreshDailyBrief() {
   const holdSummary = scoredH.map(h=>`${h.symbol}(${h._scores.overall}/100,${h._scores.rec})`).join(', ');
 
   // AI: Opportunities + Risks + Actions + Narrative (parallel)
+  const totalVal=holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0);
+  const totalInv=holdings.reduce((s,h)=>s+h.avgPrice*h.qty,0);
+  const portPnlPct=totalInv>0?((totalVal-totalInv)/totalInv*100).toFixed(1):'0';
+  const topBuySyms=topBuy.slice(0,3);
+  const topAvoidSyms=topAvoid.slice(0,3);
   const [briefData] = await Promise.allSettled([
-    claudeJSON(`Portfolio advisor, Indian equities. Holdings: ${holdSummary}. Market: ${mCtx.sentimentLabel||'Neutral'}. Hot: ${(mCtx.hotSectors||[]).join(',')}.
-Reply JSON: {"opps":["","",""],"risks":["","",""],"actions":["","",""],"narrative":"2-3 sentences on portfolio outlook"}`)
+    claudeJSON(`You are a senior Indian equity analyst generating the morning brief for this specific portfolio.
+
+PORTFOLIO SNAPSHOT:
+- ${holdings.length} holdings | Total ₹${fI(totalVal)} | P&L: ${portPnlPct}%
+- Market: ${mCtx.sentimentLabel||'Neutral'} | Hot sectors: ${(mCtx.hotSectors||[]).join(', ')||'—'}
+- VIX: ${mCtx.vix||'—'} | USD/INR: ${mCtx.usdinr||'—'}
+- Buy-rated: ${topBuySyms.join(', ')||'none'} | Avoid-rated: ${topAvoidSyms.join(', ')||'none'}
+- Top holdings by score: ${holdSummary.slice(0,300)}
+
+Generate a precise morning brief:
+
+1. opps: 3 specific opportunities FROM THIS PORTFOLIO — each must name the actual stock, include a specific ₹ price level or catalyst, and say what action to take (e.g., "RELIANCE at ₹2,850 — add on dip to ₹2,820 if Nifty holds 24,500")
+2. risks: 3 specific risks to THIS portfolio — name the stock or sector exposed, specific trigger level (e.g., "ADANIPORTS — SL at ₹1,120 breached, consider exit")
+3. actions: 3 concrete TODAY actions — specific, actionable, ordered by priority (e.g., "1. Set SL on ZOMATO at ₹190 if not already set")
+4. narrative: 3-sentence portfolio outlook — what's working, what to watch today, one tactical call
+
+Reply JSON (no markdown):
+{"opps":["<stock + ₹level + action>","<stock + ₹level + action>","<stock + ₹level + action>"],"risks":["<stock + trigger + consequence>","<stock + trigger + consequence>","<stock + trigger + consequence>"],"actions":["<today action 1>","<today action 2>","<today action 3>"],"narrative":"<3 sentences>"}`)
   ]);
 
   const bd = briefData.status==='fulfilled'&&typeof briefData.value==='object'?briefData.value:null;
@@ -21766,8 +21935,14 @@ async function scoreSentiment(sym, headlines, sector) {
     ? `Recent headlines: "${headlines.slice(0,5).join(' | ')}".`
     : `No live headlines — use your knowledge of ${sym}${sector?' ('+sector+' sector)':''} and current Indian market conditions.`;
   const src = hasNews ? 'news' : 'ai-knowledge';
-  const prompt = `Indian equity analyst. Stock: ${sym}. ${ctx} Rate overall sentiment as Bullish, Neutral, or Bearish.
-Reply ONLY compact JSON: {"sentiment":"Bullish|Neutral|Bearish","score":<1-10>,"reason":"<15 words>","catalyst":"<10 words>","risk":"<10 words>","source":"${src}"}`;
+  const prompt = `You are a sell-side equity analyst at a top Indian brokerage specialising in NSE-listed companies. Assess the sentiment for ${sym} (${sector||'Indian equity'}).
+
+${ctx}
+
+Rate the stock's current sentiment and give a precise outlook. Consider: recent earnings trend, sector headwinds/tailwinds, FII/DII interest, technical position, any regulatory/management risks.
+
+Reply ONLY compact JSON (no markdown, no extra text):
+{"sentiment":"Bullish|Neutral|Bearish","score":<1-10>,"reason":"<18 words max — most critical driver>","catalyst":"<12 words — what could push it up>","risk":"<12 words — biggest downside risk>","priceTarget":"<₹XXX or null>","timeframe":"1M|3M|6M","source":"${src}"}`;
   const raw = await claudeJSON(prompt);
   // claudeJSON returns raw string — parse it
   if (raw && typeof raw === 'object' && raw.sentiment) return raw; // already parsed (shouldn't happen but safe)
@@ -22203,13 +22378,19 @@ async function runExitAI() {
     `${r.symbol}: ${r.gainPct}% gain, ${r.days}d held, T1:${r.t1||0} T2:${r.t2||0} SL:${r.sl||0}, Score:${r.exitScore}`
   ).join('\n');
 
-  const prompt = `Indian equity portfolio manager. Exit strategy for these 5 holdings (sorted by urgency):
+  const prompt = `You are a portfolio manager at a SEBI-registered PMS firm specialising in Indian equities. Build a precise exit strategy with specific price levels.
+
+HOLDINGS RANKED BY EXIT URGENCY:
 ${topHoldings}
 
-Actions: EXIT_FULL, BOOK_PARTIAL, ADD_MORE, HOLD, CUT_LOSS. Consider targets, SL, tax (STCG 20% <12m, LTCG 12.5% >12m).
+TRADING CONTEXT: Trail stop = ${(trailPct*100).toFixed(0)}% | Indian tax: STCG 20% (<12M held), LTCG 12.5% (>12M held, above ₹1L exempt)
 
-Reply ONLY with compact valid JSON no markdown:
-{"summary":"<2-line situation>","recommendations":[{"symbol":"X","action":"Y","qty_pct":50,"rationale":"<10 words>","urgency":"high"}],"priority_exit":"<one action>","total_realizable_gain":"<amount>"}`;
+For each holding, determine the optimal exit strategy considering: P&L%, holding period (days → STCG vs LTCG), proximity to targets/SL, and capital redeployment opportunity.
+
+Actions: EXIT_FULL (take all profits/cut all loss), BOOK_PARTIAL (take 30-50% off), ADD_MORE (build position), HOLD_TRAIL (hold with trailing SL), CUT_LOSS (stop-loss exit).
+
+Reply ONLY compact valid JSON (no markdown fences):
+{"summary":"<2 precise sentences: portfolio exit situation + overall strategy>","recommendations":[{"symbol":"X","action":"EXIT_FULL|BOOK_PARTIAL|ADD_MORE|HOLD_TRAIL|CUT_LOSS","qty_pct":<0-100>,"exit_price":"<₹level or 'at market'>","sl":"<₹trailing SL level>","rationale":"<12 words — specific reason>","tax":"STCG|LTCG|NA","urgency":"high|medium|low"}],"priority_exit":"<most urgent: symbol + action + reason in 1 sentence>","total_realizable_gain":"<₹ estimate if recommendations executed>","redeployment_hint":"<1 sentence on what to do with freed capital>"}`;
 
   try {
     const raw = await claudeJSON(prompt);
@@ -22366,10 +22547,23 @@ async function runRebalanceAI() {
   });
   const alloc = Object.entries(sectorMap).map(([s,v]) => `${s}: ${(v/totalVal*100).toFixed(1)}%`).join(', ');
   const topH = D.holdings.slice(0,8).map(h=>h.symbol).join(', ');
-  const prompt = `Indian equity portfolio manager. Portfolio: ${fC(totalVal)}, sectors: ${alloc}. Top holdings: ${topH}.
-Provide a rebalancing strategy for Indian retail investor (long-term horizon, tax-efficient).
-Reply ONLY with compact valid JSON:
-{"summary":"<2 sentences>","top_overweight":"<sector>","top_underweight":"<sector>","actions":[{"sector":"X","action":"trim/add/hold","rationale":"<8 words>","priority":"high/medium/low"}],"tax_note":"<1 sentence on STCG/LTCG>"}`;
+  const prompt = `You are a portfolio strategist at a leading Indian mutual fund. Provide a tax-smart rebalancing plan with specific rupee amounts.
+
+PORTFOLIO ALLOCATION:
+- Total value: ₹${fC(totalVal)} | Holdings: ${D.holdings.length} stocks
+- Current sector allocation: ${alloc}
+- Top holdings: ${topH}
+
+REBALANCING PRINCIPLES: Ideal single-sector cap = 25% | Min 8 sectors for diversification | Avoid STCG tax where possible (hold >12M)
+
+Provide a surgical rebalancing plan:
+1. Identify the 2-3 most overweight sectors (and specific stocks to trim within them)
+2. Identify 2-3 underrepresented sectors with high conviction for fresh allocation
+3. Specific buy/sell actions with approximate ₹ amounts
+4. Tax efficiency: which trims to defer vs execute now based on likely holding period
+
+Reply ONLY compact valid JSON (no markdown):
+{"summary":"<2 crisp sentences on portfolio imbalance and fix>","top_overweight":"<sector + % weight>","top_underweight":"<sector + why add now>","actions":[{"sector":"<X>","stocks":"<specific symbols>","action":"trim|add|hold","amount":"<₹ amount>","rationale":"<10 words>","priority":"high|medium|low","tax_note":"<STCG risk or LTCG benefit>"}],"rebalance_cost":"<estimated brokerage+tax impact>","expected_outcome":"<1 sentence on portfolio improvement after rebalancing>"}`;
 
   try {
     const raw = await claudeJSON(prompt);
@@ -22491,10 +22685,17 @@ async function runEarningsAIPerStock() {
 
       const ltp = h.ltp||h.avgPrice;
       const gainPct = ((ltp-h.avgPrice)/h.avgPrice*100).toFixed(1);
-      const prompt = `Senior Indian equity research analyst. Generate pre-earnings outlook for ${h.symbol} (${h.sector||'Diversified'}, NSE).
-LTP: ₹${f(ltp)} | Cost: ₹${f(h.avgPrice)} | P&L: ${gainPct}% | Held: ${hDays(h.buyDate)||0} days | PE: ${h.pe||'N/A'} | ROE: ${h.roe?(h.roe*100).toFixed(0)+'%':'N/A'}
-Reply ONLY compact JSON:
-{"nextResultMonth":"<e.g. Jul 2026>","expectedEPS":"<₹ figure or % YoY change>","expectedRevGrowth":"<% YoY>","keyWatchItem":"<1 specific metric or event to watch>","beatScenario":"<price impact if beat, e.g. +5-8%>","missScenario":"<price impact if miss, e.g. -7-12%>","verdict":"HOLD|TRIM|ADD|EXIT","confidence":"HIGH|MEDIUM|LOW","rationale":"<2 sentences>"}`;
+      const prompt = `You are a senior equity research analyst at a top Indian brokerage covering ${h.sector||'Indian equities'}. Build a pre-earnings playbook for ${h.symbol}.
+
+STOCK DATA:
+- CMP: ₹${f(ltp)} | Avg Cost: ₹${f(h.avgPrice)} | P&L: ${gainPct}% | Held: ${hDays(h.buyDate)||0} days
+- PE: ${h.pe||'N/A'} | ROE: ${h.roe?(h.roe*100).toFixed(0)+'%':'N/A'} | Sector: ${h.sector||'Diversified'}
+- Tax status: ${(hDays(h.buyDate)||0) > 365 ? 'LTCG eligible (>12M)' : 'STCG zone (<12M held)'}
+
+Build a complete pre-earnings playbook. Estimate based on sector trends, management history, and industry data.
+
+Reply ONLY compact JSON (no markdown):
+{"nextResultMonth":"<Mon YYYY>","expectedEPS":"<₹X or +X% YoY>","expectedRevGrowth":"<+/-X% YoY>","ebitdaMarginExpected":"<X%>","keyWatchItem":"<single most important metric: e.g. loan growth, EBITDA margin, order book>","beatScenario":"<price target if beat, e.g. ₹X-Y (+Z%)>","missScenario":"<downside if miss, e.g. ₹X-Y (-Z%)>","preEarningsEntry":"<₹ level to add before results, or null>","postEarningsStrategy":"<1 sentence: hold through / book before / add on dip>","verdict":"HOLD|TRIM|ADD|EXIT","confidence":"HIGH|MEDIUM|LOW","rationale":"<2 crisp sentences with specific numbers>"}`;
       try {
         const raw = await claudeJSON(prompt);
         const j = (raw && typeof raw==='object') ? raw : (extractJSON(raw)||null);
@@ -22571,11 +22772,17 @@ async function runEarningsAI() {
     return `${h.symbol} (${h.sector||'?'}): ${g.toFixed(1)}% gain, ${hDays(h.buyDate)||0}d held`;
   }).join('\n');
 
-  const prompt = `Indian equity analyst. Pre-earnings strategy for these 5 holdings:
+  const prompt = `You are a head of equity research at a leading Indian brokerage. Design a portfolio-wide pre-earnings strategy.
+
+TOP HOLDINGS PRE-EARNINGS ASSESSMENT:
 ${top5}
-Indian markets context: Q1 results April-May, Q2 Jul-Aug, Q3 Oct-Nov, Q4 Jan-Feb.
-Reply ONLY with compact valid JSON:
-{"summary":"<2 sentences>","high_risk_sector":"<sector>","recommendations":[{"symbol":"X","verdict":"HOLD/EXIT/TRIM","rationale":"<8 words>","risk":"high/medium/low"}],"market_note":"<1 sentence on current market conditions>"}`;
+
+Indian earnings calendar context: Q1 (Apr-Jun) results: Jul-Aug | Q2 (Jul-Sep): Oct-Nov | Q3 (Oct-Dec): Jan-Feb | Q4 (Jan-Mar): Apr-May
+
+For each holding, assess earnings risk based on sector trends, historical delivery, and current market conditions. Give a pre-earnings action plan.
+
+Reply ONLY compact valid JSON (no markdown):
+{"summary":"<2 precise sentences: overall earnings season setup for this portfolio>","high_risk_sector":"<sector most at risk this quarter + why>","safe_sector":"<sector likely to beat + why>","recommendations":[{"symbol":"X","verdict":"HOLD|TRIM|ADD|EXIT","pre_earnings_action":"<specific: trim 30% before results / hold through / add on dip if results in X weeks>","beat_target":"<₹X>","miss_sl":"<₹X>","risk":"high|medium|low","key_risk":"<8 words — main earnings risk>"}],"market_note":"<current market earnings expectations + FII sentiment 1 sentence>","portfolio_strategy":"<1 sentence: overall stance heading into earnings season>"}`;
 
   try {
     const raw = await claudeJSON(prompt);
@@ -22701,11 +22908,22 @@ async function runDividendAI() {
     return `${h.symbol}: yield=${y}%, value=${fC(cv)}`;
   }).join('\n');
 
-  const prompt = `Indian dividend investing expert. Portfolio ₹${fC(totalVal)}, est. annual dividend ₹${fC(Math.round(totalDiv))}. Top 5 holdings:
-${top5}
-Indian tax: dividends taxed at slab rate. Suggest high-dividend Indian stocks from NSE to improve passive income.
-Reply ONLY with compact valid JSON:
-{"summary":"<2 sentences>","current_yield_assessment":"good/average/poor","suggestions":[{"action":"add/increase/reduce","symbol":"X","reason":"<8 words>","yield_pct":3.5}],"target_monthly_income":"<amount>","tax_note":"<1 sentence>"}`;
+  const prompt = `You are a dividend income specialist and CFA charterholder focusing on Indian equity income portfolios.
+
+CURRENT DIVIDEND PORTFOLIO:
+- Total portfolio value: ₹${fC(totalVal)}
+- Estimated annual dividend income: ₹${fC(Math.round(totalDiv))} (yield: ${totalVal > 0 ? (totalDiv/totalVal*100).toFixed(2) : 0}%)
+- Top 5 holdings by value: ${top5}
+
+Indian dividend tax: Dividend income taxed at investor's income tax slab rate. No TDS if annual dividend < ₹5,000 per company. Focus: high-quality dividend growers, not just high yielders.
+
+Build a dividend optimisation strategy with specific stock recommendations:
+1. Assess current yield vs benchmark (Nifty 50 div yield ~1.2%, good portfolio target = 2.5%+)
+2. Recommend specific NSE stocks known for consistent dividend growth (PSU banks, PSU energy, FMCG, IT)
+3. Calculate monthly income potential after optimisation
+
+Reply ONLY compact valid JSON (no markdown):
+{"summary":"<2 sentences on current yield vs potential + key gap>","current_yield_assessment":"good|average|poor","current_annual_income":"₹<amount>","target_annual_income":"₹<realistic target>","target_monthly_income":"₹<amount/month>","suggestions":[{"action":"add|increase|reduce","symbol":"<NSE symbol>","reason":"<10 words + yield history>","yield_pct":<number>,"div_growth":"<% annual growth in dividends>","risk":"low|medium|high"}],"income_gap_coverage":"<1 sentence on bridging gap>","tax_note":"<specific tax planning tip for this income level>","nps_tip":"<whether NPS/ELSS would be more tax-efficient at this bracket>"}`;
 
   try {
     const raw = await claudeJSON(prompt);
@@ -22823,10 +23041,20 @@ async function runGoalAI() {
   const onTrack = totalCorpus >= target;
 
   const topH = D.holdings.slice(0,5).map(h=>h.symbol).join(', ');
-  const prompt = `Indian financial planner. Goal: ₹${fC(target)} in ${years} years. Current portfolio: ₹${fC(Math.round(curPortVal))}. Monthly SIP: ₹${fC(sip)}. Expected return: ${rate}%/yr. Projected corpus: ₹${fC(totalCorpus)}. On track: ${onTrack}. Holdings include: ${topH}.
-Provide practical, actionable plan for Indian retail investor. Consider mutual funds, NPS, tax-saving (80C, ELSS).
-Reply ONLY with compact valid JSON:
-{"assessment":"on_track/needs_action/at_risk","summary":"<2 sentences>","key_actions":[{"action":"<specific step>","impact":"high/medium/low","category":"equity/mutual_fund/nps/insurance/other"}],"sip_advice":"<1 sentence>","tax_saving_tip":"<1 sentence>"}`;
+  const prompt = `You are a SEBI-registered investment advisor (RIA) and Certified Financial Planner (CFP) with expertise in Indian wealth creation.
+
+FINANCIAL GOAL ANALYSIS:
+- Target corpus: ₹${fC(target)} in ${years} years
+- Current equity portfolio: ₹${fC(Math.round(curPortVal))}
+- Monthly SIP: ₹${fC(sip)} | Expected CAGR: ${rate}%
+- Projected corpus at maturity: ₹${fC(totalCorpus)} (${onTrack ? '✅ ON TRACK' : '⚠ DEFICIT — needs action'})
+- Gap: ${!onTrack ? '₹'+fC(target-totalCorpus)+' shortfall' : 'Surplus of ₹'+fC(totalCorpus-target)}
+- Current holdings: ${topH}
+
+Build a comprehensive, tax-smart wealth creation plan considering Indian instruments: Direct Equity (STCG/LTCG), ELSS (80C, 3Y lock-in), PPF (15Y, tax-free), NPS (80CCD), Index Funds, REIT.
+
+Reply ONLY compact valid JSON (no markdown):
+{"assessment":"on_track|needs_action|at_risk","summary":"<2 precise sentences: gap analysis + priority fix>","required_sip_to_target":"₹<monthly SIP needed if current assumptions hold>","suggested_cagr_target":"<X% — realistic with this portfolio mix>","key_actions":[{"action":"<specific, implementable step with ₹ amounts>","impact":"high|medium|low","category":"equity|elss|ppf|nps|index_fund|reit|insurance","tax_benefit":"<specific section e.g. 80C, 80CCD, LTCG exempt>","monthly_amount":"₹<amount to allocate>"}],"sip_ladder":"<advice on increasing SIP by X% annually>","equity_debt_split":"<recommended % e.g. 70:30 at this age/horizon>","tax_saving_tip":"<specific Section 80C/80CCD/LTCG optimisation this year>","milestone_check":"<when to review: e.g. every 2 years or when corpus hits ₹X>"}`;
 
   try {
     const raw = await claudeJSON(prompt);
@@ -23054,8 +23282,19 @@ async function runIntelAI() {
   const topSector = Object.entries(sectorMap).sort((a,b)=>b[1]-a[1])[0];
   const concentration = topSector ? (topSector[1]/totalVal*100).toFixed(0) : 0;
 
-  const prompt = `Indian portfolio manager writing a weekly briefing. Portfolio: ₹${Math.round(totalVal/1000)}K, P&L ${pnlPct>0?'+':''}${pnlPct}%, avg score ${avgScore??'N/A'}/100, ${buys} buy signals ${sells} trim signals, top sector ${topSector?.[0]||'—'} at ${concentration}% weight${topBuy?', top buy: '+topBuy.stock.symbol:''}${topTrim?', top trim: '+topTrim.stock.symbol:''}.
-Write a 3-sentence executive summary for the investor. Reply JSON: {"summary":"<60 words>","strength":"<12 words>","concern":"<12 words>","outlook":"Positive|Cautious|Negative"}`;
+  const prompt = `You are the CIO of a boutique Indian PMS firm writing the weekly portfolio intelligence report for a client.
+
+PORTFOLIO INTELLIGENCE DATA:
+- Portfolio: ₹${Math.round(totalVal/1000)}K | P&L: ${pnlPct>0?'+':''}${pnlPct}% | Avg quality score: ${avgScore??'N/A'}/100
+- Signal distribution: ${buys} BUY signals | ${sells} TRIM/EXIT signals
+- Top sector: ${topSector?.[0]||'—'} at ${concentration}% concentration
+- Highest conviction buy: ${topBuy?.stock.symbol||'none identified'}
+- Top trim candidate: ${topTrim?.stock.symbol||'none flagged'}
+
+Write the executive summary section of the weekly intelligence report. Tone: authoritative, precise, like a letter to a sophisticated client.
+
+Reply JSON (no markdown):
+{"summary":"<75 words — 3 sentences: 1) portfolio state with key number 2) best opportunity right now 3) main risk to manage>","strength":"<15 words — portfolio's single biggest competitive advantage right now>","concern":"<15 words — the one issue that needs attention most>","top_action":"<10 words — single most important action this week>","outlook":"Positive|Cautious|Negative"}`;
 
   try {
     const _rawIR = await claudeJSON(prompt);
@@ -23078,12 +23317,13 @@ Write a 3-sentence executive summary for the investor. Reply JSON: {"summary":"<
     const olCol = outlook==='Positive'?'var(--grn)':outlook==='Negative'?'var(--red)':'var(--yel)';
     const now = new Date().toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'});
     document.getElementById('ir-generated-at').textContent = `Generated ${now}`;
+    const topAction = res.top_action || res.topAction || '';
     content.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
         <span style="font-size:12px;font-weight:700;color:${olCol};background:${olCol}18;border:1px solid ${olCol}44;border-radius:10px;padding:3px 12px">${outlook} Outlook</span>
       </div>
       <p style="margin:0 0 14px;color:var(--t1);font-size:13px;line-height:1.7">${summary}</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:${topAction?'10px':'0'}">
         <div style="flex:1;min-width:160px;background:var(--grn)11;border:1px solid var(--grn)33;border-radius:8px;padding:10px 14px">
           <div style="font-size:10px;color:var(--t4);margin-bottom:3px">PORTFOLIO STRENGTH</div>
           <div style="font-size:12px;color:var(--grn)">${strength}</div>
@@ -23092,7 +23332,12 @@ Write a 3-sentence executive summary for the investor. Reply JSON: {"summary":"<
           <div style="font-size:10px;color:var(--t4);margin-bottom:3px">KEY CONCERN</div>
           <div style="font-size:12px;color:var(--yel)">${concern}</div>
         </div>
-      </div>`;
+      </div>
+      ${topAction?`<div style="background:var(--ac)11;border:1px solid var(--ac)33;border-radius:8px;padding:10px 14px">
+        <div style="font-size:10px;color:var(--t4);margin-bottom:3px">THIS WEEK'S TOP ACTION</div>
+        <div style="font-size:12px;color:var(--ac);font-weight:600">→ ${topAction}</div>
+      </div>`:''}
+    `;
   } catch(e) {
     content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed: ' + (e.message||'unknown error') + '</div>';
   }
@@ -23422,8 +23667,22 @@ async function runComparatorAI() {
   const {pA, pB, sA, sB, winsA, winsB} = window._cmpData;
   const fmt = p => `${p.stock.symbol}(score:${p.sc?.overall??'?'},PE:${p.pe?.toFixed(0)??'?'},MoS:${p.mos??'?'}%,sent:${p.st?.sentiment??'?'},beta:${p.beta.toFixed(1)},sector:${p.sector})`;
 
-  const prompt = `Indian equity analyst comparing two stocks. ${fmt(pA)} vs ${fmt(pB)}. Signal wins: ${sA.symbol} ${winsA}, ${sB.symbol} ${winsB}.
-Pick the better investment and explain. Reply JSON: {"pick":"${sA.symbol} or ${sB.symbol}","reason":"<25 words>","buyCase":"<15 words>","watchOut":"<12 words>","horizon":"short-term or long-term"}`;
+  const prompt = `You are a top Indian equity analyst conducting a head-to-head stock battle for an investor choosing between two positions.
+
+STOCK A: ${fmt(pA)} | Signal wins: ${winsA}/10 criteria
+STOCK B: ${fmt(pB)} | Signal wins: ${winsB}/10 criteria
+
+Run a definitive comparison across 5 dimensions:
+1. VALUATION: Which is cheaper vs sector PE? Which has better margin of safety?
+2. QUALITY: Which has better ROE? Which beta fits current market better?
+3. MOMENTUM: 52W position, recent price trend, signal strength
+4. RISK: Which sector has more near-term headwinds? Any specific stock risk?
+5. VERDICT: Clear winner for a 6-12 month horizon
+
+Be decisive — give a single winner with conviction.
+
+Reply JSON (no markdown):
+{"pick":"${sA.symbol}|${sB.symbol}","confidence":<50-100>,"reason":"<30 words — 3 specific data-driven reasons>","buyCase":"<18 words — strongest bull argument for the winner>","watchOut":"<15 words — biggest risk even for the winner>","entry":"<₹ entry range for winner>","sl":"<₹ SL level>","target":"<₹ 12M target>","avoid_reason":"<15 words — why the loser loses this battle>","horizon":"3-6M|6-12M|1-2Y"}`;
 
   try {
     const _rawCmp = await claudeJSON(prompt);
@@ -23435,24 +23694,31 @@ Pick the better investment and explain. Reply JSON: {"pick":"${sA.symbol} or ${s
     if (!res.pick) throw new Error('Missing "pick" field in AI response');
     const pickCol = res.pick === sA.symbol ? 'var(--ac)' : 'var(--ac2)';
     content.innerHTML = `
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap">
         <div style="font-size:22px;font-weight:700;color:${pickCol}">🏆 ${res.pick}</div>
-        <div style="font-size:13px;color:var(--t2);font-style:italic;flex:1">"${res.reason}"</div>
+        ${res.confidence?`<span style="font-size:10px;font-weight:700;color:${pickCol};background:${pickCol}18;border:1px solid ${pickCol}44;border-radius:6px;padding:2px 8px">${res.confidence}% conviction</span>`:''}
+        <div style="font-size:12px;color:var(--t2);font-style:italic;flex:1">"${res.reason}"</div>
       </div>
+      ${(res.entry||res.sl||res.target)?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-family:var(--mono);font-size:11px">
+        ${res.entry?`<span style="color:var(--grn);background:var(--grn)11;border:1px solid var(--grn)33;border-radius:6px;padding:3px 8px">Entry ${res.entry}</span>`:''}
+        ${res.sl?`<span style="color:var(--red);background:var(--red)11;border:1px solid var(--red)33;border-radius:6px;padding:3px 8px">SL ${res.sl}</span>`:''}
+        ${res.target?`<span style="color:var(--ac);background:var(--ac)11;border:1px solid var(--ac)33;border-radius:6px;padding:3px 8px">Target ${res.target}</span>`:''}
+      </div>`:''}
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <div style="flex:1;min-width:150px;background:var(--grn)11;border:1px solid var(--grn)33;border-radius:8px;padding:10px 14px">
           <div style="font-size:10px;color:var(--t4);margin-bottom:3px">BUY CASE</div>
-          <div style="font-size:12px;color:var(--grn)">${res.buyCase}</div>
+          <div style="font-size:12px;color:var(--grn)">${res.buyCase||'—'}</div>
         </div>
         <div style="flex:1;min-width:150px;background:var(--yel)11;border:1px solid var(--yel)33;border-radius:8px;padding:10px 14px">
           <div style="font-size:10px;color:var(--t4);margin-bottom:3px">WATCH OUT</div>
-          <div style="font-size:12px;color:var(--yel)">${res.watchOut}</div>
+          <div style="font-size:12px;color:var(--yel)">${res.watchOut||'—'}</div>
         </div>
         <div style="min-width:120px;background:var(--b2);border-radius:8px;padding:10px 14px">
           <div style="font-size:10px;color:var(--t4);margin-bottom:3px">HORIZON</div>
-          <div style="font-size:12px;font-weight:600;color:var(--t1)">${res.horizon}</div>
+          <div style="font-size:12px;font-weight:600;color:var(--t1)">${res.horizon||'—'}</div>
         </div>
-      </div>`;
+      </div>
+      ${res.avoid_reason?`<div style="margin-top:10px;font-size:11px;color:var(--t4);background:var(--s2);border-radius:6px;padding:8px 12px">❌ Why not ${res.pick===sA.symbol?sB.symbol:sA.symbol}: ${res.avoid_reason}</div>`:''}`;
   } catch(e) {
     content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed: ' + (e.message||'unknown error') + '</div>';
   }
@@ -23582,8 +23848,20 @@ async function runStressAI() {
   const topDef  = rows.filter(r=>r.beta <= 0.8).slice(0,2).map(r=>r.h.symbol).join(', ') || 'none';
   const pctStr  = marketPct >= 0 ? `+${marketPct}%` : `${marketPct}%`;
 
-  const prompt = `Indian equity portfolio manager. Scenario: ${scenName} (${pctStr} market move). Most vulnerable holdings: ${topVuln||'none'}. Defensive holdings: ${topDef}.
-Recommend 3 specific hedging/defensive actions. Reply JSON: {"summary":"<20 words>","actions":[{"action":"<8 words>","reason":"<10 words>"},{"action":"<8 words>","reason":"<10 words>"},{"action":"<8 words>","reason":"<10 words>"}],"verdict":"Resilient|Moderate Risk|High Risk"}`;
+  const prompt = `You are a portfolio stress-testing specialist and derivatives strategist at an Indian institutional fund.
+
+STRESS SCENARIO: ${scenName} (${pctStr} Nifty move)
+MOST VULNERABLE positions (high beta, large weight): ${topVuln||'none identified'}
+DEFENSIVE holdings (beta ≤0.8, natural hedges): ${topDef||'none'}
+Portfolio total: ₹${Math.round(D.holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice||0)*h.qty,0)/1000)}K
+
+Build a specific crisis response playbook for this scenario:
+1. **IMMEDIATE ACTION** (if scenario starts unfolding): Which positions to exit first, in what order, at what price trigger (e.g., "Sell ADANIENT if Nifty breaks 22,000")
+2. **PORTFOLIO HEDGE**: Specific hedge trade — Nifty Put level, Gold ETF allocation %, or cash equivalent switch — with exact ₹ amount
+3. **DEFENSIVE ROTATION**: Which defensive sector/stocks to rotate into (FMCG, IT exporters, Pharma) — specific names and approximate allocation
+
+Reply JSON (no markdown):
+{"summary":"<20 words — scenario impact on this portfolio>","projected_loss":"<₹ amount estimate>","actions":[{"action":"<specific action with stock name and price trigger>","reason":"<12 words>","urgency":"immediate|within_week|monitor"},{"action":"<action 2>","reason":"<12 words>","urgency":"immediate|within_week|monitor"},{"action":"<action 3 — hedge/defensive>","reason":"<12 words>","urgency":"immediate|within_week|monitor"}],"recovery_timeline":"<how long to recover — realistic estimate>","verdict":"Resilient|Moderate Risk|High Risk|Critical"}`;
 
   try {
     const _rawSt = await claudeJSON(prompt);
@@ -23775,8 +24053,23 @@ async function runPositionAI() {
 
   const {sym, sector, ltp, slPrice, t1, t2, t3, rr, riskProfile, fv} = window._pbPlan;
   const mosStr = fv?.mos ? `${fv.mos}% margin of safety` : 'fair value not computed';
-  const prompt = `Indian equity trader. Stock: ${sym} (${sector}), CMP ₹${Math.round(ltp)}, SL ₹${Math.round(slPrice)}, T1 ₹${Math.round(t1)}, T2 ₹${Math.round(t2)}, T3 ₹${Math.round(t3)}, R:R 1:${rr}, ${mosStr}, profile: ${riskProfile}.
-Explain why this entry plan makes sense and key risks. Reply JSON: {"rationale":"<30 words>","bullCase":"<15 words>","keyRisk":"<15 words>","timing":"<10 words>"}`;
+  const prompt = `You are a seasoned Indian equity trader and position sizing expert. Review and validate this entry plan.
+
+TRADE SETUP:
+- Stock: ${sym} | Sector: ${sector} | CMP: ₹${Math.round(ltp)}
+- Stop-Loss: ₹${Math.round(slPrice)} (${((ltp-slPrice)/ltp*100).toFixed(1)}% risk from CMP)
+- Target 1: ₹${Math.round(t1)} (+${((t1-ltp)/ltp*100).toFixed(1)}%) | Target 2: ₹${Math.round(t2)} (+${((t2-ltp)/ltp*100).toFixed(1)}%) | Target 3: ₹${Math.round(t3)} (+${((t3-ltp)/ltp*100).toFixed(1)}%)
+- Risk:Reward = 1:${rr} | ${mosStr} | Profile: ${riskProfile}
+
+Evaluate this trade setup holistically:
+1. Is the R:R ratio of 1:${rr} compelling for this type of setup?
+2. Is the SL placement at ₹${Math.round(slPrice)} technically sound (too tight/too loose)?
+3. Are the targets realistic given the sector's typical trading range?
+4. What's the optimal entry strategy — all-in at CMP or scale in on dips?
+5. What specific catalyst/event would invalidate this setup immediately?
+
+Reply JSON (no markdown):
+{"rationale":"<35 words — complete entry thesis with specific technical/fundamental reasoning>","bullCase":"<18 words — most powerful reason this trade works>","keyRisk":"<18 words — single biggest reason this trade fails>","timing":"<12 words — when to enter: now / on dip to ₹X / after trigger>","entry_strategy":"<all_in|scale_in_2_tranches|scale_in_3_tranches>","position_sizing_note":"<1 sentence on how much capital for this risk profile>","sl_quality":"tight|optimal|loose","rr_verdict":"excellent|good|marginal|poor"}`;
 
   try {
     const _rawPb = await claudeJSON(prompt);
@@ -23786,9 +24079,16 @@ Explain why this entry plan makes sense and key risks. Reply JSON: {"rationale":
     })();
     if (!res) throw new Error('Could not parse AI response — raw: ' + String(_rawPb).slice(0,80));
     if (!res.rationale) throw new Error('Missing "rationale" field in AI response');
+    const rrVerdictCol = res.rr_verdict==='excellent'?'var(--grn)':res.rr_verdict==='good'?'var(--ac)':res.rr_verdict==='marginal'?'var(--yel)':'var(--red)';
+    const slQualCol = res.sl_quality==='optimal'?'var(--grn)':res.sl_quality==='tight'?'var(--yel)':'var(--orn)';
     content.innerHTML = `
-      <div style="font-size:13px;color:var(--t2);margin-bottom:12px">${res.rationale}</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="font-size:13px;color:var(--t2);margin-bottom:12px;line-height:1.6">${res.rationale}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        ${res.rr_verdict?`<span style="font-size:10px;font-weight:700;color:${rrVerdictCol};background:${rrVerdictCol}18;border:1px solid ${rrVerdictCol}44;border-radius:6px;padding:2px 8px">R:R ${(res.rr_verdict||'').toUpperCase()}</span>`:''}
+        ${res.sl_quality?`<span style="font-size:10px;font-weight:700;color:${slQualCol};background:${slQualCol}18;border:1px solid ${slQualCol}44;border-radius:6px;padding:2px 8px">SL ${(res.sl_quality||'').toUpperCase()}</span>`:''}
+        ${res.entry_strategy?`<span style="font-size:10px;font-weight:700;color:var(--ac);background:var(--ac)18;border:1px solid var(--ac)44;border-radius:6px;padding:2px 8px">${(res.entry_strategy||'').replace(/_/g,' ').toUpperCase()}</span>`:''}
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
         <div style="flex:1;min-width:160px;background:var(--grn)11;border:1px solid var(--grn)33;border-radius:8px;padding:10px 14px">
           <div style="font-size:10px;color:var(--t4);margin-bottom:3px">BULL CASE</div>
           <div style="font-size:12px;color:var(--grn)">${res.bullCase||'—'}</div>
@@ -23798,10 +24098,12 @@ Explain why this entry plan makes sense and key risks. Reply JSON: {"rationale":
           <div style="font-size:12px;color:var(--red)">${res.keyRisk||'—'}</div>
         </div>
         <div style="flex:1;min-width:160px;background:var(--yel)11;border:1px solid var(--yel)33;border-radius:8px;padding:10px 14px">
-          <div style="font-size:10px;color:var(--t4);margin-bottom:3px">TIMING NOTE</div>
+          <div style="font-size:10px;color:var(--t4);margin-bottom:3px">ENTRY TIMING</div>
           <div style="font-size:12px;color:var(--yel)">${res.timing||'—'}</div>
         </div>
-      </div>`;
+      </div>
+      ${res.position_sizing_note?`<div style="font-size:11px;color:var(--t3);background:var(--s2);border-radius:6px;padding:8px 12px">💡 ${res.position_sizing_note}</div>`:''}
+    `;
   } catch(e) {
     content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed: ' + (e.message||'unknown error') + '</div>';
   }
@@ -24017,9 +24319,22 @@ async function runActionPlanAI() {
   const top = rows.slice(0,6).map(r=>`${r.h.symbol}(${r.sig.action.replace(/[➕💎✂⚠✅👀]/g,'').trim()},${r.sig.conviction}%,${r.h.sector||'?'})`).join(', ');
   const moodStr = rows.filter(r=>r.sig.actionGroup==='buy').length > rows.filter(r=>r.sig.actionGroup==='sell').length ? 'bullish' : 'cautious';
 
-  const prompt = `Indian equity portfolio manager. Portfolio signal summary: ${top}. Overall stance: ${moodStr}.
-Give a weekly action plan: top 2 buys, top 1 trim, and 1-sentence market commentary.
-Reply JSON: {"commentary":"<20 words>","buys":[{"sym":"X","rationale":"<12 words>"},{"sym":"Y","rationale":"<12 words>"}],"trim":{"sym":"Z","rationale":"<12 words>"},"verdict":"Aggressive|Balanced|Defensive"}`;
+  const prompt = `You are the portfolio manager at a top Indian PMS firm producing the weekly action playbook for your investors.
+
+PORTFOLIO SIGNAL SUMMARY (top actionable stocks):
+${top}
+Overall portfolio stance: ${moodStr.toUpperCase()} (${rows.filter(r=>r.sig.actionGroup==='buy').length} buy signals vs ${rows.filter(r=>r.sig.actionGroup==='sell').length} sell signals)
+
+Design a concrete, executable weekly action plan with specific price levels for every trade:
+
+REQUIRED OUTPUT:
+1. Top 2 BUY/ACCUMULATE ideas: For each — entry price range, SL, target, conviction %, and why this week specifically
+2. Top 1 TRIM/EXIT: For each — exit price, how much to trim (%), tax note (STCG/LTCG), redeployment idea
+3. One WATCHLIST SETUP: A stock to set a price alert on this week — at what level does it become a buy?
+4. Market commentary: single sentence on market setup this week and what it means for this portfolio
+
+Reply JSON (no markdown):
+{"commentary":"<22 words — specific market call + portfolio implication>","buys":[{"sym":"X","entry":"₹<range>","sl":"₹<level>","target":"₹<12M target>","conviction":<50-100>,"rationale":"<15 words — why buy THIS week>"},{"sym":"Y","entry":"₹<range>","sl":"₹<level>","target":"₹<12M target>","conviction":<50-100>,"rationale":"<15 words>"}],"trim":{"sym":"Z","exit_price":"₹<level>","trim_pct":<number>,"rationale":"<15 words>","tax":"STCG|LTCG|NA"},"watchlist_alert":{"sym":"<symbol>","trigger":"₹<price level>","reason":"<10 words>"},"verdict":"Aggressive|Balanced|Defensive"}`;
 
   try {
     const _rawAp = await claudeJSON(prompt);
@@ -24030,15 +24345,30 @@ Reply JSON: {"commentary":"<20 words>","buys":[{"sym":"X","rationale":"<12 words
     if (!res) throw new Error('Could not parse AI response — raw: ' + String(_rawAp).slice(0,80));
     const apVerdict = res.verdict || 'Balanced';
     const vCol = apVerdict==='Aggressive'?'var(--grn)':apVerdict==='Defensive'?'var(--red)':'var(--yel)';
-    const buyCards = (res.buys||[]).map(b=>`<div style="background:var(--grn)11;border:1px solid var(--grn)33;border-radius:8px;padding:10px 14px;min-width:160px;flex:1">
-      <div style="font-size:10px;color:var(--t4);margin-bottom:3px">BUY / ACCUMULATE</div>
+    const buyCards = (res.buys||[]).map(b=>`<div style="background:var(--grn)11;border:1px solid var(--grn)33;border-radius:8px;padding:10px 14px;min-width:180px;flex:1">
+      <div style="font-size:10px;color:var(--t4);margin-bottom:3px">BUY / ACCUMULATE ${b.conviction ? `<span style="background:var(--grn)22;color:var(--grn);border-radius:4px;padding:1px 5px;margin-left:4px">${b.conviction}%</span>` : ''}</div>
       <div style="font-weight:700;font-size:14px;color:var(--grn)">${b.sym||'—'}</div>
-      <div style="font-size:11px;color:var(--t2);margin-top:3px">${b.rationale||''}</div>
+      ${b.entry ? `<div style="font-size:10px;font-family:monospace;margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">
+        <span style="background:#00ff0011;border:1px solid var(--grn)44;border-radius:4px;padding:1px 6px">E: ${b.entry}</span>
+        <span style="background:#ff000011;border:1px solid var(--red)44;border-radius:4px;padding:1px 6px">SL: ${b.sl||'—'}</span>
+        <span style="background:#0088ff11;border:1px solid #0088ff44;border-radius:4px;padding:1px 6px">T: ${b.target||'—'}</span>
+      </div>` : ''}
+      <div style="font-size:11px;color:var(--t2);margin-top:5px">${b.rationale||''}</div>
     </div>`).join('');
-    const trimCard = res.trim ? `<div style="background:var(--red)11;border:1px solid var(--red)33;border-radius:8px;padding:10px 14px;min-width:160px;flex:1">
-      <div style="font-size:10px;color:var(--t4);margin-bottom:3px">TRIM / REVIEW</div>
+    const trimCard = res.trim ? `<div style="background:var(--red)11;border:1px solid var(--red)33;border-radius:8px;padding:10px 14px;min-width:180px;flex:1">
+      <div style="font-size:10px;color:var(--t4);margin-bottom:3px">TRIM / EXIT ${res.trim.trim_pct ? `<span style="background:var(--red)22;color:var(--red);border-radius:4px;padding:1px 5px;margin-left:4px">${res.trim.trim_pct}%</span>` : ''}</div>
       <div style="font-weight:700;font-size:14px;color:var(--red)">${res.trim.sym||'—'}</div>
-      <div style="font-size:11px;color:var(--t2);margin-top:3px">${res.trim.rationale||''}</div>
+      ${res.trim.exit_price ? `<div style="font-size:10px;font-family:monospace;margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">
+        <span style="background:#ff000011;border:1px solid var(--red)44;border-radius:4px;padding:1px 6px">Exit: ${res.trim.exit_price}</span>
+        ${res.trim.tax ? `<span style="background:#ffffff11;border:1px solid var(--t4)44;border-radius:4px;padding:1px 6px">${res.trim.tax}</span>` : ''}
+      </div>` : ''}
+      <div style="font-size:11px;color:var(--t2);margin-top:5px">${res.trim.rationale||''}</div>
+    </div>` : '';
+    const watchCard = res.watchlist_alert ? `<div style="background:#8800ff11;border:1px dashed #8800ff44;border-radius:8px;padding:10px 14px;min-width:160px;flex:1">
+      <div style="font-size:10px;color:var(--t4);margin-bottom:3px">👁 WATCHLIST ALERT</div>
+      <div style="font-weight:700;font-size:14px;color:#aa44ff">${res.watchlist_alert.sym||'—'}</div>
+      <div style="font-size:10px;font-family:monospace;margin-top:4px;color:#aa44ff">Trigger: ${res.watchlist_alert.trigger||'—'}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:3px">${res.watchlist_alert.reason||''}</div>
     </div>` : '';
 
     content.innerHTML = `
@@ -24047,7 +24377,7 @@ Reply JSON: {"commentary":"<20 words>","buys":[{"sym":"X","rationale":"<12 words
         <span style="font-size:13px;color:var(--t2);font-style:italic">"${res.commentary||''}"</span>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        ${buyCards}${trimCard}
+        ${buyCards}${trimCard}${watchCard}
       </div>`;
   } catch(e) {
     content.innerHTML = '<div style="color:var(--red);font-size:12px">AI call failed: ' + (e.message||'unknown error') + '</div>';
@@ -24418,10 +24748,23 @@ async function runPortfolioDoctorAI() {
     return `${h.symbol}(${wt}%,score${sc.overall},${h._sentiment?.sentiment||'?'},MoS${fv.mos!=null?fv.mos+'%':'?'})`;
   }).join(' ');
 
-  const prompt = `Portfolio Doctor, Indian retail investor. ${D.holdings.length} stocks, ₹${fI(totalCV)} total, ${portRet}% return.
-Holdings: ${holdSummary}.
-Give 3 specific, actionable prescriptions — which stocks to trim, add, or exit and why. Be direct.
-Reply JSON: {"diagnosis":"<2 sentence overall>","rx":["<prescription 1>","<prescription 2>","<prescription 3>"],"watchlist":["<stock to watch 1>","<stock to watch 2>"],"verdict":"<Healthy|Needs Attention|At Risk>"}`;
+  const prompt = `You are an elite portfolio diagnostician — equal parts equity analyst, risk manager, and tax advisor for Indian retail investors.
+
+PORTFOLIO HEALTH SCAN:
+- ${D.holdings.length} stocks | ₹${fI(totalCV)} total value | ${portRet}% overall return
+- Holdings (symbol, weight%, score/100, sentiment, margin-of-safety): ${holdSummary}
+
+Run a full diagnostic across 5 dimensions:
+1. CONCENTRATION RISK: Any single stock >20%? Any sector >30%? Name them.
+2. QUALITY CHECK: Stocks with score <40 — are they value traps or turnaround opportunities?
+3. VALUATION: Most overvalued (negative MoS) vs most undervalued (high MoS) — action needed?
+4. MOMENTUM: Bearish sentiment + poor score = exit candidate. Bullish + oversold = add candidate.
+5. PORTFOLIO RETURN DRAG: Which 1-2 positions are holding back overall performance?
+
+Give 3 specific, surgical prescriptions with exact actions and price levels.
+
+Reply JSON (no markdown):
+{"diagnosis":"<2 precise sentences: portfolio's main strength and main weakness with numbers>","health_score":<0-100>,"rx":[{"action":"<TRIM|ADD|EXIT|HOLD|REBALANCE> <SYMBOL> — <specific instruction with ₹ amount or % and price level>"},{"action":"<specific prescription 2>"},{"action":"<specific prescription 3>"}],"biggest_risk":"<single most dangerous position and why in 1 sentence>","best_opportunity":"<highest conviction add right now and entry level>","watchlist":["<stock to monitor — symbol only>","<stock to monitor>"],"verdict":"Healthy|Needs Attention|At Risk"}`;
 
   const _raw = await claudeJSON(prompt).catch(()=>null);
   const result = (() => {
@@ -24610,19 +24953,50 @@ async function runEntryTriggerAI(wId, sym) {
 
   const g = _entryGates(w);
   const failList = g.failed.map(gt=>gt.detail).join(', ') || 'none';
-  const prompt = `Indian stock analyst. ${sym} watchlist stock. Current gates blocking entry: ${failList}. AI decision: ${w.wlDecision||'unknown'}. Entry range: ₹${w.wlEntryLow||'?'}–${w.wlEntryHigh||'?'}.
-Reply with ONE sentence: the single most important condition that, if met, would make this stock a BUY today. Be specific with price levels or catalysts.`;
+  const passedGates = g.passed.length;
+  const totalGates = g.passed.length + g.failed.length;
+  const prompt = `You are a senior technical analyst at a top Indian equity fund evaluating whether a watchlist stock is ready to buy.
+
+STOCK: ${sym}
+AI Decision: ${w.wlDecision||'unknown'}
+Entry Range: ₹${w.wlEntryLow||'?'}–₹${w.wlEntryHigh||'?'}
+Gates Passed: ${passedGates}/${totalGates}
+Blocking Conditions: ${failList || 'None — stock may be ready'}
+Notes: ${w.wlNotes||'none'}
+
+Provide a precise entry trigger analysis. What is the ONE most important condition still needed? Give exact price level, time frame (days/weeks), and what to watch.
+
+Reply JSON (no markdown):
+{"trigger":"<the single condition that makes this a buy — specific price level or catalyst, max 25 words>","entry_price":"₹<exact level>","sl":"₹<stop-loss>","target_1":"₹<6-month target>","target_2":"₹<12-month target>","timeframe":"<days/weeks/months>","conviction":"Low|Medium|High","watch_indicator":"<RSI/MACD/price/volume/earnings — most critical one>"}`;
 
   try {
-    const _rawEt = await claudeJSON(prompt + '\nReply JSON: {"trigger":"<one sentence>"}');
+    const _rawEt = await claudeJSON(prompt);
+    if (typeof _rawEt === 'string' && (_rawEt.startsWith('⚠') || _rawEt.includes('temporarily unavailable'))) {
+      el.innerHTML = `<div style="color:var(--yel);font-size:10px">⚠ AI models busy, try again shortly</div>`;
+      return;
+    }
     const result = (() => {
       if (_rawEt && typeof _rawEt === 'object') return _rawEt;
       return extractJSON(_rawEt) || null;
     })();
-    const txt = (result?.trigger || await claude(prompt)).slice(0,150);
-    el.innerHTML = `<div style="background:rgba(79,142,247,.08);border:1px solid rgba(79,142,247,.2);border-radius:6px;padding:6px 8px;font-size:10px;color:var(--t2);margin-top:3px;line-height:1.4">${txt}</div>`;
+    if (!result) throw new Error('Could not parse AI response');
+    const convColor = result.conviction==='High'?'var(--grn)':result.conviction==='Low'?'var(--red)':'var(--yel)';
+    el.innerHTML = `<div style="background:rgba(79,142,247,.08);border:1px solid rgba(79,142,247,.2);border-radius:6px;padding:7px 9px;font-size:10px;color:var(--t2);margin-top:3px;line-height:1.5">
+      <div style="margin-bottom:4px;font-size:10px;color:var(--t1)">${result.trigger||'—'}</div>
+      ${result.entry_price ? `<div style="font-family:monospace;font-size:9px;display:flex;gap:4px;flex-wrap:wrap;margin-bottom:3px">
+        <span style="background:#00ff0011;border:1px solid var(--grn)44;border-radius:3px;padding:1px 5px">E: ${result.entry_price}</span>
+        <span style="background:#ff000011;border:1px solid var(--red)44;border-radius:3px;padding:1px 5px">SL: ${result.sl||'—'}</span>
+        <span style="background:#0088ff11;border:1px solid #0088ff44;border-radius:3px;padding:1px 5px">T1: ${result.target_1||'—'}</span>
+        <span style="background:#0044ff11;border:1px solid #0044ff44;border-radius:3px;padding:1px 5px">T2: ${result.target_2||'—'}</span>
+      </div>` : ''}
+      <div style="font-size:9px;color:var(--t4);display:flex;gap:6px;flex-wrap:wrap">
+        ${result.conviction ? `<span style="color:${convColor}">${result.conviction} conviction</span>` : ''}
+        ${result.timeframe ? `<span>⏱ ${result.timeframe}</span>` : ''}
+        ${result.watch_indicator ? `<span>👁 Watch: ${result.watch_indicator}</span>` : ''}
+      </div>
+    </div>`;
   } catch(e) {
-    el.textContent = 'Error';
+    el.textContent = 'Error: ' + (e.message||'unknown');
   }
 }
 
@@ -24711,21 +25085,46 @@ async function aiRebalancePlan() {
   el.textContent = '🤖 Generating rebalancing plan...';
   const corpus = parseFloat(document.getElementById('reb-corpus')?.value) || 0;
   const totalCv = D.holdings.reduce((s,h) => s + h.qty*(h.ltp||h.avgPrice), 0);
-  const prompt = `My Indian equity portfolio rebalancing request:
-Total current value: ₹${fI(totalCv)} | Target corpus: ₹${fI(corpus||totalCv)}
+  // Build stock-level detail for AI
+  const holdingDetail = D.holdings.map(h=>{
+    const cv=h.qty*(h.ltp||h.avgPrice);
+    const pl=((h.ltp||h.avgPrice)-h.avgPrice)/h.avgPrice*100;
+    const days=hDays(h.buyDate)||0;
+    return `${h.symbol}(${h.sector||'?'}): ₹${fI(cv)}, ${(cv/totalCv*100).toFixed(1)}%, P&L ${pl.toFixed(1)}%, ${days}d held, ${days>=365?'LTCG':'STCG'}`;
+  }).join('\n');
+  const targetStr = Object.entries(_rebTargets).filter(([,v])=>v>0).map(([k,v])=>`${k}: ${v}%`).join(', ') || 'Not set — suggest optimal allocation';
+  const prompt = `You are a senior portfolio advisor at a leading Indian PMS firm. Generate a comprehensive, execution-ready rebalancing plan.
 
-Current holdings by sector:
-${[...new Set(D.holdings.map(h=>h.sector).filter(Boolean))].map(sec=>{
-  const hs=D.holdings.filter(h=>h.sector===sec);
-  const cv=hs.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
-  return `${sec}: ₹${fI(cv)} (${(cv/totalCv*100).toFixed(1)}%) — ${hs.map(h=>h.symbol).join(', ')}`;
-}).join('\n')}
+CURRENT PORTFOLIO:
+Total Current Value: ₹${fI(totalCv)} | Target Corpus: ₹${fI(corpus||totalCv)}
 
-Target allocations: ${Object.entries(_rebTargets).filter(([,v])=>v>0).map(([k,v])=>`${k}: ${v}%`).join(', ')}
+Holdings Detail (symbol, sector, value, current%, P&L%, hold days, tax status):
+${holdingDetail}
 
-Provide a specific, actionable rebalancing plan with buy/sell recommendations for each sector. Consider tax implications (STCG vs LTCG).`;
-  const result = await claude(prompt);
-  el.innerHTML = md2h(result);
+TARGET SECTOR ALLOCATIONS:
+${targetStr}
+
+Provide a detailed rebalancing plan structured in 4 parts:
+
+**PART 1 — SELL/TRIM LIST** (execute first, generates cash):
+For each stock to reduce — Symbol | Current % → Target % | Approx ₹ to sell | Exit price level | Tax (STCG 20% / LTCG 12.5%) | Tax amount estimate | Priority (High/Medium)
+
+**PART 2 — BUY/ADD LIST** (deploy cash):
+For each stock to add — Symbol | Current % → Target % | Approx ₹ to deploy | Entry range | Why add now (1 sentence)
+
+**PART 3 — TAX EFFICIENCY REVIEW**:
+Total estimated tax on sells, LTCG exemption used (₹1L free), net cash after tax, and whether timing sell in new FY saves meaningful tax (>₹5,000 saved = worth waiting).
+
+**PART 4 — REBALANCING VERDICT** (3-4 sentences):
+Is the current portfolio significantly off target? What's the single biggest allocation problem (overweight/underweight sector)? After rebalancing, what does the portfolio look like vs ideal? Is this the right time to rebalance given market regime?
+
+Be specific with ₹ amounts. Use Indian lakh/crore formatting. Flag any single stock >15% allocation as concentration risk.`;
+  try {
+    const result = await claude(prompt);
+    el.innerHTML = md2h(result);
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--red);font-size:12px">AI rebalance plan failed: ${e.message||'unknown error'}</div>`;
+  }
 }
 
 // ── Exact-Quantity Stock-Level Rebalancer ─────────────────────────────────────
@@ -26323,17 +26722,38 @@ async function _chatSend() {
     // Build system prompt with portfolio context (inside try so errors reset busy state)
     const _rawCtx = _chatGetPortfolioContext();
     const portfolioCtx = _rawCtx.length > 33000 ? _rawCtx.slice(0, 33000) + '\n…[context trimmed to fit model window]' : _rawCtx;
-    const sysPrompt = `You are an expert Indian equity market analyst and investment research co-pilot with 20+ years of NSE/BSE experience. You have access to the user's live portfolio and watchlist data below.
+    const sysPrompt = `You are a senior Indian equity research analyst and portfolio strategist — the kind found at top PMS/AIF firms. You have 20+ years of NSE/BSE experience covering fundamental research, technical analysis, and options strategy. You have real-time access to the user's live portfolio and watchlist data below.
 
-Act as a disciplined, direct research analyst — not a SEBI-registered advisor. Always:
-- Reference actual stock names and specific numbers from their portfolio/watchlist
-- Give clear buy/hold/reduce/exit calls with concise reasoning
-- Include the single strongest why-not-buy risk for any buy recommendation
-- Use Piotroski F-Score, RSI, MACD, PE, ROE, D/E when available in the data
-- For watchlist questions: rank by quality (F-Score + fundamentals + technicals), not just price
-- Complete your full answer — never truncate a table or list mid-way
-- Use ₹ for prices, Indian number formatting (lakhs/crores)
-- Format: **bold** key points, tables for comparisons, bullet points for lists
+ROLE & STYLE:
+You are a direct, no-nonsense analyst. You don't give generic advice — every answer references specific stocks from their portfolio/watchlist with specific price levels, stop-losses, and targets. You think like an investor who has skin in the game.
+
+ALWAYS INCLUDE IN EVERY ANSWER:
+- Specific ₹ price levels (entry, SL, target) whenever recommending any action
+- Conviction level (High/Medium/Low) with 1-sentence justification
+- Risk: the single biggest reason the trade could fail (not generic "markets are risky")
+- Tax implication note when discussing exits (STCG 20% if <12M, LTCG 12.5% if >12M with ₹1L exemption)
+
+WHEN ASKED ABOUT STOCKS TO BUY:
+Format: **Symbol** — Entry ₹X–Y | SL ₹Z | Target ₹T1 (6M)/T2 (12M) | R:R X:1 | Conviction: H/M/L — [reason in one sentence]
+
+WHEN ASKED ABOUT PORTFOLIO HEALTH:
+Diagnose using Piotroski F-Score, PE vs sector, ROE, D/E, and technical signals from the data. Rank holdings by quality score, not just P&L.
+
+WHEN ASKED ABOUT MARKET/MACRO:
+Connect macro events (RBI, FII flows, India VIX, global cues) directly to specific holdings in their portfolio — which stocks are most exposed, which benefit.
+
+WHEN ASKED ABOUT REBALANCING:
+Give specific ₹ amounts to buy/sell, factoring in current allocation %, tax impact, and which entry level makes sense.
+
+FORMATTING RULES:
+- Use **bold** for stock names and key numbers
+- Tables for comparisons (always include entry/SL/target columns)
+- Bullet points for lists of 3+ items
+- Never truncate a table or list mid-way
+- ₹ for all Indian prices, use lakh/crore for large numbers
+- Keep responses focused — if asked 1 thing, answer that 1 thing well
+
+IMPORTANT: You are not SEBI-registered. You provide research opinions, not personalized investment advice. Users make their own decisions.
 
 ${portfolioCtx}`;
 
@@ -30538,24 +30958,38 @@ async function _generateWeeklyLetter() {
   const conviction = document.getElementById('ds-conviction')?.textContent || '—';
   const regime = _marketRegime?.label || 'Unknown';
 
-  const prompt=`Write a personal portfolio review letter for an Indian retail investor. Tone: honest, direct, like a trusted advisor. 350-400 words total.
+  // Build richer context for the letter
+  const topHoldings = [...D.holdings].sort((a,b)=>(b.ltp||b.avgPrice)*b.qty-(a.ltp||a.avgPrice)*a.qty).slice(0,5).map(h=>`${h.symbol} (${(((h.ltp||h.avgPrice)-h.avgPrice)/h.avgPrice*100).toFixed(1)}%)`).join(', ');
+  const sectorBreakdown = Object.entries(D.holdings.reduce((m,h)=>{const s=h.sector||'Other';m[s]=(m[s]||0)+(h.ltp||h.avgPrice)*h.qty;return m},{})).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([s,v])=>`${s} ${(v/totalVal*100).toFixed(0)}%`).join(', ');
 
-Portfolio data:
-- Total value: ₹${fI(totalVal)} | P&L: ${pnlPct}% | Conviction: ${conviction}
-- Market regime: ${regime}
-- Energy concentration: ${energyPct.toFixed(1)}% (limit: 25%)
-- SL breaches: ${slBreach.length>0?slBreach.join(', '):'None'}
-- Reduce signals: ${reduces.length>0?reduces.join(', '):'None'}
-- Best performer: ${topG?.symbol} (+${(((topG?.ltp||topG?.avgPrice)-topG?.avgPrice)/topG?.avgPrice*100).toFixed(1)}%)
-- Worst performer: ${topL?.symbol} (${(((topL?.ltp||topL?.avgPrice)-topL?.avgPrice)/topL?.avgPrice*100).toFixed(1)}%)
+  const prompt=`You are a senior portfolio advisor at a leading Indian PMS firm writing the weekly client letter. Write in the voice of a trusted, honest advisor — direct, specific, no fluff. This is NOT a generic newsletter; every sentence should reference this specific portfolio's data.
 
-Structure the letter in 4 paragraphs:
-1. WHAT HAPPENED THIS WEEK — portfolio performance summary with specific numbers
-2. KEY HOLDINGS UPDATE — 2-3 specific stocks worth noting (use actual names from data above)
-3. THE ONE THING — single most important decision or action needed this week (be direct and specific)
-4. LOOKING AHEAD — what to watch next week (1 risk, 1 opportunity)
+CLIENT PORTFOLIO DATA:
+- Portfolio Value: ₹${fI(totalVal)} | Overall P&L: ${pnlPct}% (${pnlPct>0?'profit':'loss'})
+- Market Regime: ${regime} | Portfolio Conviction: ${conviction}
+- Sector Exposure: ${sectorBreakdown}
+- Top 5 Holdings by Value: ${topHoldings}
+- SL Breaches: ${slBreach.length>0?slBreach.join(', '):'None'}
+- Reduce/Exit Signals Active: ${reduces.length>0?reduces.join(', '):'None'}
+- Best Performer: ${topG?.symbol||'—'} (+${topG ? (((topG.ltp||topG.avgPrice)-topG.avgPrice)/topG.avgPrice*100).toFixed(1) : '?'}%)
+- Worst Performer: ${topL?.symbol||'—'} (${topL ? (((topL.ltp||topL.avgPrice)-topL.avgPrice)/topL.avgPrice*100).toFixed(1) : '?'}%)
 
-Start with "Dear Investor," — write in first-person advisor voice. No generic advice. Reference actual holdings by name.`;
+Write a 400-word investor letter with these 5 sections:
+
+1. **THIS WEEK IN NUMBERS** (60 words): Portfolio performance with specific ₹ P&L, what moved the needle, and one line on the market backdrop.
+
+2. **PORTFOLIO SPOTLIGHT** (80 words): Pick 2-3 specific stocks from the data that deserve attention this week — could be a winner to hold, a loser to re-evaluate, or a risk flagging SL breach. Use stock names, not generic categories.
+
+3. **THE ONE TRADE** (70 words): The single most important action to take this week with specific entry level, size suggestion, and reason. Don't hedge — be direct about what to do and why.
+
+4. **RISKS ON THE RADAR** (60 words): Two specific risks to this portfolio specifically (not generic market risks) — one short-term (this week), one structural. For each: how to hedge or limit downside.
+
+5. **NEXT WEEK WATCH** (50 words): Two things to monitor — one stock-specific trigger (price level/event), one macro (RBI/FII/earnings). What action follows if each triggers?
+
+Close with: "Stay disciplined. — Your Portfolio AI"
+
+Start with: "Dear Investor,"
+Do NOT use bullet points. Write in prose paragraphs. No generic market commentary — only what's specific to this portfolio.`;
 
   try {
     const letter = await claude(prompt);
@@ -30576,7 +31010,7 @@ Start with "Dear Investor," — write in first-person advisor voice. No generic 
     </div>`;
     window._lastWeeklyLetter = letter;
   } catch(e) {
-    el.innerHTML=`<div class="pn"><div class="pn-b" style="color:var(--red);font-size:12px">❌ Failed to generate letter — check AI key in Settings</div></div>`;
+    el.innerHTML=`<div class="pn"><div class="pn-b" style="color:var(--red);font-size:12px">❌ Failed to generate letter: ${e.message||'unknown error'}</div></div>`;
   }
   if (btn) { btn.disabled=false; btn.textContent='✉ Weekly Letter'; }
 }
