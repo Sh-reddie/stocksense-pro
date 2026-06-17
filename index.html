@@ -14295,7 +14295,7 @@ function init(){
   if(savedOrKey && document.getElementById('cfg-or-key')) document.getElementById('cfg-or-key').value = savedOrKey;
   let savedOrModel = localStorage.getItem('orModel');
   // Migrate deprecated/dead/content-safety models to current default
-  const _deadModels = ['meta-llama/llama-3.1-8b-instruct:free','mistralai/mistral-7b-instruct:free','google/gemma-3-27b-it:free','qwen/qwen3-8b:free','qwen/qwen3-14b:free','microsoft/phi-4-reasoning:free','deepseek/deepseek-r1-0528-qwen3-8b:free','nvidia/nemotron-3-nano-30b-a3b:free','nousresearch/hermes-3-llama-3.1-405b:free','nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free','nvidia/nemotron-3-nano-30b-a3b:free','nvidia/nemotron-super-49b-v1:free','nvidia/nemotron-3-super-120b-a12b:free',
+  const _deadModels = ['meta-llama/llama-3.1-8b-instruct:free','mistralai/mistral-7b-instruct:free','google/gemma-3-27b-it:free','qwen/qwen3-8b:free','qwen/qwen3-14b:free','microsoft/phi-4-reasoning:free','deepseek/deepseek-r1-0528-qwen3-8b:free','nvidia/nemotron-3-nano-30b-a3b:free','nousresearch/hermes-3-llama-3.1-405b:free','nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free','nvidia/nemotron-3-nano-30b-a3b:free','nvidia/nemotron-super-49b-v1:free',
     'nvidia/nemotron-3.5-content-safety:free' // content-safety model — not suitable as chat model
   ];
   if (savedOrModel && _deadModels.includes(savedOrModel)) {
@@ -14429,12 +14429,12 @@ async function claude(prompt, sys, overrideModel) {
     if (!key) return '⚠ No OpenRouter API key. Go to Settings → AI Provider → add your free key from openrouter.ai';
     // Use a stable HTTPS referer — file:// URLs cause OpenRouter to reject the request
     const _ref = (location.protocol === 'http:' || location.protocol === 'https:') ? location.href : 'https://stocksense.local';
-    // If primary model is rate-limited, use a fallback immediately
-    let _activeModel = model;
-    if (_isModelRateLimited(model)) {
-      const _fallbacks = ['meta-llama/llama-3.3-70b-instruct:free','google/gemma-3-12b-it:free','mistralai/mistral-small-3.2-24b-instruct:free','deepseek/deepseek-chat-v3-0324:free'];
-      _activeModel = _fallbacks.find(f => !_isModelRateLimited(f)) || model;
-      ilog && ilog('🔄 Primary model rate-limited, using fallback: ' + _activeModel, 'info');
+    // Strict single-model: use ONLY what the user selected — no silent fallbacks
+    const _activeModel = model;
+    const _shortName = _activeModel.split('/').pop();
+    // Check rate-limit cooldown before calling
+    if (_isModelRateLimited(_activeModel)) {
+      return `⚠ "${_shortName}" is rate-limited. Go to Settings → AI Provider and select a different model, or wait a minute and retry.`;
     }
     try {
       const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -14459,52 +14459,12 @@ async function claude(prompt, sys, overrideModel) {
       try { d = JSON.parse(raw); } catch(e) { return '⚠ OpenRouter returned non-JSON: '+raw.slice(0,200); }
       if(d.error) {
         const errMsg = d.error.message || JSON.stringify(d.error);
-        // Rate limit — switch model and retry once
         const _is429 = r.status===429 || /rate.?limit|free-models-per-min/i.test(errMsg);
         if(_is429) {
           _setModelRateLimit(_activeModel, 60000);
-          // Retry with a fallback model
-          const _fb2 = ['meta-llama/llama-3.3-70b-instruct:free','nvidia/nemotron-3-ultra-550b-a55b:free','google/gemma-3-12b-it:free','mistralai/mistral-small-3.2-24b-instruct:free','deepseek/deepseek-chat-v3-0324:free','z-ai/glm-4.5-air:free'].find(f => f !== _activeModel && !_isModelRateLimited(f));
-          if (_fb2) {
-            ilog && ilog('⚡ Rate limit on "'+_activeModel+'", switching to "'+_fb2+'"', 'info');
-            try {
-              const r4 = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro'},body:JSON.stringify({model:_fb2,max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),signal:AbortSignal.timeout(60000)});
-              const d4 = await r4.json();
-              if(!d4.error) {
-                window._lastClaudeModel = _fb2;
-                const _m4=d4.choices?.[0]?.message;
-                let c4 = (_m4?.content||_m4?.reasoning||'').replace(/<think>[\s\S]*?<\/think>/gi,'').trim();
-                return c4 || 'Analysis unavailable.';
-              }
-            } catch(e4) {}
-          }
-          return '⚠ OpenRouter rate limit reached. You\'re on the free tier (~20 req/min). Wait 60 seconds and try again. The app will automatically restore your primary model.';
+          return `⚠ "${_shortName}" is rate-limited. Go to Settings → AI Provider and select a different model, or wait a minute and retry.`;
         }
-        // Any non-rate-limit error — try fallback models
-        if(true) {
-          // Auto-retry with fallback free models
-          const fallbacks = ['meta-llama/llama-3.3-70b-instruct:free','google/gemma-3-12b-it:free','mistralai/mistral-small-3.2-24b-instruct:free','deepseek/deepseek-chat-v3-0324:free'];
-          for(const fb of fallbacks) {
-            if(fb === _activeModel) continue;
-            ilog && ilog('⚠ Model "'+_activeModel+'" unavailable, retrying with '+fb+'...','warn');
-            try {
-              const r2 = await fetch('https://openrouter.ai/api/v1/chat/completions',{
-                method:'POST',
-                headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':_ref,'X-Title':'StockSense Pro'},
-                body:JSON.stringify({model:fb,max_tokens:2048,temperature:0.7,messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]}),
-                signal: AbortSignal.timeout(60000)
-              });
-              const d2 = await r2.json();
-              if(!d2.error) {
-                window._lastClaudeModel = fb;
-                const _m2=d2.choices?.[0]?.message;
-                return (_m2?.content||_m2?.reasoning||'').replace(/<think>[\s\S]*?<\/think>/gi,'').trim() || 'Analysis unavailable.';
-              }
-            } catch(e2) { /* try next */ }
-          }
-          return '⚠ All AI models are temporarily unavailable on OpenRouter. Please try again in a few minutes.';
-        }
-        return '⚠ OpenRouter error ['+r.status+']: '+errMsg;
+        return `⚠ "${_shortName}" error [${r.status}]: ${errMsg.slice(0,120)}`;
       }
       const _m = d.choices?.[0]?.message;
       let content = (_m?.content || _m?.reasoning || '');
@@ -14580,82 +14540,65 @@ async function claudeJSON(prompt, sys) {
     'z-ai/glm-4.5-air:free',                  // "glm" triggers 90s reasoning timeout
     'nvidia/nemotron-3.5-content-safety:free'  // content-safety classifier, not a chat model
   ];
-  const FAST_MODELS = [
-    _userModel,
-    // New models added
-    'nex-agi/nex-n2-pro:free',
-    'qwen/qwen3-coder:free',
-    'google/gemma-4-26b-a4b-it:free',
-    // Reliable fallbacks
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'google/gemma-3-12b-it:free',
-    'mistralai/mistral-small-3.2-24b-instruct:free',
-    'deepseek/deepseek-chat-v3-0324:free',
-  ].filter((m, i, a) => a.indexOf(m) === i && !_slowModelsForJSON.includes(m)); // deduplicate, exclude slow models
-  let _rlCount = 0; // tracks consecutive 429s — drives backoff
-  for (const model of FAST_MODELS) {
-    // Skip models that are in per-model rate-limit cooldown
-    if (_isModelRateLimited(model)) {
-      ilog && ilog('⏭ Skipping rate-limited model: '+model, 'info');
-      continue;
-    }
-    try {
-      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + key,
-          'HTTP-Referer': _ref,
-          'X-Title': 'StockSense Pro'
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 1024,
-          temperature: 0.3,
-          messages: [{ role: 'system', content: sysMsg }, { role: 'user', content: prompt }]
-        }),
-        signal: AbortSignal.timeout(30000)
-      });
-      const d = await r.json();
-      if (d.error) {
-        const _errMsg = d.error.message || '';
-        const _is429 = r.status === 429 || d.error.code === 429
-          || _errMsg.includes('429') || /rate.?limit/i.test(_errMsg);
-        if (_is429) {
-          _rlCount++;
-          _setModelRateLimit(model, 60000); // track per-model, restore after 60s
-          const _wait = Math.min(_rlCount * 1000, 3000); // brief wait, then try next
-          ilog && ilog(`⚠ claudeJSON: "${model}" rate-limited (cooldown 60s), trying next…`, 'warn');
-          await new Promise(res => setTimeout(res, _wait));
-        } else {
-          ilog && ilog('⚠ claudeJSON: "'+model+'" failed ('+_errMsg.slice(0,40)+'), trying next...', 'warn');
-        }
-        continue;
-      }
-      _rlCount = 0; // successful response — reset backoff counter
-      const _msg = d.choices?.[0]?.message;
-      const content = _msg?.content || _msg?.reasoning || '';
-      const finishReason = d.choices?.[0]?.finish_reason;
-      // Skip if empty, truncated (any length-limited finish), or clearly too short to be valid JSON
-      if (!content || content.length < 50 || finishReason === 'length') {
-        ilog && ilog('⚠ claudeJSON: "'+model+'" returned empty/truncated (len='+content?.length+', finish='+finishReason+'), trying next...', 'warn');
-        continue;
-      }
-      ilog && ilog('✅ claudeJSON used model: ' + model, 'info');
-      window._lastClaudeJSONModel = model; // expose for watermark
-      return content;
-    } catch(e) {
-      // Timeout or network error — try next model
-      ilog && ilog('⚠ claudeJSON: "'+model+'" error ('+e.message.slice(0,40)+'), trying next...', 'warn');
-      continue;
-    }
+  // Strict single-model: use ONLY what the user selected in Settings — no silent fallbacks
+  const FAST_MODELS = [_userModel].filter(m => !_slowModelsForJSON.includes(m));
+  // If user chose a slow model (e.g. Nemotron Ultra), still try it — just with the standard call
+  const _useSlowModel = _slowModelsForJSON.includes(_userModel);
+  // Strict single-model: use exactly the model the user selected — no silent fallbacks
+  const _activeModel = _useSlowModel ? _userModel : (FAST_MODELS[0] || _userModel);
+  // Check per-model rate-limit cooldown
+  if (_isModelRateLimited(_activeModel)) {
+    const _shortName = _activeModel.split('/').pop();
+    ilog && ilog(`⚠ claudeJSON: "${_activeModel}" is rate-limited. Change model in Settings.`, 'warn');
+    return `⚠ "${_shortName}" is rate-limited. Go to Settings → AI Provider and select a different model, or wait a minute and retry.`;
   }
-  // All models failed — cache for 5 min, fall back to configured model
-  window[_cacheKey] = true;
-  window[_cacheKey + '_ts'] = Date.now();
-  ilog && ilog('⚠ All AI models unavailable (rate-limited or fetch aborted). Try: Settings → AI Provider → select a different model.', 'warn');
-  // Return a user-friendly string so callers can surface it instead of a raw error
-  return '⚠ All AI models temporarily unavailable. Go to Settings → AI Provider to select a different model, or wait a few minutes and retry.';
+  try {
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + key,
+        'HTTP-Referer': _ref,
+        'X-Title': 'StockSense Pro'
+      },
+      body: JSON.stringify({
+        model: _activeModel,
+        max_tokens: 1024,
+        temperature: 0.3,
+        messages: [{ role: 'system', content: sysMsg }, { role: 'user', content: prompt }]
+      }),
+      signal: AbortSignal.timeout(30000)
+    });
+    const d = await r.json();
+    if (d.error) {
+      const _errMsg = d.error.message || '';
+      const _shortName = _activeModel.split('/').pop();
+      const _is429 = r.status === 429 || d.error.code === 429
+        || _errMsg.includes('429') || /rate.?limit/i.test(_errMsg);
+      if (_is429) {
+        _setModelRateLimit(_activeModel, 60000);
+        ilog && ilog(`⚠ claudeJSON: "${_activeModel}" rate-limited.`, 'warn');
+        return `⚠ "${_shortName}" is rate-limited. Go to Settings → AI Provider and select a different model, or wait a minute and retry.`;
+      }
+      ilog && ilog(`⚠ claudeJSON: "${_activeModel}" failed — ${_errMsg.slice(0,80)}`, 'warn');
+      return `⚠ "${_shortName}" returned an error: ${_errMsg.slice(0,120)}`;
+    }
+    const _msg = d.choices?.[0]?.message;
+    const content = _msg?.content || _msg?.reasoning || '';
+    const finishReason = d.choices?.[0]?.finish_reason;
+    if (!content || content.length < 10 || finishReason === 'length') {
+      const _shortName = _activeModel.split('/').pop();
+      ilog && ilog(`⚠ claudeJSON: "${_activeModel}" returned empty/truncated response.`, 'warn');
+      return `⚠ "${_shortName}" returned an empty response. Try a different model in Settings → AI Provider.`;
+    }
+    ilog && ilog('✅ claudeJSON used model: ' + _activeModel, 'info');
+    window._lastClaudeJSONModel = _activeModel;
+    return content;
+  } catch(e) {
+    const _shortName = _activeModel.split('/').pop();
+    ilog && ilog(`⚠ claudeJSON: "${_activeModel}" error — ${e.message}`, 'warn');
+    return `⚠ "${_shortName}" timed out or failed to respond. Try a different model in Settings → AI Provider.`;
+  }
 }
 
 // ═══════════════════════════════════════════════════
