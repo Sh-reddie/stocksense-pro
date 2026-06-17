@@ -14478,7 +14478,11 @@ async function claude(prompt, sys, overrideModel) {
       }
       window._lastClaudeModel = _activeModel;
       return content || 'Analysis unavailable.';
-    } catch(e){return 'OpenRouter error: '+e.message;}
+    } catch(e){
+      const _isTimeout = e.name==='TimeoutError'||e.name==='AbortError'||/timeout|aborted/i.test(e.message);
+      if (_isTimeout) return `⚠ "${_shortName}" timed out (60s limit on free tier). Go to Settings → AI Provider and select a faster model (e.g. Llama 3.3 70B or Gemma 4 26B).`;
+      return `⚠ "${_shortName}" failed: ${e.message}`;
+    }
   } else {
     const key = localStorage.getItem('apiKey')||'';
     if(!key) return '⚠ No Anthropic API key. Go to Settings → add your key from console.anthropic.com';
