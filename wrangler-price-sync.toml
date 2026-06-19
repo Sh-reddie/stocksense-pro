@@ -1,8 +1,34 @@
+# StockSense — Telegram bot + price-sync Worker
+# Deploy:  npx wrangler deploy -c wrangler-price-sync.toml
 name = "stocksense-price-sync"
-main = "price-sync-v10.js"
-compatibility_date = "2024-01-01"
+main = "price-sync-v11.js"
+compatibility_date = "2025-06-01"
 account_id = "41c97ea0c974f951982f87a7bfa4a767"
 
 [[kv_namespaces]]
 binding = "STOCKSENSE_KV"
 id = "fb8e2b5213a948618ffd4862921e9966"
+
+# ── Observability: turn on Workers Logs so cron failures / rate-limits are visible ──
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# ── Cron triggers (UTC) — MUST match the strings in scheduled() exactly ──
+# The scheduled() handler dispatches by exact cron string:
+#   "25 3 * * 1-5" → morning brief (8:55 AM IST); Mondays also weekly digest
+#   "5 10 * * 1-5" → evening wrap   (3:35 PM IST)
+#   any other cron → price sync + alert checks
+# These mirror the 3 cron triggers currently live on the deployed worker.
+[triggers]
+crons = [
+  "25 3 * * 1-5",      # 08:55 IST  morning brief
+  "5 10 * * 1-5",      # 15:35 IST  evening wrap
+  "*/15 3-10 * * 1-5"  # 08:30-16:29 IST  price sync + alerts every 15 min
+]
+# NOTE (day-of-week): Cloudflare's UI humanizes "1-5" as "Sun–Thu" and shows the
+# next run on a Sunday. Verify actual run-days before relying on weekend silence;
+# if it truly fires Sun–Thu, switch DOW to "2-6" (and update scheduled() strings).
+
+# Credentials are read at runtime from KV key `portfolio` -> cfg.{tgToken,tgChatId,orKey,orModel}
+# (saved from the StockSense web app settings). No wrangler secrets required.
