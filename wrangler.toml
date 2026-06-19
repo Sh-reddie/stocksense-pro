@@ -1,0 +1,35 @@
+# StockSense Pro — Cloudflare Workers config
+# Run `wrangler deploy` to deploy
+
+name = "stocksense-pro"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# ── Static assets ────────────────────────────────────────────
+# IMPORTANT: Cloudflare serves "index.html" at the root URL.
+# Make sure your latest HTML file is ALSO saved as "index.html" in this folder.
+# (The deploy script below does this automatically.)
+[assets]
+directory = "./"
+not_found_handling = "single-page-application"
+
+# ── KV Namespace (free storage) ──────────────────────────────
+# Step 1: Run this command to create the namespace:
+#   npx wrangler kv:namespace create STOCKSENSE_KV
+# Step 2: Copy the `id` from the output and paste it below.
+[[kv_namespaces]]
+binding = "STOCKSENSE_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# ── D1 Database (free SQLite — per-user data isolation) ──────
+# Step 1: Create the database (one time):
+#   npx wrangler d1 create stocksense-db
+# Step 2: Copy the `database_id` from output and paste below.
+# Step 3: Apply schema:
+#   npx wrangler d1 execute stocksense-db --file=migrations/0001_schema.sql --remote
+# Step 4: Add D1 binding in Pages → Settings → Functions → D1 database bindings
+#         Name: DB  |  Database: stocksense-db
+[[d1_databases]]
+binding = "DB"
+database_name = "stocksense-db"
+database_id = "62b52781-d3de-43ab-bc5d-5ba38d37c978"
