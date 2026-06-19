@@ -26053,6 +26053,74 @@ const PROFS = {
     this.renderCards();
   },
 
+  _deleteProfileWithPIN(id, prof) {
+    const hasPIN = !!localStorage.getItem(this._pinKey(id));
+    const _doDelete = () => {
+      localStorage.removeItem(this._pinKey(id));
+      localStorage.removeItem(this._saltKey(id));
+      localStorage.removeItem(this._rcvKey(id));
+      this.saveAll(this.getAll().filter(p => p.id !== id));
+      this.renderCards();
+      toast('🗑 Profile "' + prof.name + '" deleted.', 'info');
+    };
+    if (!hasPIN) {
+      // No PIN set — just confirm
+      if (confirm('Delete "' + prof.name + '"? This cannot be undone.')) _doDelete();
+      return;
+    }
+    // PIN set — require verification
+    const overlay = document.createElement('div');
+    overlay.id = 'prof-del-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:20001;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.78);backdrop-filter:blur(6px)';
+    overlay.innerHTML = `
+      <div style="background:var(--s1);border:1px solid var(--sell);border-radius:18px;padding:24px 22px;width:300px;max-width:92vw;box-shadow:0 24px 60px rgba(0,0,0,.5)">
+        <div style="font-size:17px;font-weight:700;color:var(--sell);margin-bottom:6px">🗑 Delete Profile</div>
+        <div style="font-size:13px;color:var(--t3);margin-bottom:18px">Enter the PIN for <b style="color:var(--t1)">${prof.emoji} ${prof.name}</b> to confirm deletion.</div>
+
+        <div style="font-size:11px;color:var(--t4);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">PIN</div>
+        <input id="prof-del-pin" class="fi" type="password" inputmode="numeric" maxlength="8" placeholder="Enter PIN"
+          style="width:100%;box-sizing:border-box;margin-bottom:8px;letter-spacing:4px;font-size:18px"
+          onkeydown="if(event.key==='Enter')PROFS._confirmDelete('${id}')">
+        <div id="prof-del-err" style="color:var(--sell);font-size:12px;min-height:18px;margin-bottom:14px"></div>
+
+        <div style="display:flex;gap:8px">
+          <button class="btn" onclick="document.getElementById('prof-del-modal')?.remove()" style="flex:1">Cancel</button>
+          <button class="btn" onclick="PROFS._confirmDelete('${id}')" style="flex:2;background:var(--sell);color:#fff;border-color:var(--sell)">Delete</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    this._pendingDelete = { id, prof, doDelete: _doDelete };
+    setTimeout(() => document.getElementById('prof-del-pin')?.focus(), 80);
+  },
+
+  async _confirmDelete(id) {
+    const pinEl = document.getElementById('prof-del-pin');
+    const errEl = document.getElementById('prof-del-err');
+    const pin = pinEl?.value || '';
+    if (!pin) { if (errEl) errEl.textContent = 'Please enter your PIN.'; return; }
+    // Hash and verify against this profile's stored hash
+    const storedHash = localStorage.getItem(this._pinKey(id));
+    const salt = localStorage.getItem(this._saltKey(id)) || '';
+    let hash;
+    try {
+      const enc = new TextEncoder().encode('stocksense:' + salt + ':' + pin);
+      const buf = await crypto.subtle.digest('SHA-256', enc);
+      hash = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    } catch(e) {
+      let h = 5381, s = 'stocksense:' + salt + ':' + pin;
+      for (let i = 0; i < s.length; i++) h = ((h << 5) + h) ^ s.charCodeAt(i);
+      hash = (h >>> 0).toString(16).padStart(8,'0');
+    }
+    if (hash !== storedHash) {
+      if (errEl) errEl.textContent = 'Incorrect PIN. Try again.';
+      if (pinEl) { pinEl.value = ''; pinEl.focus(); }
+      return;
+    }
+    document.getElementById('prof-del-modal')?.remove();
+    if (this._pendingDelete?.doDelete) this._pendingDelete.doDelete();
+    this._pendingDelete = null;
+  },
+
   _ctxMenu(id) {
     const prof = this.getAll().find(p => p.id === id);
     if (!prof) return;
@@ -26081,10 +26149,7 @@ const PROFS = {
         }
       }],
       !isMain && ['Delete profile', () => {
-        if (confirm('Delete "' + prof.name + '"? PIN and settings will be removed.')) {
-          localStorage.removeItem(this._pinKey(id)); localStorage.removeItem(this._saltKey(id)); localStorage.removeItem(this._rcvKey(id));
-          this.saveAll(this.getAll().filter(p=>p.id!==id)); this.renderCards();
-        }
+        this._deleteProfileWithPIN(id, prof);
       }],
     ].filter(Boolean);
     const choice = prompt(menu.map((m,i)=>(i+1)+'. '+m[0]).join('\n') + '\n\nEnter number (or cancel):');
