@@ -26050,7 +26050,18 @@ const PROFS = {
     ps.push({ id, name, emoji: this._newEmoji || '👤', color: this._newColor || '#4f8ef7', useOwnKey: false });
     this.saveAll(ps);
     this._closeCreateModal();
-    this.renderCards();
+    // Auto-select new profile and immediately show PIN setup screen
+    this.setActiveId(id);
+    this.hideSelector();
+    sessionStorage.removeItem('ss_unlocked');
+    LK._profileId = id;
+    LK._buf = '';
+    LK._setupPIN = '';
+    LK._mode = 'setup1';
+    document.body.classList.add('app-locked');
+    const ls = document.getElementById('lock-screen');
+    if (ls) { ls.style.display = 'flex'; requestAnimationFrame(() => ls.classList.remove('hidden')); }
+    LK.render();
   },
 
   _deleteProfileWithPIN(id, prof) {
@@ -26170,6 +26181,10 @@ const PROFS = {
     if (!activeId) {
       this.showSelector();
     } else {
+      // On every page load, clear the session unlock flag so the user must
+      // re-enter their PIN. The 30-min inactivity timer handles auto-lock
+      // within a session; a full page reload should always require re-auth.
+      sessionStorage.removeItem('ss_unlocked');
       LK._profileId = activeId;
       LK.init();
     }
@@ -26266,10 +26281,13 @@ const LK = {
 
   _renderSetup(isConfirm) {
     const card = document.getElementById('lk-card');
+    const pid = this._pid();
+    const prof = (PROFS.getAll().find(p=>p.id===pid)) || { name:'My Portfolio', emoji:'🔐' };
+    const isNew = !isConfirm && !localStorage.getItem(this._pinKey());
     card.innerHTML = `
-      <div class="lk-logo">🔐</div>
-      <div class="lk-title">Secure Your App</div>
-      <div class="lk-subtitle">${isConfirm ? 'Confirm your PIN' : 'Create a 4-digit PIN<br>to protect your portfolio'}</div>
+      <div class="lk-logo">${isNew ? prof.emoji : '🔐'}</div>
+      <div class="lk-title">${isNew ? 'Set PIN for ' + prof.name : 'Secure Your App'}</div>
+      <div class="lk-subtitle">${isConfirm ? 'Confirm your PIN' : 'Create a 4-digit PIN to protect this profile'}</div>
       <div class="lk-pin-dots" id="lk-dots">
         <div class="lk-pd" id="lkd0"></div>
         <div class="lk-pd" id="lkd1"></div>
@@ -26277,7 +26295,8 @@ const LK = {
         <div class="lk-pd" id="lkd3"></div>
       </div>
       <div class="lk-err" id="lk-err"></div>
-      ${this._numpadHTML()}`;
+      ${this._numpadHTML()}
+      ${isNew ? `<div class="lk-actions"><button class="lk-link" onclick="LK._skipPINSetup()" style="margin-top:6px">Skip — set PIN later</button></div>` : ''}`;
   },
 
   _renderPhrase() {
@@ -26443,6 +26462,11 @@ const LK = {
     localStorage.clear();
     sessionStorage.clear();
     location.reload();
+  },
+
+  _skipPINSetup() {
+    // User chose to skip PIN setup for new profile — unlock directly
+    this._unlock();
   },
 
   _startPINChange() {
