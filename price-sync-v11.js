@@ -638,6 +638,9 @@ async function sendEveningWrap(env){
   const _pdp=(cur-dayPnl)>0?dayPnl/(cur-dayPnl)*100:0; const _np=(idx&&idx.nifty)?idx.nifty.chgP:null;
   if(_np!=null){const _a=_pdp-_np; msg+='\ud83d\udcca <b>vs Nifty:</b> you '+(_pdp>=0?'+':'')+_pdp.toFixed(1)+'% vs Nifty '+(_np>=0?'+':'')+_np.toFixed(1)+'% ('+(_a>=0?'+':'')+_a.toFixed(1)+' pts)\n';}
   msg+='<b>Portfolio:</b> ₹'+Math.round(cur).toLocaleString('en-IN')+' ('+(pnlPct>=0?'+':'')+pnlPct.toFixed(1)+'%)';
+  try{let _b=[];const _r=await env.STOCKSENSE_KV.get('portfolioBackups');if(_r)_b=JSON.parse(_r);_b.push({ts:Date.now(),holdings:pf.holdings||[],realised:pf.realised||[]});if(_b.length>7)_b=_b.slice(-7);await env.STOCKSENSE_KV.put('portfolioBackups',JSON.stringify(_b));}catch(e){}
+  let _pcts=0;try{const _r2=await env.STOCKSENSE_KV.get('priceCache');if(_r2)_pcts=JSON.parse(_r2).ts||0;}catch(e){}
+  if(_pcts){const _ag=Math.round((Date.now()-_pcts)/60000);const _tt=new Date(_pcts+5.5*3600000).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit'});msg+='\n--------------------\n\ud83e\ude7a Last sync '+_tt+' IST'+(_ag>45?' \u26a0\ufe0f '+_ag+'m ago — check sync':'')+' \u00b7 \ud83d\udcbe backup saved';}
   await tgSend(token,chatId,msg);console.log('evening wrap sent');
 }
 
@@ -1225,6 +1228,8 @@ async function handleTelegram(request,env){
   else if(cmd==='/sector')                      await sendSector(env,chatId,token);
   else if(cmd==='/rebalance'||cmd==='/rb')      await sendRebalance(env,chatId,token);
   else if(cmd==='/discipline'||cmd==='/checkup') await sendDiscipline(env,chatId,token);
+  else if(cmd==='/health'||cmd==='/status')     await sendHealth(env,chatId,token);
+  else if(cmd==='/backups')                     await sendBackups(env,chatId,token);
   // ── v11 AI commands ──────────────────────────────────────────────────────
   else if(cmd==='/ask'){
     // /ask TEXT — explicit AI query
@@ -1268,6 +1273,8 @@ async function handleTelegram(request,env){
       +'/sector — sector allocation\n'
       +'/rebalance (/rb) — trim to your caps\n'
       +'/discipline — stop/target/cap audit\n'
+      +'/health — status + last sync\n'
+      +'/backups — saved snapshots\n'
       +'/watchlist (/wl) — watchlist\n\n'
       +'📋 <b>Digests</b>\n'
       +'/brief — morning brief\n'
@@ -1362,6 +1369,36 @@ async function sendDiscipline(env,chatId,token){
     m+='⚖️ <b>Over caps:</b> '+[...d.overStock.map(x=>x+' (stock)'),...d.overSector.map(x=>x+' (sector)')].join(', ')+' → /rebalance\n';
   } else { m+='✅ Within your '+d.maxStock+'%/'+d.maxSector+'% caps\n'; }
   m+='--------------------\n📝 Log a one-line thesis + exit for each name via /note SYM reason &amp; exit.\nPre-commit stop, target &amp; size before buying — then just approve the alerts.';
+  await tgSend(token,chatId,m);
+}
+
+async function sendHealth(env,chatId,token){
+  let pc=null;try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)pc=JSON.parse(raw);}catch(e){}
+  let pf=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
+  const cfg=(pf&&pf.cfg)||{};
+  const ist=new Date(Date.now()+5.5*3600000);
+  let m='🩺 <b>Health</b>\n';
+  if(pc&&pc.ts){
+    const ageMin=Math.round((Date.now()-pc.ts)/60000);
+    const t=new Date(pc.ts+5.5*3600000).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    const nP=pc.prices?Object.keys(pc.prices).length:0;
+    m+='Last sync: '+t+' IST ('+ageMin+'m ago)\n'+nP+' symbols cached\n';
+    const h=ist.getUTCHours()+ist.getUTCMinutes()/60;const dow=ist.getUTCDay();
+    const mkt=(dow>=1&&dow<=5)&&(h>=9.25&&h<=15.6);
+    m+=(mkt&&ageMin>30)?'🔴 Stale during market hours — sync cron may be down.\n':'🟢 Healthy\n';
+  } else { m+='⚠️ No price cache found.\n'; }
+  m+='Holdings: '+((pf&&pf.holdings)?pf.holdings.length:0)+'\n';
+  m+='AI model: '+(cfg.orModel||'—')+'\n';
+  m+='Token: '+(env.TELEGRAM_TOKEN?'Workers Secret 🔐':'KV fallback');
+  await tgSend(token,chatId,m);
+}
+
+async function sendBackups(env,chatId,token){
+  let b=[];try{const raw=await env.STOCKSENSE_KV.get('portfolioBackups');if(raw)b=JSON.parse(raw);}catch(e){}
+  if(!b.length){await tgSend(token,chatId,'💾 No backups yet — first snapshot is taken at the next evening wrap (~3:35 PM IST).');return;}
+  let m='💾 <b>Backups</b> (last '+b.length+')\n';
+  for(const x of b.slice().reverse()){const t=new Date(x.ts+5.5*3600000).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});m+=t+' IST · '+((x.holdings||[]).length)+' holdings\n';}
+  m+='\nStored in KV (portfolioBackups). Ask to restore one if ever needed.';
   await tgSend(token,chatId,m);
 }
 
