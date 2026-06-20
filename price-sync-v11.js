@@ -747,6 +747,7 @@ async function checkAndSendAlerts(env,prices,prevPrices){
   // ── Concentration breach (enforce your maxStockPct / maxSectorPct) ──
   {
     const maxStock=+cfg.maxStockPct||0, maxSector=+cfg.maxSectorPct||0;
+    const ncFire=k=>!cool[k];
     if((maxStock||maxSector)&&cfg.concAlerts!==false){
       const day=new Date().toDateString();
       let total=0; const pos=[];
@@ -760,7 +761,7 @@ async function checkAndSendAlerts(env,prices,prevPrices){
       if(total>0){
         if(maxStock)for(const p of pos){
           const wt=p.val/total*100;
-          if(wt>maxStock&&canFire('conc-stk|'+p.sym+'|'+day)){
+          if(wt>maxStock&&ncFire('conc-stk|'+p.sym+'|'+day)){
             msgs.push('\u26a0\ufe0f <b>Concentration: '+p.sym+'</b>\n'+wt.toFixed(0)+'% of portfolio \u2014 over your '+maxStock+'% per-stock cap.\nConsider trimming toward your limit.');
             fired('conc-stk|'+p.sym+'|'+day);
           }
@@ -769,7 +770,7 @@ async function checkAndSendAlerts(env,prices,prevPrices){
           const secMap={}; for(const p of pos)secMap[p.sec]=(secMap[p.sec]||0)+p.val;
           for(const sec of Object.keys(secMap)){
             const wt=secMap[sec]/total*100;
-            if(wt>maxSector&&canFire('conc-sec|'+sec+'|'+day)){
+            if(wt>maxSector&&ncFire('conc-sec|'+sec+'|'+day)){
               const names=pos.filter(p=>p.sec===sec).sort((a,b)=>b.val-a.val).slice(0,4).map(p=>p.sym).join(', ');
               msgs.push('\u26a0\ufe0f <b>Concentration: '+sec+' '+wt.toFixed(0)+'%</b>\nOver your '+maxSector+'% sector cap. Top: '+names+'.\nConsider rebalancing.');
               fired('conc-sec|'+sec+'|'+day);
