@@ -744,6 +744,41 @@ async function checkAndSendAlerts(env,prices,prevPrices){
       fired(ck);
     }
   }
+  // ── Concentration breach (enforce your maxStockPct / maxSectorPct) ──
+  {
+    const maxStock=+cfg.maxStockPct||0, maxSector=+cfg.maxSectorPct||0;
+    if((maxStock||maxSector)&&cfg.concAlerts!==false){
+      const day=new Date().toDateString();
+      let total=0; const pos=[];
+      for(const h of(portfolio.holdings||[])){
+        if(!h.symbol||!h.qty)continue;
+        const c=prices[h.symbol+'|'+(h.exchange||'NSE')];
+        const ltp=(c&&c.ltp)||h.ltp||h.avgPrice||0;
+        const val=h.qty*ltp; if(val<=0)continue;
+        total+=val; pos.push({sym:h.symbol,sec:h.sector||'Other',val});
+      }
+      if(total>0){
+        if(maxStock)for(const p of pos){
+          const wt=p.val/total*100;
+          if(wt>maxStock&&canFire('conc-stk|'+p.sym+'|'+day)){
+            msgs.push('\u26a0\ufe0f <b>Concentration: '+p.sym+'</b>\n'+wt.toFixed(0)+'% of portfolio \u2014 over your '+maxStock+'% per-stock cap.\nConsider trimming toward your limit.');
+            fired('conc-stk|'+p.sym+'|'+day);
+          }
+        }
+        if(maxSector){
+          const secMap={}; for(const p of pos)secMap[p.sec]=(secMap[p.sec]||0)+p.val;
+          for(const sec of Object.keys(secMap)){
+            const wt=secMap[sec]/total*100;
+            if(wt>maxSector&&canFire('conc-sec|'+sec+'|'+day)){
+              const names=pos.filter(p=>p.sec===sec).sort((a,b)=>b.val-a.val).slice(0,4).map(p=>p.sym).join(', ');
+              msgs.push('\u26a0\ufe0f <b>Concentration: '+sec+' '+wt.toFixed(0)+'%</b>\nOver your '+maxSector+'% sector cap. Top: '+names+'.\nConsider rebalancing.');
+              fired('conc-sec|'+sec+'|'+day);
+            }
+          }
+        }
+      }
+    }
+  }
   for(const m of msgs){await tgSend(token,chatId,m);await new Promise(r=>setTimeout(r,300));}
   if(msgs.length)console.log('sent',msgs.length,'alert(s) to Telegram');
   if(portfolioDirty){await env.STOCKSENSE_KV.put('portfolio',JSON.stringify(portfolio));console.log('updated trailSlHigh');}
