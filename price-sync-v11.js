@@ -665,6 +665,8 @@ async function sendWeeklyDigest(env,prices){
   if(winners.length){msg+='🏆 <b>Winners:</b>\n';for(const r of winners)msg+=r.sym+' +'+r.wkChg.toFixed(1)+'%\n';}
   if(laggards.length){msg+='⚠️ <b>Laggards:</b>\n';for(const r of laggards)msg+=r.sym+' '+r.wkChg.toFixed(1)+'%\n';}
   msg+='--------------------\n<b>Week P&amp;L:</b> '+(wkPnl>=0?'+':'')+'₹'+Math.abs(Math.round(wkPnl)).toLocaleString('en-IN')+' ('+(wkPct>=0?'+':'')+wkPct.toFixed(1)+'%)';
+  const _d=disciplineScan(pf,prices);const _g=[];if(_d.noStop.length)_g.push(_d.noStop.length+' no-stop');if(_d.noTarget.length)_g.push(_d.noTarget.length+' no-target');if(_d.overStock.length||_d.overSector.length)_g.push('over caps');
+  msg+='\n--------------------\n\ud83d\uddd3\ufe0f <b>Checkpoint:</b> '+(_g.length?_g.join(' \u00b7 '):'all armed & in-cap \u2705')+'\nRun /discipline \u00b7 /rebalance to prune & rebalance.';
   await tgSend(token,chatId,msg);console.log('weekly digest sent');
 }
 
@@ -1222,6 +1224,7 @@ async function handleTelegram(request,env){
   else if(cmd==='/sell')                        await sellHolding(env,chatId,token,args);
   else if(cmd==='/sector')                      await sendSector(env,chatId,token);
   else if(cmd==='/rebalance'||cmd==='/rb')      await sendRebalance(env,chatId,token);
+  else if(cmd==='/discipline'||cmd==='/checkup') await sendDiscipline(env,chatId,token);
   // ── v11 AI commands ──────────────────────────────────────────────────────
   else if(cmd==='/ask'){
     // /ask TEXT — explicit AI query
@@ -1264,6 +1267,7 @@ async function handleTelegram(request,env){
       +'/target SYM T1 [T2] — set targets\n'
       +'/sector — sector allocation\n'
       +'/rebalance (/rb) — trim to your caps\n'
+      +'/discipline — stop/target/cap audit\n'
       +'/watchlist (/wl) — watchlist\n\n'
       +'📋 <b>Digests</b>\n'
       +'/brief — morning brief\n'
@@ -1323,6 +1327,41 @@ async function sendRebalance(env,chatId,token){
   if(overStk.length){m+='--------------------\n🟠 <b>Stock over cap:</b>\n';for(const x of overStk)m+=x.s+' '+x.pct.toFixed(0)+'% → '+maxStock+'% (trim '+inr(x.trim)+')\n';}
   if(tail.length){m+='--------------------\n🧹 <b>Tail (under '+minPos+'%):</b> '+tail.length+' = '+inr(tailVal)+'\n'+tail.slice(0,10).map(r=>r.s).join(', ')+(tail.length>10?'…':'')+'\n<i>too small to move the needle — consolidate</i>\n';}
   m+='--------------------\n💰 <b>Frees ~'+inr(freed)+'</b> to redeploy into conviction names or an index sleeve.\nNot advice — your call.';
+  await tgSend(token,chatId,m);
+}
+
+function disciplineScan(pf,prices){
+  const cfg=pf.cfg||{};const maxStock=+cfg.maxStockPct||15,maxSector=+cfg.maxSectorPct||25;
+  let T=0;const rows=[];
+  for(const h of(pf.holdings||[])){
+    if(!h.symbol||!h.qty)continue;
+    const c=prices[h.symbol+'|'+(h.exchange||'NSE')];
+    const ltp=(c&&c.ltp)||h.ltp||h.avgPrice||0;const v=h.qty*ltp;if(v<=0)continue;
+    T+=v;rows.push({s:h.symbol,sec:h.sector||'Other',v,noStop:!h.stopLoss,noTarget:!h.target1});
+  }
+  rows.forEach(r=>r.w=T?r.v/T*100:0);
+  const secM={};rows.forEach(r=>secM[r.sec]=(secM[r.sec]||0)+r.v);
+  const overSector=Object.keys(secM).filter(x=>T&&secM[x]/T*100>maxSector);
+  const overStock=rows.filter(r=>r.w>maxStock).map(r=>r.s);
+  const noStop=rows.filter(r=>r.noStop).map(r=>r.s);
+  const noTarget=rows.filter(r=>r.noTarget).map(r=>r.s);
+  const armed=rows.filter(r=>!r.noStop&&!r.noTarget).length;
+  return {total:rows.length,noStop,noTarget,overStock,overSector,armed,maxStock,maxSector};
+}
+
+async function sendDiscipline(env,chatId,token){
+  let pf=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
+  if(!pf){await tgSend(token,chatId,'No portfolio data.');return;}
+  let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}
+  const d=disciplineScan(pf,prices);
+  const lst=a=>a.slice(0,12).join(', ')+(a.length>12?'…':'');
+  let m='🩺 <b>Discipline Check</b>\n'+d.total+' holdings · '+d.armed+'/'+d.total+' armed (stop + target)\n--------------------\n';
+  m+= d.noStop.length? '🛑 <b>No stop-loss:</b> '+d.noStop.length+'\n'+lst(d.noStop)+'\n' : '✅ Every position has a stop-loss\n';
+  m+= d.noTarget.length? '🎯 <b>No target:</b> '+d.noTarget.length+'\n'+lst(d.noTarget)+'\n' : '✅ Every position has a target\n';
+  if(d.overStock.length||d.overSector.length){
+    m+='⚖️ <b>Over caps:</b> '+[...d.overStock.map(x=>x+' (stock)'),...d.overSector.map(x=>x+' (sector)')].join(', ')+' → /rebalance\n';
+  } else { m+='✅ Within your '+d.maxStock+'%/'+d.maxSector+'% caps\n'; }
+  m+='--------------------\n📝 Log a one-line thesis + exit for each name via /note SYM reason &amp; exit.\nPre-commit stop, target &amp; size before buying — then just approve the alerts.';
   await tgSend(token,chatId,m);
 }
 
