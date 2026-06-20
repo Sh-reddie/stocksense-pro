@@ -1,0 +1,25 @@
+name: Guard index.html
+
+on:
+  push:
+    branches: [main]
+    paths: ['index.html']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify index.html is not truncated
+        run: |
+          BYTES=$(wc -c < index.html)
+          echo "index.html size: $BYTES bytes"
+          if [ "$BYTES" -lt 1000000 ]; then
+            echo "::error::index.html is $BYTES bytes (<1MB) - likely truncated. Expected ~1.9MB."
+            exit 1
+          fi
+          if ! tail -c 64 index.html | grep -q '</html>'; then
+            echo "::error::index.html does not end with closing html tag - likely truncated."
+            exit 1
+          fi
+          echo "OK: index.html looks complete ($BYTES bytes)."
