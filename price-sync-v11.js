@@ -635,6 +635,8 @@ async function sendEveningWrap(env){
   if(gainers.length){msg+='📈 <b>Top Gainers:</b>\n';for(const r of gainers)msg+=r.sym+' +'+r.cp.toFixed(1)+'% ₹'+r.ltp.toFixed(0)+'\n';}
   if(losers.length){msg+='📉 <b>Top Losers:</b>\n';for(const r of losers)msg+=r.sym+' '+r.cp.toFixed(1)+'% ₹'+r.ltp.toFixed(0)+'\n';}
   msg+='--------------------\n<b>Day P&amp;L:</b> '+(dayPnl>=0?'+':'−')+'₹'+Math.abs(Math.round(dayPnl)).toLocaleString('en-IN')+'\n';
+  const _pdp=(cur-dayPnl)>0?dayPnl/(cur-dayPnl)*100:0; const _np=(idx&&idx.nifty)?idx.nifty.chgP:null;
+  if(_np!=null){const _a=_pdp-_np; msg+='\ud83d\udcca <b>vs Nifty:</b> you '+(_pdp>=0?'+':'')+_pdp.toFixed(1)+'% vs Nifty '+(_np>=0?'+':'')+_np.toFixed(1)+'% ('+(_a>=0?'+':'')+_a.toFixed(1)+' pts)\n';}
   msg+='<b>Portfolio:</b> ₹'+Math.round(cur).toLocaleString('en-IN')+' ('+(pnlPct>=0?'+':'')+pnlPct.toFixed(1)+'%)';
   await tgSend(token,chatId,msg);console.log('evening wrap sent');
 }
