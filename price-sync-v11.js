@@ -540,7 +540,7 @@ async function sendSector(env,chatId,token){
 
 async function sendMonthlyDigest(env){
   let pf=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
-  if(!pf)return;const cfg=pf.cfg||{};const token=cfg.tgToken,chatId=cfg.tgChatId;if(!token||!chatId)return;
+  if(!pf)return;const cfg=pf.cfg||{};const token=env.TELEGRAM_TOKEN||cfg.tgToken,chatId=cfg.tgChatId;if(!token||!chatId)return;
   let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}
   const istNow=new Date(Date.now()+5.5*3600000);
   const currentMonth=istNow.getUTCFullYear()+'-'+(istNow.getUTCMonth()+1).toString().padStart(2,'0');
@@ -572,7 +572,7 @@ async function sendMonthlyDigest(env){
 
 async function sendMorningBrief(env){
   let pf=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
-  if(!pf)return;const cfg=pf.cfg||{};const token=cfg.tgToken,chatId=cfg.tgChatId;if(!token||!chatId)return;
+  if(!pf)return;const cfg=pf.cfg||{};const token=env.TELEGRAM_TOKEN||cfg.tgToken,chatId=cfg.tgChatId;if(!token||!chatId)return;
   let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}
   const now=new Date();const istOffset=5.5*3600000;const istNow=new Date(now.getTime()+istOffset);
   const dayStart=Date.UTC(istNow.getUTCFullYear(),istNow.getUTCMonth(),istNow.getUTCDate())-istOffset;
@@ -612,7 +612,7 @@ async function sendMorningBrief(env){
 
 async function sendEveningWrap(env){
   let pf=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
-  if(!pf)return;const cfg=pf.cfg||{};const token=cfg.tgToken,chatId=cfg.tgChatId;if(!token||!chatId)return;
+  if(!pf)return;const cfg=pf.cfg||{};const token=env.TELEGRAM_TOKEN||cfg.tgToken,chatId=cfg.tgChatId;if(!token||!chatId)return;
   let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}
   const idx=await fetchIndexPrices();
   const istNow=new Date(Date.now()+5.5*3600000);
@@ -643,7 +643,7 @@ async function sendEveningWrap(env){
 
 async function sendWeeklyDigest(env,prices){
   let pf=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
-  if(!pf)return;const cfg=pf.cfg||{};const token=cfg.tgToken,chatId=cfg.tgChatId;if(!token||!chatId)return;
+  if(!pf)return;const cfg=pf.cfg||{};const token=env.TELEGRAM_TOKEN||cfg.tgToken,chatId=cfg.tgChatId;if(!token||!chatId)return;
   let baseline=null;try{const raw=await env.STOCKSENSE_KV.get('weeklyBaseline');if(raw)baseline=JSON.parse(raw);}catch(e){}
   await env.STOCKSENSE_KV.put('weeklyBaseline',JSON.stringify({ts:Date.now(),prices}));
   if(!baseline){await tgSend(token,chatId,'📅 <b>Weekly Digest</b>\nFirst Monday — storing baseline for next week\'s digest.');return;}
@@ -673,7 +673,7 @@ async function sendWeeklyDigest(env,prices){
 async function checkAndSendAlerts(env,prices,prevPrices){
   let portfolio=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)portfolio=JSON.parse(raw);}catch(e){return;}
   if(!portfolio)return;
-  const cfg=portfolio.cfg||{};const token=cfg.tgToken,chatId=cfg.tgChatId;
+  const cfg=portfolio.cfg||{};const token=env.TELEGRAM_TOKEN||cfg.tgToken,chatId=cfg.tgChatId;
   if(!token||!chatId){console.log('no tg creds in cfg');return;}
   let cool={};try{const raw=await env.STOCKSENSE_KV.get('alertCooldowns');if(raw)cool=JSON.parse(raw);}catch(e){}
   const now=Date.now();const COOL=3600000;
@@ -1005,7 +1005,7 @@ async function handleChatAgent(msg,env){
 
   // Load creds
   let token=null,orKey=null,orModel=null,pf={holdings:[],watchlist:[],realised:[],cfg:{}};
-  try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw){pf=JSON.parse(raw);token=pf.cfg?.tgToken;orKey=pf.cfg?.orKey;orModel=pf.cfg?.orModel||null;}}catch(e){}
+  try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw){pf=JSON.parse(raw);token=env.TELEGRAM_TOKEN||pf.cfg?.tgToken;orKey=env.OPENROUTER_KEY||pf.cfg?.orKey;orModel=pf.cfg?.orModel||null;}}catch(e){}
   if(!token)return;
 
   // No OpenRouter key → guide user
@@ -1077,7 +1077,7 @@ async function sendAnalyze(env,chatId,token,sym){
   const base=sym.toUpperCase().replace(/\.(NS|BO)$/i,'');
   let pf={holdings:[],watchlist:[]};
   try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw){pf=JSON.parse(raw);}}catch(e){}
-  const orKey=pf.cfg?.orKey;const orModel=pf.cfg?.orModel||null;
+  const orKey=env.OPENROUTER_KEY||pf.cfg?.orKey;const orModel=pf.cfg?.orModel||null;
   if(!orKey){await tgSend(token,chatId,'⚠️ OpenRouter API key not configured. Set it in StockSense Settings → AI Provider.');return;}
 
   // Fetch live price
@@ -1122,7 +1122,7 @@ Keep it under 350 words. Be direct — no disclaimers.`;
 async function sendRecommend(env,chatId,token,args){
   let pf={holdings:[],watchlist:[],cfg:{}};
   try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
-  const orKey=pf.cfg?.orKey;const orModel=pf.cfg?.orModel||null;
+  const orKey=env.OPENROUTER_KEY||pf.cfg?.orKey;const orModel=pf.cfg?.orModel||null;
   if(!orKey){await tgSend(token,chatId,'⚠️ OpenRouter API key not configured. Set it in StockSense Settings → AI Provider.');return;}
 
   await tgSend(token,chatId,'🧠 Generating recommendations... (15-25 sec)');
@@ -1177,7 +1177,7 @@ async function handleCallbackQuery(update,env){
   const cq=update.callback_query;if(!cq)return;
   const chatId=cq.message&&cq.message.chat&&cq.message.chat.id;
   const data=cq.data||'';
-  let token=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)token=(JSON.parse(raw)).cfg?.tgToken;}catch(e){}
+  let token=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)token=env.TELEGRAM_TOKEN||(JSON.parse(raw)).cfg?.tgToken;}catch(e){}
   if(!token||!chatId){await answerCallback(token||'',cq.id,'No token');return;}
   await answerCallback(token,cq.id);
   if(data==='refresh_portfolio')await sendPortfolioSnapshot(env,chatId,token);
@@ -1195,7 +1195,7 @@ async function handleTelegram(request,env){
   if(update.callback_query){await handleCallbackQuery(update,env);return new Response('ok');}
   const msg=update.message||update.edited_message;if(!msg)return new Response('ok');
   const chatId=msg.chat&&msg.chat.id;const text=(msg.text||'').trim();if(!chatId||!text)return new Response('ok');
-  let token=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)token=(JSON.parse(raw)).cfg?.tgToken;}catch(e){}
+  let token=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)token=env.TELEGRAM_TOKEN||(JSON.parse(raw)).cfg?.tgToken;}catch(e){}
   if(!token)return new Response('ok');
 
   const parts=text.split(/\s+/);const cmd=parts[0].toLowerCase().replace(/@.*$/,'');const args=parts.slice(1);
@@ -1298,7 +1298,7 @@ export default{
     // ── Endpoint auth guard (added 2026-06-19): require secret on webhook + trigger URLs ──
     {const _p=url.pathname;
      if(_p==='/telegram'||_p==='/sync'||_p==='/brief'||_p==='/evening'||_p==='/weekly'||_p==='/monthly'){
-       let _sec=null;try{const _r=await env.STOCKSENSE_KV.get('portfolio');const _tok=_r?(JSON.parse(_r).cfg||{}).tgToken:null;
+       let _sec=null;try{const _r=await env.STOCKSENSE_KV.get('portfolio');const _tok=env.TELEGRAM_TOKEN||(_r?(JSON.parse(_r).cfg||{}).tgToken:null);
          if(_tok){const _h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('ss-webhook:'+_tok));_sec=[...new Uint8Array(_h)].map(x=>x.toString(16).padStart(2,'0')).join('');}
        }catch(e){}
        if(_sec){let _ok=true;
