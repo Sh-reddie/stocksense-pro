@@ -1221,6 +1221,7 @@ async function handleTelegram(request,env){
   else if(cmd==='/watchlist'||cmd==='/wl')      await sendWatchlist(env,chatId,token);
   else if(cmd==='/sell')                        await sellHolding(env,chatId,token,args);
   else if(cmd==='/sector')                      await sendSector(env,chatId,token);
+  else if(cmd==='/rebalance'||cmd==='/rb')      await sendRebalance(env,chatId,token);
   // ── v11 AI commands ──────────────────────────────────────────────────────
   else if(cmd==='/ask'){
     // /ask TEXT — explicit AI query
@@ -1262,6 +1263,7 @@ async function handleTelegram(request,env){
       +'/sl SYM PRICE — set stop loss\n'
       +'/target SYM T1 [T2] — set targets\n'
       +'/sector — sector allocation\n'
+      +'/rebalance (/rb) — trim to your caps\n'
       +'/watchlist (/wl) — watchlist\n\n'
       +'📋 <b>Digests</b>\n'
       +'/brief — morning brief\n'
@@ -1288,6 +1290,40 @@ async function handleTelegram(request,env){
   }
 
   return new Response('ok');
+}
+
+async function sendRebalance(env,chatId,token){
+  let pf=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
+  if(!pf){await tgSend(token,chatId,'No portfolio data.');return;}
+  const cfg=pf.cfg||{};
+  const maxStock=+cfg.maxStockPct||15, maxSector=+cfg.maxSectorPct||25, minPos=+cfg.minPosPct||2;
+  let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}
+  let T=0;const rows=[];
+  for(const h of(pf.holdings||[])){
+    if(!h.symbol||!h.qty)continue;
+    const c=prices[h.symbol+'|'+(h.exchange||'NSE')];
+    const ltp=(c&&c.ltp)||h.ltp||h.avgPrice||0;const v=h.qty*ltp;if(v<=0)continue;
+    T+=v;rows.push({s:h.symbol,sec:h.sector||'Other',v});
+  }
+  if(T<=0){await tgSend(token,chatId,'No live prices cached yet — try after a sync.');return;}
+  rows.forEach(r=>r.w=r.v/T*100);rows.sort((a,b)=>b.w-a.w);
+  const secM={};rows.forEach(r=>secM[r.sec]=(secM[r.sec]||0)+r.v);
+  const overSec=Object.entries(secM).map(([x,v])=>({s:x,pct:v/T*100,trim:v-T*maxSector/100})).filter(x=>x.trim>0).sort((a,b)=>b.trim-a.trim);
+  const overStk=rows.filter(r=>r.w>maxStock).map(r=>({s:r.s,pct:r.w,trim:r.v-T*maxStock/100}));
+  const tail=rows.filter(r=>r.w<minPos);const tailVal=tail.reduce((a,b)=>a+b.v,0);
+  const overNames=new Set(overSec.map(x=>x.s));
+  const freed=overSec.reduce((a,b)=>a+b.trim,0)+tail.filter(r=>!overNames.has(r.sec)).reduce((a,b)=>a+b.v,0);
+  const inr=n=>'₹'+Math.round(n).toLocaleString('en-IN');
+  let m='⚖️ <b>Rebalance Check</b>\n'+inr(T)+' · '+rows.length+' holdings\nCaps: '+maxStock+'%/stock · '+maxSector+'%/sector\n';
+  if(!overSec.length&&!overStk.length&&!tail.length){
+    m+='--------------------\n✅ Within your caps and well-sized — no rebalance needed.';
+    await tgSend(token,chatId,m);return;
+  }
+  if(overSec.length){m+='--------------------\n🔴 <b>Sector over cap:</b>\n';for(const x of overSec)m+=x.s+' '+x.pct.toFixed(0)+'% → '+maxSector+'% (trim '+inr(x.trim)+')\n';}
+  if(overStk.length){m+='--------------------\n🟠 <b>Stock over cap:</b>\n';for(const x of overStk)m+=x.s+' '+x.pct.toFixed(0)+'% → '+maxStock+'% (trim '+inr(x.trim)+')\n';}
+  if(tail.length){m+='--------------------\n🧹 <b>Tail (under '+minPos+'%):</b> '+tail.length+' = '+inr(tailVal)+'\n'+tail.slice(0,10).map(r=>r.s).join(', ')+(tail.length>10?'…':'')+'\n<i>too small to move the needle — consolidate</i>\n';}
+  m+='--------------------\n💰 <b>Frees ~'+inr(freed)+'</b> to redeploy into conviction names or an index sleeve.\nNot advice — your call.';
+  await tgSend(token,chatId,m);
 }
 
 // ── Worker entry point ────────────────────────────────────────────────────────
