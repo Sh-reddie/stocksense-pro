@@ -10,6 +10,7 @@
      Expose on window.SSFinance / window.SSAI; inline fns below delegate to these. -->
 <script type="module" src="/lib/finance.js"></script>
 <script type="module" src="/lib/ai.js"></script>
+<script type="module" src="/lib/aicache.js"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="StockSense">
@@ -9259,27 +9260,48 @@ function applySentimentToUI(ctx){if(!ctx)return;const sc=ctx.sentimentScore||50;
 // Stored in localStorage as 'ss_ai_cache_<SYMBOL>'.
 const AI_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
-function _aiCacheGet(symbol) {
+// ns '' = holdings (legacy key ss_ai_cache_<SYM>); ns 'wl' = watchlist
+// (ss_wl_cache_<SYM>). Pure key/TTL logic lives in lib/aicache.js
+// (window.SSAICache) and is unit-tested; inline fallback kept for safety.
+function _aiKey(symbol, ns) {
+  if (typeof window !== 'undefined' && window.SSAICache) return window.SSAICache.entryKey(symbol, ns || '');
+  return ns ? ('ss_' + ns + '_cache_' + symbol) : ('ss_ai_cache_' + symbol);
+}
+
+function _aiCacheGet(symbol, ns) {
   try {
-    const raw = localStorage.getItem('ss_ai_cache_' + symbol);
+    const key = _aiKey(symbol, ns);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
+    if (window.SSAICache) {
+      const data = window.SSAICache.readFresh(raw, AI_CACHE_TTL_MS);
+      if (data === null) { localStorage.removeItem(key); return null; }
+      return data;
+    }
     const { ts, data } = JSON.parse(raw);
-    if (Date.now() - ts > AI_CACHE_TTL_MS) { localStorage.removeItem('ss_ai_cache_' + symbol); return null; }
+    if (Date.now() - ts > AI_CACHE_TTL_MS) { localStorage.removeItem(key); return null; }
     return data;
   } catch(e) { return null; }
 }
 
-function _aiCacheSet(symbol, data) {
-  try { localStorage.setItem('ss_ai_cache_' + symbol, JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
+function _aiCacheSet(symbol, data, ns) {
+  try {
+    const raw = window.SSAICache ? window.SSAICache.serialize(data) : JSON.stringify({ ts: Date.now(), data });
+    localStorage.setItem(_aiKey(symbol, ns), raw);
+  } catch(e) {}
 }
 
-function _aiCacheInvalidate(symbol) {
-  try { localStorage.removeItem('ss_ai_cache_' + symbol); } catch(e) {}
+function _aiCacheInvalidate(symbol, ns) {
+  try { localStorage.removeItem(_aiKey(symbol, ns)); } catch(e) {}
 }
+
+// Watchlist-namespaced shortcuts
+function _wlCacheGet(symbol) { return _aiCacheGet(symbol, 'wl'); }
+function _wlCacheSet(symbol, data) { return _aiCacheSet(symbol, data, 'wl'); }
 
 // Call to force fresh analysis (e.g. when user manually triggers re-run)
 function _aiCacheClear() {
-  Object.keys(localStorage).filter(k => k.startsWith('ss_ai_cache_')).forEach(k => localStorage.removeItem(k));
+  Object.keys(localStorage).filter(k => k.startsWith('ss_ai_cache_') || k.startsWith('ss_wl_cache_')).forEach(k => localStorage.removeItem(k));
 }
 
 async function analyseHolding(h,ctx,{forceRefresh=false}={}) {
@@ -9407,7 +9429,11 @@ Decision rules: ENTER NOW = price is at support/consolidation with catalyst; WAI
 Reply ONLY compact JSON no markdown: {"decision":"ENTER NOW|WAIT|AVOID","entryScore":<0-10>,"conviction":"HIGH|MEDIUM|LOW","whyEnter":"<specific price/catalyst reason>","whyWait":"<what condition would trigger entry>"}`;
 
   try {
-    const r = await claudeJSON(prompt);
+    // 6h cache (ns 'wl') — skips the model call but still re-derives price
+    // targets below from the current LTP. Saves free-tier quota on re-runs.
+    let r = _wlCacheGet(w.symbol);
+    const _wlHit = !!r;
+    if (!r) r = await claudeJSON(prompt);
     if(!r || typeof r !== 'string' || /^(⚠|AI error|OpenRouter error|⛔|Analysis unavailable)/.test(r.trim())) {
       w.aiError = r || 'No response from AI';
       (window.D && D._aiErrors) && D._aiErrors.push(w.symbol+' (watch): '+(r||'empty response'));
@@ -9417,6 +9443,7 @@ Reply ONLY compact JSON no markdown: {"decision":"ENTER NOW|WAIT|AVOID","entrySc
     }
     const j = extractJSON(r);
     if(!j) { w.aiError = 'AI returned unparseable response'; (window.D && D._aiErrors) && D._aiErrors.push(w.symbol+' (watch): unparseable model response'); w.wlDecision = 'WAIT'; w.entryScore = preScore; return; }
+    if (!_wlHit) _wlCacheSet(w.symbol, r); // cache the good model response for 6h
     w.wlDecision   = j.decision;
     w.entryScore   = j.entryScore;
     w.wlConviction = j.conviction;
