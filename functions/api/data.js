@@ -23,6 +23,17 @@ const CORS = {
 
 const DATA_KEYS = ['holdings','realised','watchlist','dividends','cfg','orders','alerts','symMap','pushSubscription'];
 
+// Never persist live secrets to at-rest storage. The Telegram bot token and
+// OpenRouter key now live in Workers Secrets; the web app keeps its own copy
+// client-side (localStorage). So strip them before writing to D1/KV.
+function stripSecrets(cfg) {
+  if (!cfg || typeof cfg !== 'object') return cfg;
+  const c = { ...cfg };
+  delete c.tgToken;
+  delete c.orKey;
+  return c;
+}
+
 function getEmail(request) {
   return request.headers.get('cf-access-authenticated-user-email') || null;
 }
@@ -85,7 +96,7 @@ export async function onRequestPost({ request, env }) {
         const stmts = entries.map(([k, v]) =>
           env.DB.prepare(
             'INSERT OR REPLACE INTO user_data (email, key, value, updated_at) VALUES (?, ?, ?, ?)'
-          ).bind(email, k, JSON.stringify(v), now)
+          ).bind(email, k, JSON.stringify(k === 'cfg' ? stripSecrets(v) : v), now)
         );
         await env.DB.batch(stmts);
       }
@@ -105,6 +116,7 @@ export async function onRequestPost({ request, env }) {
   if (env.STOCKSENSE_KV) {
     try {
       const { _token, _savedAt: _, ...portfolioData } = body;
+      if (portfolioData.cfg) portfolioData.cfg = stripSecrets(portfolioData.cfg);
       portfolioData._savedAt = new Date().toISOString();
       await env.STOCKSENSE_KV.put('portfolio', JSON.stringify(portfolioData));
       return Response.json({ ok: true, savedAt: portfolioData._savedAt, source: 'kv' }, { headers: CORS });
