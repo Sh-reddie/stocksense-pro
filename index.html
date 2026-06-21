@@ -6,6 +6,10 @@
 <title>StockSense Pro v3</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#4f8ef7">
+<!-- Tested, DOM-free math + AI parsing (unit-tested in tests/; see tests/README.md).
+     Expose on window.SSFinance / window.SSAI; inline fns below delegate to these. -->
+<script type="module" src="/lib/finance.js"></script>
+<script type="module" src="/lib/ai.js"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="StockSense">
@@ -9186,6 +9190,11 @@ async function runAllAI() {
 
 // ── Robust JSON extractor — handles models that add text around JSON ────────
 function extractJSON(text) {
+  // Prefer the tested module (lib/ai.js → window.SSAI). Inline code below is a
+  // verbatim fallback kept only for the case where the module fails to load.
+  if (typeof window !== 'undefined' && window.SSAI && window.SSAI.extractJSON) {
+    try { return window.SSAI.extractJSON(text); } catch(e) { /* fall through */ }
+  }
   if(!text) return null;
   // Strategy 0: strip reasoning blocks (<think>, <reasoning>, <reflection>) used by models like nemotron
   let stripped = text.replace(/<think>[\s\S]*?<\/think>/gi, '')
@@ -11540,6 +11549,10 @@ async function renderNews() {
 // A 12% fixed stop on ZOMATO fires randomly; ATR adapts to actual price swings.
 
 function calcATR(series, period = 14) {
+  // Prefer the tested module (lib/finance.js → window.SSFinance). Inline fallback below.
+  if (typeof window !== 'undefined' && window.SSFinance && window.SSFinance.calcATR) {
+    try { return window.SSFinance.calcATR(series, period); } catch(e) { /* fall through */ }
+  }
   if (!series || series.length < period + 1) return null;
   const trs = [];
   for (let i = 1; i < series.length; i++) {
@@ -17798,6 +17811,10 @@ function aiHideBusy() {
 // XIRR IMPLEMENTATION (Newton-Raphson)
 // ═══════════════════════════════════════════════════
 function xirr(cashflows) {
+  // Prefer the tested module (lib/finance.js → window.SSFinance). Inline fallback below.
+  if (typeof window !== 'undefined' && window.SSFinance && window.SSFinance.xirr) {
+    try { return window.SSFinance.xirr(cashflows); } catch(e) { /* fall through */ }
+  }
   if (!cashflows || cashflows.length < 2) return null;
   let rate = 0.1;
   const t0 = cashflows[0].date;
