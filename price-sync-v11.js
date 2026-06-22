@@ -1407,8 +1407,9 @@ async function sendBackups(env,chatId,token){
 // on /ai-start. Uses the user's saved model; pauses on 429 and resumes next tick.
 const AQ_IST_OFFSET=(5*60+30)*60*1000;
 const AQ_MINUTE=60*1000;
-const AQ_DAILY_CAP=45;            // under the ~50/day free-tier ceiling
-const AQ_PER_RUN_CAP=12;          // bounded per invocation (under ~20/min)
+const AQ_DAILY_CAP=45;            // REQUESTS/day — under the ~50/day free-tier ceiling
+const AQ_PER_RUN_CAP=20;          // requests per invocation (20 batches × 10 = 200 symbols)
+const AQ_BATCH_SIZE=10;           // symbols packed into one model request
 const AQ_FREE_DEFAULT='meta-llama/llama-3.3-70b-instruct:free'; // never default to a PAID model
 
 function aq_dayKeyIST(now){return new Date(now+AQ_IST_OFFSET).toISOString().slice(0,10);}
@@ -1442,6 +1443,8 @@ function aq_parseRateLimit(resp,now){
 }
 function aq_applyPause(job,rl,now){job.status='paused';job.pausedUntil=rl.resetAt||(now+AQ_MINUTE);job.lastError='rate-limited ('+(rl.kind||'unknown')+')';job.updatedAt=now;return job;}
 function aq_advance(job,ok,now){job.cursor+=1;job.dailyCount+=1;if(ok)job.done+=1;else job.failed+=1;job.updatedAt=now;if(job.cursor>=job.total){job.status='done';job.pausedUntil=0;}else if(job.status==='paused'){job.status='running';}return job;}
+function aq_peekBatch(job,size){if(!job||aq_isComplete(job))return [];const out=[];let i=job.cursor;const type=job.queue[i]&&job.queue[i].type;while(i<job.total&&out.length<size&&job.queue[i].type===type){out.push(job.queue[i]);i++;}return out;}
+function aq_advanceBatch(job,processed,ok,now){job.cursor+=processed;job.dailyCount+=1;job.done+=ok;job.failed+=(processed-ok);job.updatedAt=now;if(job.cursor>=job.total){job.status='done';job.pausedUntil=0;}else if(job.status==='paused'){job.status='running';}return job;}
 function aq_isComplete(job){return !!job&&job.cursor>=job.total;}
 function aq_canRunNow(job,now){if(!job||aq_isComplete(job))return false;if(job.status==='idle'||job.status==='done')return false;aq_rolloverDaily(job,now);if(job.dailyCount>=job.dailyCap)return false;if(job.pausedUntil&&now<job.pausedUntil)return false;return true;}
 function aq_peek(job){if(!job||aq_isComplete(job))return null;return job.queue[job.cursor]||null;}
@@ -1479,6 +1482,42 @@ function aq_buildPrompt(item,row,ltp,chgP){
     return `You are an equity analyst. Holding ${sym} (${exch}), sector ${sector}: ${qty} sh @ avg ₹${avg}, LTP ₹${ltp} (${chgP>=0?'+':''}${chgP}% today), unrealised ${pnlP}%.${sl}${t1}\nReply ONLY compact JSON, no markdown: {"signal":"STRONG BUY|BUY MORE|HOLD|REDUCE|EXIT","stopLoss":<price>,"target1":<price>,"target2":<price>,"confidence":<1-10>,"action":"<1 sentence>","reasoning":"<2 sentences with numbers>","tradeType":"SHORT_TERM|LONG_TERM|BOTH"}`;
   }
   return `You are an equity analyst evaluating a fresh entry. Stock ${sym} (${exch}), sector ${sector}, LTP ₹${ltp} (${chgP>=0?'+':''}${chgP}% today).\nReply ONLY compact JSON, no markdown: {"decision":"ENTER NOW|WAIT|AVOID","entryScore":<0-10>,"conviction":"HIGH|MEDIUM|LOW","whyEnter":"<specific price/catalyst reason>","whyWait":"<condition that would trigger entry>"}`;
+}
+function aq_rowFor(item,pf){
+  if(item.type==='holding')return (pf.holdings||[]).find(h=>h.symbol===item.sym&&(h.exchange||'NSE')===item.exch);
+  return (pf.watchlist||[]).find(w=>w.symbol===item.sym);
+}
+function aq_buildBatchPrompt(items,pf,prices){
+  const type=items[0].type;
+  const lines=items.map((it,i)=>{
+    const row=aq_rowFor(it,pf),pc=prices[it.sym+'|'+it.exch]||{};
+    const ltp=pc.ltp||(row&&row.ltp)||(row&&row.avgPrice)||0;
+    const chgP=(+(pc.chgP||0)).toFixed(2);
+    const sector=(row&&row.sector)||'Unknown';
+    if(type==='holding'){
+      const avg=(row&&row.avgPrice)||ltp,qty=(row&&row.qty)||0;
+      const pnlP=avg?(((ltp-avg)/avg)*100).toFixed(1):'0';
+      const sl=row&&row.stopLoss?(' SL ₹'+row.stopLoss):'';const t1=row&&row.target1?(' T1 ₹'+row.target1):'';
+      return `${i+1}. ${it.sym} (${it.exch}) sector ${sector}: ${qty}sh @ avg ₹${avg}, LTP ₹${ltp} (${chgP}% today), unrealised ${pnlP}%.${sl}${t1}`;
+    }
+    return `${i+1}. ${it.sym} (${it.exch}) sector ${sector}, LTP ₹${ltp} (${chgP}% today).`;
+  }).join('\n');
+  if(type==='holding'){
+    return `You are an equity analyst. Analyse EACH holding below and reply ONLY a JSON array (no markdown), one object per holding IN THE SAME ORDER.\nObject schema: {"sym":"<symbol>","signal":"STRONG BUY|BUY MORE|HOLD|REDUCE|EXIT","stopLoss":<price>,"target1":<price>,"target2":<price>,"confidence":<1-10>,"action":"<1 sentence>","reasoning":"<1-2 sentences with numbers>","tradeType":"SHORT_TERM|LONG_TERM|BOTH"}\nHoldings:\n${lines}`;
+  }
+  return `You are an equity analyst evaluating fresh entries. Analyse EACH stock below and reply ONLY a JSON array (no markdown), one object per stock IN THE SAME ORDER.\nObject schema: {"sym":"<symbol>","decision":"ENTER NOW|WAIT|AVOID","entryScore":<0-10>,"conviction":"HIGH|MEDIUM|LOW","whyEnter":"<specific reason>","whyWait":"<condition to trigger entry>"}\nStocks:\n${lines}`;
+}
+async function aq_analyzeBatch(items,pf,prices,model,orKey){
+  const prompt=aq_buildBatchPrompt(items,pf,prices);
+  const resp=await aq_callModelOnce(orKey,model,[{role:'user',content:prompt}],200*items.length+250);
+  const rl=aq_parseRateLimit(resp,Date.now());
+  if(rl.limited)return {ok:false,rl,results:[]};
+  if(!resp.ok||!resp.text)return {ok:false,err:resp.err||('http '+resp.status),results:[]};
+  const arr=aq_extractJSON(resp.text);
+  if(!Array.isArray(arr))return {ok:false,err:'not-array',results:[]};
+  const bySym={};for(const o of arr){if(o&&o.sym)bySym[String(o.sym).toUpperCase()]=o;}
+  const results=items.map((it,idx)=>{const f=bySym[it.sym.toUpperCase()]||arr[idx]||null;return {item:it,ok:!!(f&&typeof f==='object'),fields:f||{aiError:'missing in batch response'}};});
+  return {ok:true,results};
 }
 async function aq_analyzeOne(item,pf,prices,model,orKey){
   const key=item.sym+'|'+item.exch,pc=prices[key]||{};
@@ -1523,13 +1562,16 @@ async function runAIQueue(env,perRunCap){
   const orKey=env.OPENROUTER_KEY||(pf.cfg&&pf.cfg.orKey);
   const model=job.model||(pf.cfg&&pf.cfg.orModel)||AQ_FREE_DEFAULT;
   if(!orKey){job.status='paused';job.lastError='no OpenRouter key';job.pausedUntil=Date.now()+3600000;await aq_saveJob(env,job);return {ran:0,status:'no-key'};}
-  let ran=0;
+  let ran=0; // requests this run
   while(ran<perRunCap&&aq_canRunNow(job,Date.now())){
-    const item=aq_peek(job);if(!item)break;
-    let res;try{res=await aq_analyzeOne(item,pf,prices,model,orKey);}catch(e){res={ok:false,err:e.message};}
+    const batch=aq_peekBatch(job,AQ_BATCH_SIZE);
+    if(!batch.length)break;
+    let res;try{res=await aq_analyzeBatch(batch,pf,prices,model,orKey);}catch(e){res={ok:false,err:e.message,results:[]};}
     if(res.rl&&res.rl.limited){aq_applyPause(job,res.rl,Date.now());await aq_saveJob(env,job);return {ran,status:'paused',pausedUntil:job.pausedUntil};}
-    if(res.ok){await aq_saveResult(env,item,res.result,model);aq_advance(job,true,Date.now());}
-    else{aq_advance(job,false,Date.now());job.lastError=res.err||'analysis failed';}
+    let ok=0;
+    if(res.ok&&res.results){for(const r of res.results){if(r.ok){await aq_saveResult(env,r.item,r.fields,model);ok++;}}}
+    aq_advanceBatch(job,batch.length,ok,Date.now());
+    if(!res.ok)job.lastError=res.err||'batch failed';
     ran++;
     await aq_saveJob(env,job);
   }
