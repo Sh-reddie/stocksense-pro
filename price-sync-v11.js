@@ -1413,6 +1413,7 @@ const AQ_BATCH_SIZE=10;           // symbols packed into one model request
 const AQ_FREE_DEFAULT='meta-llama/llama-3.3-70b-instruct:free'; // never default to a PAID model
 
 function aq_dayKeyIST(now){return new Date(now+AQ_IST_OFFSET).toISOString().slice(0,10);}
+function aq_isMarketHours(now){const ist=new Date(now+AQ_IST_OFFSET);const dow=ist.getUTCDay();if(dow===0||dow===6)return false;const mins=ist.getUTCHours()*60+ist.getUTCMinutes();return mins>=9*60&&mins<=16*60;}
 function aq_nextISTMidnight(now){const ist=now+AQ_IST_OFFSET;const ds=Math.floor(ist/86400000)*86400000;return (ds+86400000)-AQ_IST_OFFSET;}
 function aq_buildQueue(holdings,watchlist){
   const seen=new Set(),out=[];
@@ -1551,8 +1552,11 @@ async function startAIJob(env,modelOverride){
   await aq_saveJob(env,job);
   return job;
 }
-async function runAIQueue(env,perRunCap){
-  perRunCap=perRunCap||AQ_PER_RUN_CAP;
+async function runAIQueue(env,perRunCap,opts){
+  perRunCap=perRunCap||AQ_PER_RUN_CAP;opts=opts||{};
+  // Automatic (cron) runs only during IST market hours so we never spend quota
+  // on stale weekend/overnight prices. Manual triggers pass force:true.
+  if(!opts.force&&!aq_isMarketHours(Date.now()))return {ran:0,status:'market-closed'};
   let job=await aq_loadJob(env);
   if(!job)return {ran:0,status:'none'};
   aq_rolloverDaily(job,Date.now());
@@ -1604,8 +1608,8 @@ export default{
     if(url.pathname==='/monthly'){ctx.waitUntil(sendMonthlyDigest(env));return new Response('{"ok":true}',{headers:{'Content-Type':'application/json'}});}
     if(url.pathname==='/indices'){const idx=await fetchIndexPrices();return new Response(JSON.stringify(idx||{}),{headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});}
     const _AICORS={'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
-    if(url.pathname==='/ai-start'){const m=url.searchParams.get('model');const job=await startAIJob(env,m);ctx.waitUntil(runAIQueue(env));return new Response(JSON.stringify({ok:true,status:job.status,total:job.total,model:job.model}),{headers:_AICORS});}
-    if(url.pathname==='/ai-run'){ctx.waitUntil(runAIQueue(env));return new Response('{"ok":true}',{headers:_AICORS});}
+    if(url.pathname==='/ai-start'){const m=url.searchParams.get('model');const job=await startAIJob(env,m);ctx.waitUntil(runAIQueue(env,null,{force:true}));return new Response(JSON.stringify({ok:true,status:job.status,total:job.total,model:job.model}),{headers:_AICORS});}
+    if(url.pathname==='/ai-run'){ctx.waitUntil(runAIQueue(env,null,{force:true}));return new Response('{"ok":true}',{headers:_AICORS});}
     if(url.pathname==='/ai-stop'){const job=await aq_loadJob(env);if(job){job.status='idle';job.pausedUntil=0;job.lastError='stopped by user';await aq_saveJob(env,job);}return new Response(JSON.stringify({ok:true,stopped:!!job}),{headers:_AICORS});}
     if(url.pathname==='/ai-status'){const job=await aq_loadJob(env);let results=null;try{const raw=await env.STOCKSENSE_KV.get('aiResults');if(raw)results=JSON.parse(raw);}catch(e){}return new Response(JSON.stringify({job,results}),{headers:_AICORS});}
     return new Response('StockSense Price Sync Worker v11 — AI Chat Agent',{status:200});
