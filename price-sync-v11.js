@@ -1409,7 +1409,7 @@ const AQ_IST_OFFSET=(5*60+30)*60*1000;
 const AQ_MINUTE=60*1000;
 const AQ_DAILY_CAP=45;            // REQUESTS/day — under the ~50/day free-tier ceiling
 const AQ_PER_RUN_CAP=20;          // requests per invocation (20 batches × 10 = 200 symbols)
-const AQ_BATCH_SIZE=10;           // symbols packed into one model request
+const AQ_BATCH_SIZE=6;            // symbols per request (smaller = less chance of truncated JSON)
 const AQ_FREE_DEFAULT='meta-llama/llama-3.3-70b-instruct:free'; // never default to a PAID model
 
 function aq_dayKeyIST(now){return new Date(now+AQ_IST_OFFSET).toISOString().slice(0,10);}
@@ -1459,6 +1459,7 @@ function aq_extractJSON(text){
   }
   return null;
 }
+function aq_extractObjects(text){if(!text)return [];const objs=[];let depth=0,start=-1,inStr=false,esc=false;for(let i=0;i<text.length;i++){const c=text[i];if(inStr){if(esc)esc=false;else if(c==='\\')esc=true;else if(c==='"')inStr=false;continue;}if(c==='"'){inStr=true;continue;}if(c==='{'){if(depth===0)start=i;depth++;}else if(c==='}'){if(depth>0){depth--;if(depth===0&&start>=0){try{objs.push(JSON.parse(text.slice(start,i+1)));}catch(e){}start=-1;}}}}return objs;}
 async function aq_callModelOnce(orKey,model,messages,maxTokens){
   try{
     const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
@@ -1510,12 +1511,15 @@ function aq_buildBatchPrompt(items,pf,prices){
 }
 async function aq_analyzeBatch(items,pf,prices,model,orKey){
   const prompt=aq_buildBatchPrompt(items,pf,prices);
-  const resp=await aq_callModelOnce(orKey,model,[{role:'user',content:prompt}],200*items.length+250);
+  const resp=await aq_callModelOnce(orKey,model,[{role:'user',content:prompt}],320*items.length+400);
   const rl=aq_parseRateLimit(resp,Date.now());
   if(rl.limited)return {ok:false,rl,results:[]};
   if(!resp.ok||!resp.text)return {ok:false,err:resp.err||('http '+resp.status),results:[]};
-  const arr=aq_extractJSON(resp.text);
-  if(!Array.isArray(arr))return {ok:false,err:'not-array',results:[]};
+  // Tolerant parse: clean array first, else salvage complete objects from a
+  // truncated/prose-wrapped response (recovers all but a clipped trailing item).
+  let arr=aq_extractJSON(resp.text);
+  if(!Array.isArray(arr))arr=aq_extractObjects(resp.text);
+  if(!arr.length)return {ok:false,err:'no-objects',results:[]};
   const bySym={};for(const o of arr){if(o&&o.sym)bySym[String(o.sym).toUpperCase()]=o;}
   const results=items.map((it,idx)=>{const f=bySym[it.sym.toUpperCase()]||arr[idx]||null;return {item:it,ok:!!(f&&typeof f==='object'),fields:f||{aiError:'missing in batch response'}};});
   return {ok:true,results};
