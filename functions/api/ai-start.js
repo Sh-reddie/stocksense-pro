@@ -22,12 +22,19 @@ async function workerSecret(kv) {
   } catch (e) { return null; }
 }
 
-export async function onRequestPost({ env }) {
+export async function onRequestPost({ request, env }) {
   const kv = env.STOCKSENSE_KV;
   if (!kv) return new Response(JSON.stringify({ ok: false, error: 'KV not configured' }), { status: 503, headers: CORS });
   try {
+    // The browser knows the user's saved model (cfg.orModel); pass it through so
+    // the queue never silently falls back to a paid model.
+    let model = null;
+    try { model = (await request.json()).model || null; } catch (e) { /* no body */ }
     const secret = await workerSecret(kv);
-    const url = WORKER + '/ai-start' + (secret ? ('?key=' + secret) : '');
+    const params = new URLSearchParams();
+    if (secret) params.set('key', secret);
+    if (model) params.set('model', model);
+    const url = WORKER + '/ai-start' + (params.toString() ? ('?' + params.toString()) : '');
     const r = await fetch(url, { method: 'GET' });
     const text = await r.text();
     if (!r.ok) return new Response(JSON.stringify({ ok: false, error: 'worker ' + r.status, detail: text.slice(0, 200) }), { status: 502, headers: CORS });

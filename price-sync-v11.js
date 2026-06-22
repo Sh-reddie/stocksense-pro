@@ -1409,6 +1409,7 @@ const AQ_IST_OFFSET=(5*60+30)*60*1000;
 const AQ_MINUTE=60*1000;
 const AQ_DAILY_CAP=45;            // under the ~50/day free-tier ceiling
 const AQ_PER_RUN_CAP=12;          // bounded per invocation (under ~20/min)
+const AQ_FREE_DEFAULT='meta-llama/llama-3.3-70b-instruct:free'; // never default to a PAID model
 
 function aq_dayKeyIST(now){return new Date(now+AQ_IST_OFFSET).toISOString().slice(0,10);}
 function aq_nextISTMidnight(now){const ist=now+AQ_IST_OFFSET;const ds=Math.floor(ist/86400000)*86400000;return (ds+86400000)-AQ_IST_OFFSET;}
@@ -1503,10 +1504,10 @@ async function aq_saveResult(env,item,fields,model){
   store.updatedAt=Date.now();
   try{await env.STOCKSENSE_KV.put('aiResults',JSON.stringify(store));}catch(e){}
 }
-async function startAIJob(env){
+async function startAIJob(env,modelOverride){
   let pf={holdings:[],watchlist:[],cfg:{}};try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
   const queue=aq_buildQueue(pf.holdings||[],pf.watchlist||[]);
-  const model=(pf.cfg&&pf.cfg.orModel)||AI_MODELS_FALLBACK[0];
+  const model=modelOverride||(pf.cfg&&pf.cfg.orModel)||AQ_FREE_DEFAULT;
   const job=aq_initJob(queue,model,Date.now(),AQ_DAILY_CAP);
   await aq_saveJob(env,job);
   return job;
@@ -1520,7 +1521,7 @@ async function runAIQueue(env,perRunCap){
   let pf={holdings:[],watchlist:[],cfg:{}};try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
   let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}
   const orKey=env.OPENROUTER_KEY||(pf.cfg&&pf.cfg.orKey);
-  const model=job.model||(pf.cfg&&pf.cfg.orModel)||AI_MODELS_FALLBACK[0];
+  const model=job.model||(pf.cfg&&pf.cfg.orModel)||AQ_FREE_DEFAULT;
   if(!orKey){job.status='paused';job.lastError='no OpenRouter key';job.pausedUntil=Date.now()+3600000;await aq_saveJob(env,job);return {ran:0,status:'no-key'};}
   let ran=0;
   while(ran<perRunCap&&aq_canRunNow(job,Date.now())){
@@ -1543,7 +1544,7 @@ export default{
     const url=new URL(request.url);
     // ── Endpoint auth guard (added 2026-06-19): require secret on webhook + trigger URLs ──
     {const _p=url.pathname;
-     if(_p==='/telegram'||_p==='/sync'||_p==='/brief'||_p==='/evening'||_p==='/weekly'||_p==='/monthly'||_p==='/ai-start'||_p==='/ai-run'){
+     if(_p==='/telegram'||_p==='/sync'||_p==='/brief'||_p==='/evening'||_p==='/weekly'||_p==='/monthly'||_p==='/ai-start'||_p==='/ai-run'||_p==='/ai-stop'){
        let _sec=null;try{const _r=await env.STOCKSENSE_KV.get('portfolio');const _tok=env.TELEGRAM_TOKEN||(_r?(JSON.parse(_r).cfg||{}).tgToken:null);
          if(_tok){const _h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('ss-webhook:'+_tok));_sec=[...new Uint8Array(_h)].map(x=>x.toString(16).padStart(2,'0')).join('');}
        }catch(e){}
@@ -1561,8 +1562,9 @@ export default{
     if(url.pathname==='/monthly'){ctx.waitUntil(sendMonthlyDigest(env));return new Response('{"ok":true}',{headers:{'Content-Type':'application/json'}});}
     if(url.pathname==='/indices'){const idx=await fetchIndexPrices();return new Response(JSON.stringify(idx||{}),{headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});}
     const _AICORS={'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
-    if(url.pathname==='/ai-start'){const job=await startAIJob(env);ctx.waitUntil(runAIQueue(env));return new Response(JSON.stringify({ok:true,status:job.status,total:job.total,model:job.model}),{headers:_AICORS});}
+    if(url.pathname==='/ai-start'){const m=url.searchParams.get('model');const job=await startAIJob(env,m);ctx.waitUntil(runAIQueue(env));return new Response(JSON.stringify({ok:true,status:job.status,total:job.total,model:job.model}),{headers:_AICORS});}
     if(url.pathname==='/ai-run'){ctx.waitUntil(runAIQueue(env));return new Response('{"ok":true}',{headers:_AICORS});}
+    if(url.pathname==='/ai-stop'){const job=await aq_loadJob(env);if(job){job.status='idle';job.pausedUntil=0;job.lastError='stopped by user';await aq_saveJob(env,job);}return new Response(JSON.stringify({ok:true,stopped:!!job}),{headers:_AICORS});}
     if(url.pathname==='/ai-status'){const job=await aq_loadJob(env);let results=null;try{const raw=await env.STOCKSENSE_KV.get('aiResults');if(raw)results=JSON.parse(raw);}catch(e){}return new Response(JSON.stringify({job,results}),{headers:_AICORS});}
     return new Response('StockSense Price Sync Worker v11 — AI Chat Agent',{status:200});
   },
