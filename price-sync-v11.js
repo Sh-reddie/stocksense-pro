@@ -1402,6 +1402,140 @@ async function sendBackups(env,chatId,token){
   await tgSend(token,chatId,m);
 }
 
+// ── Resumable AI analysis queue ───────────────────────────────────────────────
+// Mirrors lib/aiqueue.js (unit-tested). Runs in the */15 market-hours cron and
+// on /ai-start. Uses the user's saved model; pauses on 429 and resumes next tick.
+const AQ_IST_OFFSET=(5*60+30)*60*1000;
+const AQ_MINUTE=60*1000;
+const AQ_DAILY_CAP=45;            // under the ~50/day free-tier ceiling
+const AQ_PER_RUN_CAP=12;          // bounded per invocation (under ~20/min)
+
+function aq_dayKeyIST(now){return new Date(now+AQ_IST_OFFSET).toISOString().slice(0,10);}
+function aq_nextISTMidnight(now){const ist=now+AQ_IST_OFFSET;const ds=Math.floor(ist/86400000)*86400000;return (ds+86400000)-AQ_IST_OFFSET;}
+function aq_buildQueue(holdings,watchlist){
+  const seen=new Set(),out=[];
+  const add=(row,type)=>{if(!row||!row.symbol)return;const exch=row.exchange||'NSE';const k=row.symbol+'|'+exch;if(seen.has(k))return;seen.add(k);out.push({sym:row.symbol,exch,type});};
+  for(const h of(holdings||[]))add(h,'holding');
+  for(const w of(watchlist||[]))add(w,'watch');
+  return out;
+}
+function aq_initJob(queue,model,now,dailyCap){
+  return {status:queue.length?'running':'done',queue,cursor:0,total:queue.length,done:0,failed:0,model:model||null,dayKey:aq_dayKeyIST(now),dailyCount:0,dailyCap:dailyCap||AQ_DAILY_CAP,pausedUntil:0,startedAt:now,updatedAt:now,lastError:null};
+}
+function aq_rolloverDaily(job,now){const t=aq_dayKeyIST(now);if(job.dayKey!==t){job.dayKey=t;job.dailyCount=0;}return job;}
+function aq_readResetHeader(headers,now){
+  const reset=headers['x-ratelimit-reset'];
+  if(reset!=null&&reset!==''){const n=Number(reset);if(!isNaN(n)){if(n>1e12)return n;if(n>1e9)return n*1000;if(n>0)return now+n*1000;}}
+  const retry=headers['retry-after'];
+  if(retry!=null&&retry!==''){const n=Number(retry);if(!isNaN(n)&&n>0)return now+n*1000;}
+  return 0;
+}
+function aq_parseRateLimit(resp,now){
+  const code=resp.status||(resp.body&&resp.body.error&&resp.body.error.code);
+  if(code!==429)return{limited:false,kind:null,resetAt:0};
+  const msg=((resp.body&&resp.body.error&&resp.body.error.message)||'').toLowerCase();
+  const isDay=/per-?day|daily|free-models-per-day/.test(msg);
+  const resetAt=aq_readResetHeader(resp.headers||{},now);
+  if(resetAt)return{limited:true,kind:isDay?'day':'minute',resetAt};
+  return{limited:true,kind:isDay?'day':'minute',resetAt:isDay?aq_nextISTMidnight(now):now+AQ_MINUTE};
+}
+function aq_applyPause(job,rl,now){job.status='paused';job.pausedUntil=rl.resetAt||(now+AQ_MINUTE);job.lastError='rate-limited ('+(rl.kind||'unknown')+')';job.updatedAt=now;return job;}
+function aq_advance(job,ok,now){job.cursor+=1;job.dailyCount+=1;if(ok)job.done+=1;else job.failed+=1;job.updatedAt=now;if(job.cursor>=job.total){job.status='done';job.pausedUntil=0;}else if(job.status==='paused'){job.status='running';}return job;}
+function aq_isComplete(job){return !!job&&job.cursor>=job.total;}
+function aq_canRunNow(job,now){if(!job||aq_isComplete(job))return false;if(job.status==='idle'||job.status==='done')return false;aq_rolloverDaily(job,now);if(job.dailyCount>=job.dailyCap)return false;if(job.pausedUntil&&now<job.pausedUntil)return false;return true;}
+function aq_peek(job){if(!job||aq_isComplete(job))return null;return job.queue[job.cursor]||null;}
+function aq_extractJSON(text){
+  if(!text)return null;
+  let s=text.replace(/<think>[\s\S]*?<\/think>/gi,'').replace(/<thinking>[\s\S]*?<\/thinking>/gi,'').replace(/<reasoning>[\s\S]*?<\/reasoning>/gi,'').replace(/<reflection>[\s\S]*?<\/reflection>/gi,'').trim();
+  for(const cand of [s,text]){
+    try{return JSON.parse(cand.trim());}catch(e){}
+    const md=cand.match(/```(?:json)?\s*([\s\S]*?)```/);if(md){try{return JSON.parse(md[1].trim());}catch(e){}}
+    const fb=cand.indexOf('{'),lb=cand.lastIndexOf('}');if(fb>=0&&lb>fb){try{return JSON.parse(cand.slice(fb,lb+1));}catch(e){}}
+  }
+  return null;
+}
+async function aq_callModelOnce(orKey,model,messages,maxTokens){
+  try{
+    const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+orKey,'HTTP-Referer':'https://stocksense-pro.pages.dev/','X-Title':'StockSense Pro'},
+      body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:0.4}),
+      signal:AbortSignal.timeout(25000),
+    });
+    let body=null;try{body=await r.json();}catch(e){}
+    const headers={};r.headers.forEach((v,k)=>headers[k.toLowerCase()]=v);
+    const text=body&&body.choices&&body.choices[0]&&body.choices[0].message&&body.choices[0].message.content;
+    return {ok:r.ok&&!!text,status:r.status,headers,body,text:text||null};
+  }catch(e){return {ok:false,status:0,headers:{},body:null,text:null,err:e.message};}
+}
+function aq_buildPrompt(item,row,ltp,chgP){
+  const sym=item.sym,exch=item.exch,sector=(row&&row.sector)||'Unknown';
+  if(item.type==='holding'){
+    const avg=row&&row.avgPrice||ltp,qty=row&&row.qty||0;
+    const pnlP=avg?((ltp-avg)/avg*100).toFixed(1):'0';
+    const sl=row&&row.stopLoss?(' Current SL ₹'+row.stopLoss+'.'):'';
+    const t1=row&&row.target1?(' T1 ₹'+row.target1+'.'):'';
+    return `You are an equity analyst. Holding ${sym} (${exch}), sector ${sector}: ${qty} sh @ avg ₹${avg}, LTP ₹${ltp} (${chgP>=0?'+':''}${chgP}% today), unrealised ${pnlP}%.${sl}${t1}\nReply ONLY compact JSON, no markdown: {"signal":"STRONG BUY|BUY MORE|HOLD|REDUCE|EXIT","stopLoss":<price>,"target1":<price>,"target2":<price>,"confidence":<1-10>,"action":"<1 sentence>","reasoning":"<2 sentences with numbers>","tradeType":"SHORT_TERM|LONG_TERM|BOTH"}`;
+  }
+  return `You are an equity analyst evaluating a fresh entry. Stock ${sym} (${exch}), sector ${sector}, LTP ₹${ltp} (${chgP>=0?'+':''}${chgP}% today).\nReply ONLY compact JSON, no markdown: {"decision":"ENTER NOW|WAIT|AVOID","entryScore":<0-10>,"conviction":"HIGH|MEDIUM|LOW","whyEnter":"<specific price/catalyst reason>","whyWait":"<condition that would trigger entry>"}`;
+}
+async function aq_analyzeOne(item,pf,prices,model,orKey){
+  const key=item.sym+'|'+item.exch,pc=prices[key]||{};
+  let row=null;
+  if(item.type==='holding')row=(pf.holdings||[]).find(h=>h.symbol===item.sym&&(h.exchange||'NSE')===item.exch);
+  else row=(pf.watchlist||[]).find(w=>w.symbol===item.sym);
+  const ltp=pc.ltp||(row&&row.ltp)||(row&&row.avgPrice)||0;
+  const chgP=+(pc.chgP||0).toFixed?(+(pc.chgP||0)).toFixed(2):0;
+  const resp=await aq_callModelOnce(orKey,model,[{role:'user',content:aq_buildPrompt(item,row,ltp,chgP)}],600);
+  const rl=aq_parseRateLimit(resp,Date.now());
+  if(rl.limited)return {ok:false,rl};
+  if(!resp.ok||!resp.text)return {ok:false,err:resp.err||('http '+resp.status)};
+  const j=aq_extractJSON(resp.text);
+  if(!j)return {ok:false,err:'unparseable'};
+  return {ok:true,result:j};
+}
+async function aq_loadJob(env){try{const raw=await env.STOCKSENSE_KV.get('aiJob');return raw?JSON.parse(raw):null;}catch(e){return null;}}
+async function aq_saveJob(env,job){job.updatedAt=Date.now();try{await env.STOCKSENSE_KV.put('aiJob',JSON.stringify(job));}catch(e){}}
+async function aq_saveResult(env,item,fields,model){
+  let store={updatedAt:0,items:{}};try{const raw=await env.STOCKSENSE_KV.get('aiResults');if(raw)store=JSON.parse(raw);}catch(e){}
+  if(!store.items)store.items={};
+  store.items[item.sym+'|'+item.exch]=Object.assign({sym:item.sym,exch:item.exch,type:item.type},fields,{model,analysedAt:Date.now()});
+  store.updatedAt=Date.now();
+  try{await env.STOCKSENSE_KV.put('aiResults',JSON.stringify(store));}catch(e){}
+}
+async function startAIJob(env){
+  let pf={holdings:[],watchlist:[],cfg:{}};try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
+  const queue=aq_buildQueue(pf.holdings||[],pf.watchlist||[]);
+  const model=(pf.cfg&&pf.cfg.orModel)||AI_MODELS_FALLBACK[0];
+  const job=aq_initJob(queue,model,Date.now(),AQ_DAILY_CAP);
+  await aq_saveJob(env,job);
+  return job;
+}
+async function runAIQueue(env,perRunCap){
+  perRunCap=perRunCap||AQ_PER_RUN_CAP;
+  let job=await aq_loadJob(env);
+  if(!job)return {ran:0,status:'none'};
+  aq_rolloverDaily(job,Date.now());
+  if(!aq_canRunNow(job,Date.now())){await aq_saveJob(env,job);return {ran:0,status:job.status};}
+  let pf={holdings:[],watchlist:[],cfg:{}};try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
+  let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}
+  const orKey=env.OPENROUTER_KEY||(pf.cfg&&pf.cfg.orKey);
+  const model=job.model||(pf.cfg&&pf.cfg.orModel)||AI_MODELS_FALLBACK[0];
+  if(!orKey){job.status='paused';job.lastError='no OpenRouter key';job.pausedUntil=Date.now()+3600000;await aq_saveJob(env,job);return {ran:0,status:'no-key'};}
+  let ran=0;
+  while(ran<perRunCap&&aq_canRunNow(job,Date.now())){
+    const item=aq_peek(job);if(!item)break;
+    let res;try{res=await aq_analyzeOne(item,pf,prices,model,orKey);}catch(e){res={ok:false,err:e.message};}
+    if(res.rl&&res.rl.limited){aq_applyPause(job,res.rl,Date.now());await aq_saveJob(env,job);return {ran,status:'paused',pausedUntil:job.pausedUntil};}
+    if(res.ok){await aq_saveResult(env,item,res.result,model);aq_advance(job,true,Date.now());}
+    else{aq_advance(job,false,Date.now());job.lastError=res.err||'analysis failed';}
+    ran++;
+    await aq_saveJob(env,job);
+  }
+  await aq_saveJob(env,job);
+  return {ran,status:job.status};
+}
+
 // ── Worker entry point ────────────────────────────────────────────────────────
 
 export default{
@@ -1409,7 +1543,7 @@ export default{
     const url=new URL(request.url);
     // ── Endpoint auth guard (added 2026-06-19): require secret on webhook + trigger URLs ──
     {const _p=url.pathname;
-     if(_p==='/telegram'||_p==='/sync'||_p==='/brief'||_p==='/evening'||_p==='/weekly'||_p==='/monthly'){
+     if(_p==='/telegram'||_p==='/sync'||_p==='/brief'||_p==='/evening'||_p==='/weekly'||_p==='/monthly'||_p==='/ai-start'||_p==='/ai-run'){
        let _sec=null;try{const _r=await env.STOCKSENSE_KV.get('portfolio');const _tok=env.TELEGRAM_TOKEN||(_r?(JSON.parse(_r).cfg||{}).tgToken:null);
          if(_tok){const _h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('ss-webhook:'+_tok));_sec=[...new Uint8Array(_h)].map(x=>x.toString(16).padStart(2,'0')).join('');}
        }catch(e){}
@@ -1426,6 +1560,10 @@ export default{
     if(url.pathname==='/weekly'){ctx.waitUntil((async()=>{let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}await sendWeeklyDigest(env,prices);})());return new Response('{"ok":true}',{headers:{'Content-Type':'application/json'}});}
     if(url.pathname==='/monthly'){ctx.waitUntil(sendMonthlyDigest(env));return new Response('{"ok":true}',{headers:{'Content-Type':'application/json'}});}
     if(url.pathname==='/indices'){const idx=await fetchIndexPrices();return new Response(JSON.stringify(idx||{}),{headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});}
+    const _AICORS={'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
+    if(url.pathname==='/ai-start'){const job=await startAIJob(env);ctx.waitUntil(runAIQueue(env));return new Response(JSON.stringify({ok:true,status:job.status,total:job.total,model:job.model}),{headers:_AICORS});}
+    if(url.pathname==='/ai-run'){ctx.waitUntil(runAIQueue(env));return new Response('{"ok":true}',{headers:_AICORS});}
+    if(url.pathname==='/ai-status'){const job=await aq_loadJob(env);let results=null;try{const raw=await env.STOCKSENSE_KV.get('aiResults');if(raw)results=JSON.parse(raw);}catch(e){}return new Response(JSON.stringify({job,results}),{headers:_AICORS});}
     return new Response('StockSense Price Sync Worker v11 — AI Chat Agent',{status:200});
   },
   async scheduled(event,env,ctx){
@@ -1439,6 +1577,7 @@ export default{
       }else{
         const{prices,prevPrices}=await syncPrices(env);
         await checkAndSendAlerts(env,prices,prevPrices);
+        try{await runAIQueue(env);}catch(e){console.warn('AI queue err:',e.message);}   // advance the resumable AI queue (never breaks price sync)
       }
     })());
   }
