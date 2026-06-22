@@ -1411,6 +1411,10 @@ const AQ_DAILY_CAP=45;            // REQUESTS/day — under the ~50/day free-tie
 const AQ_PER_RUN_CAP=20;          // requests per invocation (20 batches × 10 = 200 symbols)
 const AQ_BATCH_SIZE=6;            // symbols per request (smaller = less chance of truncated JSON)
 const AQ_FREE_DEFAULT='meta-llama/llama-3.3-70b-instruct:free'; // never default to a PAID model
+// 'openrouter/free' is an AUTO-ROUTER that can land on content-safety models which
+// refuse financial analysis ("Unauthorized Advice"). Pin a real instruct model.
+function aq_resolveModel(m){return (!m||m==='openrouter/free'||m==='openrouter/auto')?AQ_FREE_DEFAULT:m;}
+const AQ_SYS='You are a financial-analysis assistant helping the portfolio OWNER review their OWN holdings for personal record-keeping. This is permitted and not advice to a third party. Respond with ONLY the requested JSON.';
 
 function aq_dayKeyIST(now){return new Date(now+AQ_IST_OFFSET).toISOString().slice(0,10);}
 function aq_isMarketHours(now){const ist=new Date(now+AQ_IST_OFFSET);const dow=ist.getUTCDay();if(dow===0||dow===6)return false;const mins=ist.getUTCHours()*60+ist.getUTCMinutes();return mins>=9*60&&mins<=16*60;}
@@ -1511,7 +1515,7 @@ function aq_buildBatchPrompt(items,pf,prices){
 }
 async function aq_analyzeBatch(items,pf,prices,model,orKey){
   const prompt=aq_buildBatchPrompt(items,pf,prices);
-  const resp=await aq_callModelOnce(orKey,model,[{role:'user',content:prompt}],320*items.length+400);
+  const resp=await aq_callModelOnce(orKey,model,[{role:'system',content:AQ_SYS},{role:'user',content:prompt}],320*items.length+400);
   const rl=aq_parseRateLimit(resp,Date.now());
   if(rl.limited)return {ok:false,rl,results:[]};
   if(!resp.ok||!resp.text)return {ok:false,err:resp.err||('http '+resp.status),results:[]};
@@ -1551,7 +1555,7 @@ async function aq_saveResult(env,item,fields,model){
 async function startAIJob(env,modelOverride){
   let pf={holdings:[],watchlist:[],cfg:{}};try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
   const queue=aq_buildQueue(pf.holdings||[],pf.watchlist||[]);
-  const model=modelOverride||(pf.cfg&&pf.cfg.orModel)||AQ_FREE_DEFAULT;
+  const model=aq_resolveModel(modelOverride||(pf.cfg&&pf.cfg.orModel));
   const job=aq_initJob(queue,model,Date.now(),AQ_DAILY_CAP);
   await aq_saveJob(env,job);
   return job;
@@ -1568,7 +1572,7 @@ async function runAIQueue(env,perRunCap,opts){
   let pf={holdings:[],watchlist:[],cfg:{}};try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
   let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}
   const orKey=env.OPENROUTER_KEY||(pf.cfg&&pf.cfg.orKey);
-  const model=job.model||(pf.cfg&&pf.cfg.orModel)||AQ_FREE_DEFAULT;
+  const model=aq_resolveModel(job.model||(pf.cfg&&pf.cfg.orModel));
   if(!orKey){job.status='paused';job.lastError='no OpenRouter key';job.pausedUntil=Date.now()+3600000;await aq_saveJob(env,job);return {ran:0,status:'no-key'};}
   let ran=0; // requests this run
   while(ran<perRunCap&&aq_canRunNow(job,Date.now())){
