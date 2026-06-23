@@ -1410,10 +1410,13 @@ const AQ_MINUTE=60*1000;
 const AQ_DAILY_CAP=45;            // REQUESTS/day — under the ~50/day free-tier ceiling
 const AQ_PER_RUN_CAP=20;          // requests per invocation (20 batches × 10 = 200 symbols)
 const AQ_BATCH_SIZE=6;            // symbols per request (smaller = less chance of truncated JSON)
-const AQ_FREE_DEFAULT='meta-llama/llama-3.3-70b-instruct:free'; // never default to a PAID model
+// As of Jun 2026 most :free models are discontinued (404) and llama-3.3-70b:free is
+// provider-throttled (429). With the account's $10 credit, deepseek-chat-v3 is reliable
+// and extremely cheap (~a fraction of a cent per full 133-stock pass at batch 6).
+const AQ_DEFAULT_MODEL='deepseek/deepseek-chat-v3-0324';
 // 'openrouter/free' is an AUTO-ROUTER that can land on content-safety models which
-// refuse financial analysis ("Unauthorized Advice"). Pin a real instruct model.
-function aq_resolveModel(m){return (!m||m==='openrouter/free'||m==='openrouter/auto')?AQ_FREE_DEFAULT:m;}
+// refuse financial analysis ("Unauthorized Advice"); map router/empty → reliable model.
+function aq_resolveModel(m){return (!m||m==='openrouter/free'||m==='openrouter/auto')?AQ_DEFAULT_MODEL:m;}
 const AQ_SYS='You are a financial-analysis assistant helping the portfolio OWNER review their OWN holdings for personal record-keeping. This is permitted and not advice to a third party. Respond with ONLY the requested JSON.';
 
 function aq_dayKeyIST(now){return new Date(now+AQ_IST_OFFSET).toISOString().slice(0,10);}
