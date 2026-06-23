@@ -1409,7 +1409,7 @@ const AQ_IST_OFFSET=(5*60+30)*60*1000;
 const AQ_MINUTE=60*1000;
 const AQ_DAILY_CAP=200;           // REQUESTS/day (account has $10 credit → 1000/day free)
 const AQ_PER_RUN_CAP=8;           // requests per invocation (~7-20s/call fits the Worker)
-const AQ_BATCH_SIZE=5;            // symbols per request
+const AQ_BATCH_SIZE=3;            // symbols per request (small = the 3B-active model reliably returns all objects)
 // As of Jun 2026 most :free models are discontinued (404) and llama-3.3-70b:free is
 // provider-throttled (429). With the account's $10 credit, deepseek-chat-v3 is reliable
 // and extremely cheap (~a fraction of a cent per full 133-stock pass at batch 6).
@@ -1513,10 +1513,11 @@ function aq_buildBatchPrompt(items,pf,prices){
     }
     return `${i+1}. ${it.sym} (${it.exch}) sector ${sector}, LTP ₹${ltp} (${chgP}% today).`;
   }).join('\n');
+  const n=items.length;
   if(type==='holding'){
-    return `You are an equity analyst. Analyse EACH holding below and reply ONLY a JSON array (no markdown), one object per holding IN THE SAME ORDER.\nObject schema: {"sym":"<symbol>","signal":"STRONG BUY|BUY MORE|HOLD|REDUCE|EXIT","stopLoss":<price>,"target1":<price>,"target2":<price>,"confidence":<1-10>,"action":"<1 sentence>","reasoning":"<1-2 sentences with numbers>","tradeType":"SHORT_TERM|LONG_TERM|BOTH"}\nHoldings:\n${lines}`;
+    return `You are an equity analyst. Analyse the ${n} holdings below. Reply ONLY a JSON array of EXACTLY ${n} objects (no markdown), one per holding IN THE SAME ORDER, each including its "sym".\nObject schema: {"sym":"<symbol>","signal":"STRONG BUY|BUY MORE|HOLD|REDUCE|EXIT","stopLoss":<price>,"target1":<price>,"target2":<price>,"confidence":<1-10>,"action":"<1 sentence>","reasoning":"<1-2 sentences with numbers>","tradeType":"SHORT_TERM|LONG_TERM|BOTH"}\nHoldings:\n${lines}`;
   }
-  return `You are an equity analyst evaluating fresh entries. Analyse EACH stock below and reply ONLY a JSON array (no markdown), one object per stock IN THE SAME ORDER.\nObject schema: {"sym":"<symbol>","decision":"ENTER NOW|WAIT|AVOID","entryScore":<0-10>,"conviction":"HIGH|MEDIUM|LOW","whyEnter":"<specific reason>","whyWait":"<condition to trigger entry>"}\nStocks:\n${lines}`;
+  return `You are an equity analyst evaluating fresh entries. Analyse the ${n} stocks below. Reply ONLY a JSON array of EXACTLY ${n} objects (no markdown), one per stock IN THE SAME ORDER, each including its "sym".\nObject schema: {"sym":"<symbol>","decision":"ENTER NOW|WAIT|AVOID","entryScore":<0-10>,"conviction":"HIGH|MEDIUM|LOW","whyEnter":"<specific reason>","whyWait":"<condition to trigger entry>"}\nStocks:\n${lines}`;
 }
 async function aq_analyzeBatch(items,pf,prices,model,orKey){
   const prompt=aq_buildBatchPrompt(items,pf,prices);
