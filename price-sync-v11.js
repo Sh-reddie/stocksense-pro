@@ -812,10 +812,9 @@ const AI_MODELS_FALLBACK=[
 // Build model cascade: user's chosen model first, then standard fallbacks
 function getAIModels(userModel){
   const base=AI_MODELS_FALLBACK;
-  if(!userModel)return base;
-  // Strip :free suffix if present (free tier often unavailable)
-  const preferred=userModel.endsWith(':free')?userModel.replace(/:free$/,''):userModel;
-  return[preferred,...base.filter(m=>m!==preferred&&m!==userModel)];
+  if(!userModel||userModel==='custom')return base;
+  // Honor the user's EXACT selected model first (do NOT strip :free — respect their choice).
+  return[userModel,...base.filter(m=>m!==userModel)];
 }
 
 async function callAI(orKey,messages,maxTokens=1500,userModel=null){
@@ -1062,7 +1061,9 @@ async function handleChatAgent(msg,env){
   // Send response
   let finalText=cleanResponse;
   if(actionResults.length>0)finalText+='\n\n<i>'+actionResults.join('\n')+'</i>';
-  finalText+='\n\n<i>🤖 '+aiModelUsed.split('/').pop()+'</i>';
+  const _req=(orModel&&orModel!=='custom')?orModel:null;
+  if(_req&&aiModelUsed!==_req)finalText+='\n\n<i>⚠️ '+_req.split('/').pop()+' unavailable — used '+aiModelUsed.split('/').pop()+'</i>';
+  else finalText+='\n\n<i>🤖 '+aiModelUsed.split('/').pop()+'</i>';
 
   // Split if > 3800 chars (Telegram 4096 limit)
   if(finalText.length>3800){
@@ -1230,6 +1231,7 @@ async function handleTelegram(request,env){
   else if(cmd==='/discipline'||cmd==='/checkup') await sendDiscipline(env,chatId,token);
   else if(cmd==='/health'||cmd==='/status')     await sendHealth(env,chatId,token);
   else if(cmd==='/backups')                     await sendBackups(env,chatId,token);
+  else if(cmd==='/model')                       await sendModel(env,chatId,token,args.join(' ').trim());
   // ── v11 AI commands ──────────────────────────────────────────────────────
   else if(cmd==='/ask'){
     // /ask TEXT — explicit AI query
@@ -1275,6 +1277,7 @@ async function handleTelegram(request,env){
       +'/discipline — stop/target/cap audit\n'
       +'/health — status + last sync\n'
       +'/backups — saved snapshots\n'
+      +'/model — view/set AI model\n'
       +'/watchlist (/wl) — watchlist\n\n'
       +'📋 <b>Digests</b>\n'
       +'/brief — morning brief\n'
@@ -1595,6 +1598,22 @@ async function runAIQueue(env,perRunCap,opts){
   }
   await aq_saveJob(env,job);
   return {ran,status:job.status};
+}
+
+async function sendModel(env,chatId,token,arg){
+  let pf=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
+  if(!pf){await tgSend(token,chatId,'No portfolio data.');return;}
+  if(!arg){
+    const cur=(pf.cfg&&pf.cfg.orModel)||'(none — using default cascade, llama-3.3-70b first)';
+    await tgSend(token,chatId,'🤖 <b>AI model</b>\nCurrent: <code>'+cur+'</code>\n\nSet one with:\n<code>/model MODEL_ID</code>\n\nSome valid free models:\n• nvidia/nemotron-3-ultra-550b-a55b:free\n• google/gemma-4-31b-it:free\n• deepseek/deepseek-chat-v3-0324\n\nFull list: openrouter.ai/models');
+    return;
+  }
+  let valid=null;
+  try{const list=await fetch('https://openrouter.ai/api/v1/models').then(r=>r.json());valid=(list.data||[]).some(m=>m.id===arg);}catch(e){valid=null;}
+  if(valid===false){await tgSend(token,chatId,'⚠️ <code>'+arg+'</code> is not a valid OpenRouter model id.\nCheck the exact id at openrouter.ai/models');return;}
+  pf.cfg=pf.cfg||{};pf.cfg.orModel=arg;
+  try{await env.STOCKSENSE_KV.put('portfolio',JSON.stringify(pf));}catch(e){await tgSend(token,chatId,'⚠️ Could not save: '+e.message);return;}
+  await tgSend(token,chatId,'✅ AI model set to <code>'+arg+'</code>\nAll chat, /ask, /analyze &amp; /recommend will use this exact model now (it falls back only if the model is down, and tells you when it does).');
 }
 
 // ── Worker entry point ────────────────────────────────────────────────────────
