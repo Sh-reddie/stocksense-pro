@@ -13243,7 +13243,9 @@ function saveSettings(){
   localStorage.setItem('aiProvider', provider);
   const orKey = document.getElementById('cfg-or-key')?.value.trim();
   if (orKey) localStorage.setItem('orKey', orKey);
-  const orModel = document.getElementById('cfg-or-model')?.value;
+  let orModel = document.getElementById('cfg-or-model')?.value;
+  // 'custom' is just a UI placeholder — resolve it to the real model id from the custom field
+  if (orModel === 'custom') orModel = (document.getElementById('cfg-or-custom')?.value.trim() || '');
   if (orModel) localStorage.setItem('orModel', orModel);
   // Save custom model ID separately so it's never sent as literal 'custom'
   const customModelVal = document.getElementById('cfg-or-custom')?.value.trim();
@@ -14333,7 +14335,9 @@ function init(){
   }
   const savedOrKey = localStorage.getItem('orKey');
   if(savedOrKey && document.getElementById('cfg-or-key')) document.getElementById('cfg-or-key').value = savedOrKey;
-  let savedOrModel = localStorage.getItem('orModel');
+  // Prefer the synced config (KV/D1) so a model changed from Telegram (/model) shows up here too
+  let savedOrModel = (D.cfg && D.cfg.orModel) || localStorage.getItem('orModel');
+  if (D.cfg && D.cfg.orModel) localStorage.setItem('orModel', D.cfg.orModel);
   // No dead-model migration — user manages model selection via Settings
   if (!savedOrModel) {
     savedOrModel = 'nvidia/nemotron-3-ultra-550b-a55b:free';
