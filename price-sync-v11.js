@@ -1568,6 +1568,18 @@ async function aq_saveResult(env,item,fields,model){
   store.updatedAt=Date.now();
   try{await env.STOCKSENSE_KV.put('aiResults',JSON.stringify(store));}catch(e){}
 }
+function aq_fmtMsg(item,f,prices){
+  const pc=(prices&&prices[item.sym+'|'+item.exch])||{};
+  const ltp=pc.ltp!=null?('₹'+pc.ltp):'';
+  if(item.type==='holding'){
+    return `🤖 <b>${item.sym}</b>${ltp?(' · '+ltp):''}\nSignal: <b>${f.signal||'—'}</b> · Conf ${f.confidence!=null?f.confidence:'—'}/10\n`+
+      (f.action?('🎯 '+f.action+'\n'):'')+
+      `SL ₹${f.stopLoss!=null?f.stopLoss:'—'} · T1 ₹${f.target1!=null?f.target1:'—'}`+(f.target2!=null?(' · T2 ₹'+f.target2):'')+
+      (f.reasoning?('\n💡 '+f.reasoning):'');
+  }
+  return `🔭 <b>${item.sym}</b>${ltp?(' · '+ltp):''} (watch)\nDecision: <b>${f.decision||'—'}</b> · Score ${f.entryScore!=null?f.entryScore:'—'}/10${f.conviction?(' · '+f.conviction):''}\n`+
+    (f.whyEnter?('✅ '+f.whyEnter+'\n'):'')+(f.whyWait?('⏳ '+f.whyWait):'');
+}
 async function startAIJob(env,modelOverride){
   let pf={holdings:[],watchlist:[],cfg:{}};try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
   const queue=aq_buildQueue(pf.holdings||[],pf.watchlist||[]);
@@ -1589,6 +1601,7 @@ async function runAIQueue(env,perRunCap,opts){
   let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}
   const orKey=env.OPENROUTER_KEY||(pf.cfg&&pf.cfg.orKey);
   const model=aq_resolveModel(job.model||(pf.cfg&&pf.cfg.orModel));
+  const tgToken=env.TELEGRAM_TOKEN||(pf.cfg&&pf.cfg.tgToken);const tgChatId=pf.cfg&&pf.cfg.tgChatId;
   if(!orKey){job.status='paused';job.lastError='no OpenRouter key';job.pausedUntil=Date.now()+3600000;await aq_saveJob(env,job);return {ran:0,status:'no-key'};}
   let ran=0; // requests this run
   while(ran<perRunCap&&aq_canRunNow(job,Date.now())){
@@ -1597,7 +1610,7 @@ async function runAIQueue(env,perRunCap,opts){
     let res;try{res=await aq_analyzeBatch(batch,pf,prices,model,orKey);}catch(e){res={ok:false,err:e.message,results:[]};}
     if(res.rl&&res.rl.limited){aq_applyPause(job,res.rl,Date.now());await aq_saveJob(env,job);return {ran,status:'paused',pausedUntil:job.pausedUntil};}
     let ok=0;
-    if(res.ok&&res.results){for(const r of res.results){if(r.ok){await aq_saveResult(env,r.item,r.fields,model);ok++;}}}
+    if(res.ok&&res.results){for(const r of res.results){if(r.ok){await aq_saveResult(env,r.item,r.fields,model);ok++;if(tgToken&&tgChatId){try{await tgSend(tgToken,tgChatId,aq_fmtMsg(r.item,r.fields,prices));}catch(e){}}}}}
     aq_advanceBatch(job,batch.length,ok,Date.now());
     if(!res.ok)job.lastError=res.err||'batch failed';
     ran++;

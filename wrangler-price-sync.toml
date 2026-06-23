@@ -24,7 +24,7 @@ head_sampling_rate = 1
 crons = [
   "25 3 * * 1-5",      # 08:55 IST  morning brief
   "5 10 * * 1-5",      # 15:35 IST  evening wrap
-  "*/15 3-10 * * 1-5"  # 08:30-16:29 IST  price sync + alerts every 15 min
+  "*/3 3-10 * * 1-5"   # 08:30-16:29 IST  price sync + alerts + AI queue every 3 min
 ]
 # NOTE (day-of-week): Cloudflare's UI humanizes "1-5" as "Sun–Thu" and shows the
 # next run on a Sunday. Verify actual run-days before relying on weekend silence;
