@@ -1408,12 +1408,14 @@ async function sendBackups(env,chatId,token){
 const AQ_IST_OFFSET=(5*60+30)*60*1000;
 const AQ_MINUTE=60*1000;
 const AQ_DAILY_CAP=200;           // REQUESTS/day (account has $10 credit → 1000/day free)
-const AQ_PER_RUN_CAP=2;           // requests per invocation — small: the reasoning model is slow (~40s/call)
-const AQ_BATCH_SIZE=3;            // symbols per request (reasoning model needs room; small batch = less truncation)
+const AQ_PER_RUN_CAP=8;           // requests per invocation (~7-20s/call fits the Worker)
+const AQ_BATCH_SIZE=5;            // symbols per request
 // As of Jun 2026 most :free models are discontinued (404) and llama-3.3-70b:free is
 // provider-throttled (429). With the account's $10 credit, deepseek-chat-v3 is reliable
 // and extremely cheap (~a fraction of a cent per full 133-stock pass at batch 6).
-const AQ_DEFAULT_MODEL='nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
+// Non-reasoning nemotron: ~7s/call, clean JSON, free. (The :reasoning sibling takes
+// 40-90s/call and Cloudflare Workers kill the task before it returns — unusable here.)
+const AQ_DEFAULT_MODEL='nvidia/nemotron-3-nano-30b-a3b:free';
 // 'openrouter/free' is an AUTO-ROUTER that can land on content-safety models which
 // refuse financial analysis ("Unauthorized Advice"); map router/empty → reliable model.
 function aq_resolveModel(m){return (!m||m==='openrouter/free'||m==='openrouter/auto')?AQ_DEFAULT_MODEL:m;}
@@ -1473,7 +1475,7 @@ async function aq_callModelOnce(orKey,model,messages,maxTokens){
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+orKey,'HTTP-Referer':'https://stocksense-pro.pages.dev/','X-Title':'StockSense Pro'},
       body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:0.4}),
-      signal:AbortSignal.timeout(90000),
+      signal:AbortSignal.timeout(40000),
     });
     let body=null;try{body=await r.json();}catch(e){}
     const headers={};r.headers.forEach((v,k)=>headers[k.toLowerCase()]=v);
@@ -1518,7 +1520,7 @@ function aq_buildBatchPrompt(items,pf,prices){
 }
 async function aq_analyzeBatch(items,pf,prices,model,orKey){
   const prompt=aq_buildBatchPrompt(items,pf,prices);
-  const resp=await aq_callModelOnce(orKey,model,[{role:'system',content:AQ_SYS},{role:'user',content:prompt}],600*items.length+2000);
+  const resp=await aq_callModelOnce(orKey,model,[{role:'system',content:AQ_SYS},{role:'user',content:prompt}],400*items.length+600);
   const rl=aq_parseRateLimit(resp,Date.now());
   if(rl.limited)return {ok:false,rl,results:[]};
   if(!resp.ok||!resp.text)return {ok:false,err:resp.err||('http '+resp.status),results:[]};
