@@ -1526,15 +1526,20 @@ function aq_buildBatchPrompt(items,pf,prices){
 }
 async function aq_analyzeBatch(items,pf,prices,model,orKey){
   const prompt=aq_buildBatchPrompt(items,pf,prices);
-  const resp=await aq_callModelOnce(orKey,model,[{role:'system',content:AQ_SYS},{role:'user',content:prompt}],400*items.length+600);
-  const rl=aq_parseRateLimit(resp,Date.now());
-  if(rl.limited)return {ok:false,rl,results:[]};
-  if(!resp.ok||!resp.text)return {ok:false,err:resp.err||('http '+resp.status),results:[]};
-  // Tolerant parse: clean array first, else salvage complete objects from a
-  // truncated/prose-wrapped response (recovers all but a clipped trailing item).
-  let arr=aq_extractJSON(resp.text);
-  if(!Array.isArray(arr))arr=aq_extractObjects(resp.text);
-  if(!arr.length)return {ok:false,err:'no-objects',results:[]};
+  // The free nemotron model intermittently returns empty/unparseable output, so
+  // retry up to 3 times (50% → ~87% per stock). Stop early on 429 (pause) or success.
+  let arr=null,lastErr='no-objects';
+  for(let attempt=0;attempt<3 && !(arr&&arr.length);attempt++){
+    const resp=await aq_callModelOnce(orKey,model,[{role:'system',content:AQ_SYS},{role:'user',content:prompt}],400*items.length+600);
+    const rl=aq_parseRateLimit(resp,Date.now());
+    if(rl.limited)return {ok:false,rl,results:[]};
+    if(!resp.ok||!resp.text){lastErr=resp.err||('http '+resp.status);continue;}
+    let a=aq_extractJSON(resp.text);
+    if(!Array.isArray(a))a=aq_extractObjects(resp.text);
+    if(a&&a.length){arr=a;break;}
+    lastErr='no-objects';
+  }
+  if(!arr||!arr.length)return {ok:false,err:lastErr,results:[]};
   const bySym={};for(const o of arr){if(o&&o.sym)bySym[String(o.sym).toUpperCase()]=o;}
   const results=items.map((it,idx)=>{const f=bySym[it.sym.toUpperCase()]||arr[idx]||null;return {item:it,ok:!!(f&&typeof f==='object'),fields:f||{aiError:'missing in batch response'}};});
   return {ok:true,results};
