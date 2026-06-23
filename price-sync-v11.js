@@ -1411,8 +1411,10 @@ async function sendBackups(env,chatId,token){
 const AQ_IST_OFFSET=(5*60+30)*60*1000;
 const AQ_MINUTE=60*1000;
 const AQ_DAILY_CAP=200;           // REQUESTS/day (account has $10 credit → 1000/day free)
-const AQ_PER_RUN_CAP=8;           // requests per invocation (~7-20s/call fits the Worker)
-const AQ_BATCH_SIZE=3;            // symbols per request (small = the 3B-active model reliably returns all objects)
+const AQ_PER_RUN_CAP=8;           // requests per invocation (~7-15s/call fits the Worker)
+// Batch 1: the $10 credit gives ~1000 req/day, so quota is no longer the constraint —
+// one stock per request maximises reliability (small models drop objects in multi-item batches).
+const AQ_BATCH_SIZE=1;
 // As of Jun 2026 most :free models are discontinued (404) and llama-3.3-70b:free is
 // provider-throttled (429). With the account's $10 credit, deepseek-chat-v3 is reliable
 // and extremely cheap (~a fraction of a cent per full 133-stock pass at batch 6).
