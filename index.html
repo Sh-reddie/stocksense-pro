@@ -2014,7 +2014,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="sec-head">
       <div class="sec-title">News & Events</div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-g" onclick="renderNews()">↻ Market</button>
+        <button class="btn btn-g" onclick="renderNews(true)">↻ Market</button>
         <button class="btn btn-p btn-sm" onclick="renderPortfolioNewsFeed(true)" title="Fetch latest headlines for all your holdings">📰 My Holdings Feed</button>
       </div>
     </div>
@@ -11419,15 +11419,16 @@ function _estimateNextDiv(divArr) {
   };
 }
 
-async function renderCorporateActions() {
+async function renderCorporateActions(forceRefresh = false) {
   const el = document.getElementById('n-corp-c');
   if (!el) return;
   if (!D.holdings.length) {
     el.innerHTML = '<div style="padding:20px;color:var(--t4);font-size:12px">Add holdings to see corporate actions.</div>';
     return;
   }
-  // 10-min cache
-  if (_corpActCache.ts && Date.now() - _corpActCache.ts < 600000 && Object.keys(_corpActCache.data).length) {
+  // Once fetched, keep showing it until the user explicitly hits Refresh —
+  // no time-based auto-expiry, so switching tabs/sections never silently re-fetches.
+  if (!forceRefresh && Object.keys(_corpActCache.data).length) {
     _renderCorpActions(_corpActCache.data);
     return;
   }
@@ -11454,8 +11455,9 @@ function _renderCorpActions(data) {
   const daysTo = d => Math.round((d - today) / 86400000);
 
   const entries = Object.values(data);
+  const refreshBtn = `<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-g btn-xs" onclick="renderCorporateActions(true)">↻ Refresh</button></div>`;
   if (!entries.length) {
-    el.innerHTML = `<div style="padding:20px;color:var(--t4);font-size:12px">⚠ No dividend data found. Holdings may be growth stocks or data unavailable via proxy.</div>
+    el.innerHTML = refreshBtn + `<div style="padding:20px;color:var(--t4);font-size:12px">⚠ No dividend data found. Holdings may be growth stocks or data unavailable via proxy.</div>
       <div style="padding:0 20px 20px;font-size:11px;color:var(--t4)">Check <a href="https://www.nseindia.com/companies-listing/corporate-filings-announcements" target="_blank" style="color:var(--ac)">NSE Announcements</a> for recent corporate actions.</div>`;
     return;
   }
@@ -11514,7 +11516,7 @@ function _renderCorpActions(data) {
     ⚠ Dates are <strong>estimated</strong> from historical ex-dividend frequency. Always verify on
     <a href="https://www.nseindia.com/companies-listing/corporate-filings-corporate-actions" target="_blank" style="color:var(--ac)">NSE Corporate Actions</a> before trading.
   </div>`;
-  el.innerHTML = html;
+  el.innerHTML = refreshBtn + html;
 }
 
 // ═══════════════════════════════════════════════════
@@ -11577,12 +11579,13 @@ function renderResultsCalendar() {
   el.innerHTML = html;
 }
 
-async function renderNews() {
+async function renderNews(forceRefresh = false) {
   const allC = document.getElementById('n-all-c');
   const portC = document.getElementById('n-port-c');
   if (!allC) return;
-  // Cache for 10 minutes
-  if (_newsCache.ts && Date.now()-_newsCache.ts < 600000 && _newsCache.items.length) {
+  // Once fetched, keep showing it until the user explicitly hits Refresh —
+  // no time-based auto-expiry, so switching tabs/sections never silently re-fetches.
+  if (!forceRefresh && _newsCache.items.length) {
     _renderNewsItems(_newsCache.items);
     return;
   }
@@ -11787,12 +11790,20 @@ function _renderNewsItems(items) {
 // Cached per-stock in sessionStorage (30 min) to avoid re-fetching on tab switch.
 
 const NEWS_FEED_TTL = 30 * 60 * 1000;
+// Once a full "My Portfolio" feed is built, keep showing it until the user
+// explicitly hits Refresh — no time-based auto-expiry, so switching tabs/
+// sections never silently re-fetches or re-flashes the loading spinner.
+const _portNewsCache = { unique: null, refreshTime: null };
 
 async function renderPortfolioNewsFeed(forceRefresh = false) {
   const el = document.getElementById('n-port-c');
   if (!el) return;
   if (!D.holdings.length) {
     el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t4)">Add holdings to see your personalised news feed.</div>';
+    return;
+  }
+  if (!forceRefresh && _portNewsCache.unique) {
+    _renderPortfolioNewsRows(_portNewsCache.unique, _portNewsCache.refreshTime);
     return;
   }
 
@@ -11849,6 +11860,15 @@ async function renderPortfolioNewsFeed(forceRefresh = false) {
     seen.add(k); return true;
   }).sort((a, b) => b.ts - a.ts);
 
+  const refreshTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  _portNewsCache.unique = unique;
+  _portNewsCache.refreshTime = refreshTime;
+  _renderPortfolioNewsRows(unique, refreshTime);
+}
+
+function _renderPortfolioNewsRows(unique, refreshTime) {
+  const el = document.getElementById('n-port-c');
+  if (!el) return;
   const sentColor = s => !s ? 'var(--t4)' : s.sentiment === 'Bullish' ? 'var(--grn)' : s.sentiment === 'Bearish' ? 'var(--red)' : 'var(--yel)';
   const sentIcon  = s => !s ? '' : s.sentiment === 'Bullish' ? '▲' : s.sentiment === 'Bearish' ? '▼' : '↔';
 
@@ -11872,7 +11892,6 @@ async function renderPortfolioNewsFeed(forceRefresh = false) {
     </div>`;
   }).join('');
 
-  const refreshTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
   el.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0 14px;border-bottom:1px solid var(--b2);margin-bottom:4px">
       <span style="font-size:11px;color:var(--t4)">${unique.length} headlines across ${new Set(unique.map(a=>a.sym)).size} stocks · Updated ${refreshTime}</span>
