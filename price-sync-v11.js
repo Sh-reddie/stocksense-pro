@@ -29,18 +29,39 @@ async function getYFSession(){
 // CORS proxy because a proxy can't carry the cookie jar across two hops.
 const NSE_UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
-async function getNSESession(){
-  const r=await fetch('https://www.nseindia.com/',{
-    headers:{
-      'User-Agent':NSE_UA,
-      'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language':'en-US,en;q=0.9',
-    },
-    redirect:'follow',
-  });
-  const vals=typeof r.headers.getAll==='function'?r.headers.getAll('set-cookie'):[];
-  const cookies=vals.map(c=>c.split(';')[0].trim()).join('; ');
-  if(!cookies)throw new Error('NSE session: no cookies received');
+function _mergeCookies(a,b){
+  const jar={};
+  (a||'').split(';').map(s=>s.trim()).filter(Boolean).forEach(c=>{const i=c.indexOf('=');if(i>0)jar[c.slice(0,i)]=c;});
+  (b||'').split(';').map(s=>s.trim()).filter(Boolean).forEach(c=>{const i=c.indexOf('=');if(i>0)jar[c.slice(0,i)]=c;});
+  return Object.values(jar).join('; ');
+}
+
+async function getNSESession(refererPath){
+  const homeHeaders={
+    'User-Agent':NSE_UA,
+    'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language':'en-US,en;q=0.9',
+    'Sec-Fetch-Mode':'navigate','Sec-Fetch-Site':'none','Sec-Fetch-Dest':'document',
+  };
+  const r=await fetch('https://www.nseindia.com/',{headers:homeHeaders,redirect:'follow'});
+  const vals1=typeof r.headers.getAll==='function'?r.headers.getAll('set-cookie'):[];
+  let cookies=vals1.map(c=>c.split(';')[0].trim()).join('; ');
+  if(!cookies)throw new Error('NSE session: no cookies received from homepage');
+
+  // Also visit the actual report page a browser would land on before this API
+  // call — NSE/Akamai sets additional bot-manager cookies (bm_sz, ak_bmsc)
+  // scoped to that navigation, not just the bare homepage.
+  if(refererPath&&refererPath!=='/'){
+    try{
+      const r2=await fetch('https://www.nseindia.com'+refererPath,{
+        headers:{...homeHeaders,'Cookie':cookies,'Referer':'https://www.nseindia.com/'},
+        redirect:'follow',
+      });
+      const vals2=typeof r2.headers.getAll==='function'?r2.headers.getAll('set-cookie'):[];
+      const cookies2=vals2.map(c=>c.split(';')[0].trim()).join('; ');
+      if(cookies2)cookies=_mergeCookies(cookies,cookies2);
+    }catch(e){ /* homepage cookies alone are still worth trying */ }
+  }
   return{cookies};
 }
 
@@ -52,7 +73,7 @@ async function nseApiFetch(path, refererPath){
   let lastErr=null;
   for(let attempt=0;attempt<2;attempt++){
     try{
-      const sess=await getNSESession();
+      const sess=await getNSESession(refererPath);
       const res=await fetch('https://www.nseindia.com'+path,{
         headers:{
           'User-Agent':NSE_UA,
@@ -60,6 +81,7 @@ async function nseApiFetch(path, refererPath){
           'Accept-Language':'en-US,en;q=0.9',
           'Referer':'https://www.nseindia.com'+refererPath,
           'X-Requested-With':'XMLHttpRequest',
+          'Sec-Fetch-Mode':'cors','Sec-Fetch-Site':'same-origin','Sec-Fetch-Dest':'empty',
           'Cookie':sess.cookies,
         },
         signal:AbortSignal.timeout(10000),
