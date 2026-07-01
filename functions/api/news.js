@@ -68,7 +68,7 @@ async function fetchRSS(query) {
       'Accept': 'application/rss+xml, application/xml, text/xml, */*',
       'Accept-Language': 'en-IN,en;q=0.9',
     },
-    signal: AbortSignal.timeout(7000),
+    signal: AbortSignal.timeout(18000),
   });
   if (!r.ok) throw new Error('rss http ' + r.status);
   return r.text();
