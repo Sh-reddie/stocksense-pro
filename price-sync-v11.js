@@ -206,6 +206,87 @@ async function refreshMarketData(env){
   return results;
 }
 
+// ── News cache warmer ───────────────────────────────────────────────────────
+// Writes to the SAME KV key scheme functions/api/news.js reads for its
+// "last known good" fallback (newsKV:q:<query> / newsKV:sym:<symbol>), so
+// this needs zero changes on the Pages Function side — it just picks up
+// whatever's freshest here automatically. Runs on its own cron rather than
+// relying on live user requests, because Google intermittently rate-limits
+// Cloudflare's IPs for minutes at a time — a background job that tries every
+// ~20 min gets far more chances to land a fresh success than a handful of
+// live page loads ever would.
+function parseGNewsItems(xml, fallbackLabel){
+  if(!xml||!xml.includes('<item>'))return[];
+  const items=[];
+  const blocks=xml.match(/<item>([\s\S]*?)<\/item>/g)||[];
+  blocks.slice(0,15).forEach(block=>{
+    const getTag=(tag,fallback='')=>{
+      const m=block.match(new RegExp('<'+tag+'(?:[^>]*)><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/'+tag+'>'))||
+               block.match(new RegExp('<'+tag+'(?:[^>]*)>([\\s\\S]*?)<\\/'+tag+'>'));
+      return m?m[1].replace(/<[^>]+>/g,'').trim():fallback;
+    };
+    const title=getTag('title');
+    if(!title||title.length<10||title.trim().toLowerCase()==='google news')return;
+    const link=getTag('link')||getTag('guid');
+    const pubDate=getTag('pubDate');
+    const source=getTag('source',fallbackLabel||'');
+    items.push({title,link,pubDate,source});
+  });
+  return items;
+}
+
+async function fetchGNewsRSS(query){
+  const rssUrl='https://news.google.com/rss/search?q='+encodeURIComponent(query)+'&hl=en-IN&gl=IN&ceid=IN:en';
+  const r=await fetch(rssUrl,{headers:{'User-Agent':UA,'Accept':'application/rss+xml, application/xml, text/xml, */*','Accept-Language':'en-IN,en;q=0.9'},signal:AbortSignal.timeout(9000)});
+  if(!r.ok)throw new Error('rss http '+r.status);
+  return r.text();
+}
+
+const NEWS_MARKET_QUERIES=[
+  {q:'Indian stock market NSE BSE Nifty Sensex',label:'Market'},
+  {q:'SEBI RBI India economy monetary policy',label:'Macro'},
+  {q:'Nifty 50 earnings results India quarterly',label:'Earnings'},
+];
+
+async function warmNewsCache(env){
+  let ok=0,fail=0;
+  for(const {q,label} of NEWS_MARKET_QUERIES){
+    try{
+      const xml=await fetchGNewsRSS(q);
+      const items=parseGNewsItems(xml,label);
+      if(items.length){
+        await env.STOCKSENSE_KV.put('newsKV:q:'+q.toLowerCase(),JSON.stringify({items,source:'google-news',ts:Date.now()}),{expirationTtl:30*24*3600});
+        ok++;
+      }else fail++;
+    }catch(e){ fail++; }
+    await new Promise(r=>setTimeout(r,500));
+  }
+  let pf=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
+  const holdings=(pf&&pf.holdings||[]).slice(0,15);
+  for(const h of holdings){
+    if(!h.symbol)continue;
+    const sym=h.symbol.toUpperCase();
+    const exch=h.exchange||'NSE';
+    const queries=[sym+' '+exch+' stock India', sym+' share price India'];
+    let got=false;
+    for(const q of queries){
+      try{
+        const xml=await fetchGNewsRSS(q);
+        const titles=[...xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/gs)].slice(1,10).map(m=>m[1].trim())
+          .filter(t=>t&&t.length>8&&t.trim().toLowerCase()!=='google news').slice(0,8);
+        if(titles.length>=2){
+          await env.STOCKSENSE_KV.put('newsKV:sym:'+sym,JSON.stringify({headlines:titles,source:'google-news',ts:Date.now()}),{expirationTtl:30*24*3600});
+          got=true; ok++; break;
+        }
+      }catch(e){}
+    }
+    if(!got)fail++;
+    await new Promise(r=>setTimeout(r,400));
+  }
+  console.log('news cache warmed: ok=',ok,'fail=',fail);
+  return {ok,fail};
+}
+
 async function tgSend(token,chatId,text,replyMarkup){
   try{
     const body={chat_id:chatId,text:'StockSense Pro\n\n'+text,parse_mode:'HTML'};
@@ -1828,7 +1909,7 @@ export default{
     const url=new URL(request.url);
     // ── Endpoint auth guard (added 2026-06-19): require secret on webhook + trigger URLs ──
     {const _p=url.pathname;
-     if(_p==='/telegram'||_p==='/sync'||_p==='/brief'||_p==='/evening'||_p==='/weekly'||_p==='/monthly'||_p==='/ai-start'||_p==='/ai-run'||_p==='/ai-stop'||_p==='/fiidii-refresh'||_p==='/deals-refresh'){
+     if(_p==='/telegram'||_p==='/sync'||_p==='/brief'||_p==='/evening'||_p==='/weekly'||_p==='/monthly'||_p==='/ai-start'||_p==='/ai-run'||_p==='/ai-stop'||_p==='/fiidii-refresh'||_p==='/deals-refresh'||_p==='/news-warm'){
        let _sec=null;try{const _r=await env.STOCKSENSE_KV.get('portfolio');const _tok=env.TELEGRAM_TOKEN||(_r?(JSON.parse(_r).cfg||{}).tgToken:null);
          if(_tok){const _h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('ss-webhook:'+_tok));_sec=[...new Uint8Array(_h)].map(x=>x.toString(16).padStart(2,'0')).join('');}
        }catch(e){}
@@ -1876,6 +1957,10 @@ export default{
       try{const deals=await fetchBulkBlockDealsLive(env);return new Response(JSON.stringify({ok:true,deals}),{headers:_MKTCORS});}
       catch(e){return new Response(JSON.stringify({ok:false,error:e.message}),{status:502,headers:_MKTCORS});}
     }
+    if(url.pathname==='/news-warm'){
+      const result=await warmNewsCache(env);
+      return new Response(JSON.stringify({ok:true,...result}),{headers:_MKTCORS});
+    }
     const _AICORS={'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
     if(url.pathname==='/ai-start'){const m=url.searchParams.get('model');const job=await startAIJob(env,m);ctx.waitUntil(runAIQueue(env,null,{force:true}));return new Response(JSON.stringify({ok:true,status:job.status,total:job.total,model:job.model}),{headers:_AICORS});}
     if(url.pathname==='/ai-run'){ctx.waitUntil(runAIQueue(env,null,{force:true}));return new Response('{"ok":true}',{headers:_AICORS});}
@@ -1894,6 +1979,11 @@ export default{
       }else if(event.cron==='0 13 * * 1-5'){
         // 18:30 IST — after NSE publishes EOD FII/DII + bulk/block deal reports (~5:30-6:30pm IST)
         await refreshMarketData(env);
+      }else if(event.cron==='*/20 2-16 * * *'){
+        // Every 20 min, 7:30am-10:29pm IST, every day (news doesn't stop on weekends) —
+        // keeps the KV "last known good" news cache fresh so a live page load that
+        // hits Google's intermittent rate-limit still has something recent to fall back to.
+        try{await warmNewsCache(env);}catch(e){console.warn('news warm err:',e.message);}
       }else{
         const{prices,prevPrices}=await syncPrices(env);
         await checkAndSendAlerts(env,prices,prevPrices);
