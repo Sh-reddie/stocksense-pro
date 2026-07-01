@@ -1845,33 +1845,13 @@ export default{
     if(url.pathname==='/weekly'){ctx.waitUntil((async()=>{let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}await sendWeeklyDigest(env,prices);})());return new Response('{"ok":true}',{headers:{'Content-Type':'application/json'}});}
     if(url.pathname==='/monthly'){ctx.waitUntil(sendMonthlyDigest(env));return new Response('{"ok":true}',{headers:{'Content-Type':'application/json'}});}
     if(url.pathname==='/indices'){const idx=await fetchIndexPrices();return new Response(JSON.stringify(idx||{}),{headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});}
-    if(url.pathname==='/market-news'){
-      // Google News RSS is reliably blocked (HTTP 503 "unusual traffic" page)
-      // from Cloudflare's shared IP ranges — confirmed by direct test. Yahoo
-      // Finance's search API is not, and is already proven reliable here (same
-      // session pattern the Telegram /news command and price sync use), so
-      // market-wide news is served from Yahoo instead.
-      const q=(url.searchParams.get('q')||'Indian stock market').slice(0,80);
-      const label=url.searchParams.get('label')||'Market';
-      try{
-        let sess=null;try{sess=await getYFSession();}catch(e){}
-        const hh={'User-Agent':UA,'Accept':'application/json','Referer':'https://finance.yahoo.com/'};
-        if(sess&&sess.cookies)hh['Cookie']=sess.cookies;
-        const cq=sess?('&crumb='+encodeURIComponent(sess.crumb)):'';
-        const res=await fetch('https://query1.finance.yahoo.com/v1/finance/search?q='+encodeURIComponent(q)+'&quotesCount=1&newsCount=10&enableFuzzyQuery=false'+cq,{headers:hh,signal:AbortSignal.timeout(8000)});
-        const d=res.ok?await res.json():null;
-        const news=(d&&d.news)||[];
-        const items=news.map(n=>({
-          title:n.title,
-          link:n.link,
-          pubDate:n.providerPublishTime?new Date(n.providerPublishTime*1000).toISOString():'',
-          source:n.publisher||label,
-        })).filter(it=>it.title&&it.title.length>8).slice(0,10);
-        return new Response(JSON.stringify({ok:true,q,items,source:items.length?'yahoo-finance':'none',fetchedAt:Date.now()}),{headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Cache-Control':'public, max-age=900'}});
-      }catch(e){
-        return new Response(JSON.stringify({ok:false,q,items:[],source:'none',error:e.message,fetchedAt:Date.now()}),{headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-      }
-    }
+    // NOTE (checked 2026-06-30): tried serving market-wide news from Yahoo's
+    // /v1/finance/search here as a Google-News-blocked workaround, but its
+    // `news` array turned out to ignore the query (returns generic global
+    // trending finance news regardless of q= or quotesCount=), so a "GABRIEL"
+    // query returned Tiffany & Co / beauty-industry articles — worse than no
+    // result. Reverted. News stays on /api/news (Google, with retry) which at
+    // least returns genuinely relevant results when it isn't rate-limited.
     const _MKTCORS={'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
     if(url.pathname==='/fiidii'){
       let history=[],meta=null;

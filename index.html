@@ -11604,7 +11604,7 @@ async function renderNews() {
   _newsCache.items = unique.length ? unique : allItems;
   _newsCache.ts = Date.now();
   if (!unique.length) {
-    allC.innerHTML='<div style="color:var(--t4);font-size:12px;padding:20px">⚠ Could not fetch live news (CORS / network). Try refreshing.</div>';
+    allC.innerHTML='<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:8px;padding:14px;font-size:12px;color:var(--yel)">⚠ Google News is rate-limiting this request right now (not a bug on our end — it intermittently blocks server traffic). Click Refresh to retry, it usually succeeds within a try or two.</div>';
     return;
   }
   _renderNewsItems(unique);
