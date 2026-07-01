@@ -5,6 +5,26 @@
  * Server-side Google News RSS proxy — no CORS, no third-party dependency
  * (news.google.com is fetched directly from Cloudflare's edge; only a
  * browser needs a CORS workaround, a server doesn't).
+ *
+ * Google intermittently rate-limits requests from Cloudflare's shared IP
+ * ranges (confirmed: returns its "unusual traffic" block page). It isn't a
+ * hard block — retries usually get through — but a burst of ~20 requests
+ * (one per portfolio holding) can occasionally all land in a blocked window
+ * at once. To keep "My Portfolio" news from going blank when that happens,
+ * every successful fetch is cached in KV per-symbol; if a live fetch fails,
+ * the last known-good cached result is served instead (clearly marked
+ * stale, with an age) rather than an empty "no headlines" state.
+ *
+ * Tried and abandoned as fallbacks:
+ *  - Yahoo Finance /v1/finance/search: reachable from Cloudflare (Google
+ *    isn't), but its `news` array turned out to be generic trending finance
+ *    content that ignores the search query entirely — confirmed with and
+ *    without a proper session crumb, searching "SUZLON" both times returned
+ *    identical unrelated headlines (Meta, Stryker, a school district). Not
+ *    usable for symbol-specific news.
+ *  - MoneyControl RSS: usually redirects to a login-consent page instead of
+ *    serving the feed to non-browser requests. Kept as a cheap last-resort
+ *    attempt since it's low-cost, but rarely succeeds.
  */
 
 const CORS = {
@@ -23,7 +43,6 @@ function decodeEntities(s) {
 
 function parseRSSTitles(xml) {
   if (!xml || !xml.includes('<item>')) return [];
-  // CDATA titles first, then plain
   let titles = [...xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/gs)]
     .slice(1, 10)
     .map(m => m[1].trim());
@@ -38,8 +57,7 @@ function parseRSSTitles(xml) {
     .slice(0, 8);
 }
 
-// Full-fidelity parse (title + link + pubDate + source) for the market-wide feed —
-// mirrors the client-side parseRSSItems() that used to run against allorigins.win.
+// Full-fidelity parse (title + link + pubDate + source) for the market-wide feed.
 function parseRSSItems(xml, fallbackLabel) {
   if (!xml || !xml.includes('<item>')) return [];
   const items = [];
@@ -62,9 +80,6 @@ function parseRSSItems(xml, fallbackLabel) {
 
 function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
 
-// Google News RSS from Cloudflare's shared IP ranges gets intermittently
-// rate-limited (503, or a hang until timeout) — not a hard block, since it
-// does succeed on retry. Two attempts with a short gap clears most of these.
 async function fetchRSS(query, attempts = 2) {
   let lastErr;
   for (let i = 0; i < attempts; i++) {
@@ -88,100 +103,74 @@ async function fetchRSS(query, attempts = 2) {
   throw lastErr;
 }
 
-// Yahoo Finance's search API isn't blocked from Cloudflare's IPs the way
-// Google News is — used here as a per-symbol fallback. Requires a session
-// crumb (same handshake the price-sync Worker's getYFSession() does) —
-// without it, Yahoo silently degrades to generic trending news instead of
-// query-matched results (confirmed: without a crumb, searching "SUZLON"
-// returned Meta/Stryker/school-district headlines, nothing SUZLON-related).
-async function getYFSession() {
-  const r = await fetch('https://finance.yahoo.com/', {
-    headers: { 'User-Agent': BROWSER_UA, 'Accept': 'text/html,*/*', 'Accept-Language': 'en-US,en;q=0.9' },
-    redirect: 'follow',
-  });
-  const vals = typeof r.headers.getAll === 'function' ? r.headers.getAll('set-cookie') : [];
-  const cookies = vals.map(c => c.split(';')[0].trim()).join('; ');
-  const cr = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
-    headers: { 'User-Agent': BROWSER_UA, 'Cookie': cookies, 'Referer': 'https://finance.yahoo.com/', 'Accept': '*/*' },
-  });
-  const crumb = (await cr.text()).trim();
-  if (!crumb || crumb.includes('Too Many') || crumb[0] === '<' || crumb[0] === '{') throw new Error('bad crumb: ' + crumb.slice(0, 60));
-  return { cookies, crumb };
-}
-
-async function fetchYahooNews(sym) {
-  const sess = await getYFSession();
-  const hh = { 'User-Agent': BROWSER_UA, 'Accept': 'application/json', 'Referer': 'https://finance.yahoo.com/', 'Cookie': sess.cookies };
-  const r = await fetch(
-    `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(sym)}&quotesCount=1&newsCount=8&enableFuzzyQuery=false&crumb=${encodeURIComponent(sess.crumb)}`,
-    { headers: hh, signal: AbortSignal.timeout(8000) }
-  );
-  if (!r.ok) throw new Error('yahoo http ' + r.status);
-  const d = await r.json();
-  const news = d?.news || [];
-  return news.map(n => n.title).filter(t => t && t.length > 8).slice(0, 8);
-}
-
 async function fetchMoneyControlItems(label) {
   const r = await fetch('https://www.moneycontrol.com/rss/buzzingstocks.xml', {
     headers: { 'User-Agent': BROWSER_UA },
-    signal: AbortSignal.timeout(9000),
+    signal: AbortSignal.timeout(6000),
   });
   if (!r.ok) throw new Error('moneycontrol http ' + r.status);
   const xml = await r.text();
   return parseRSSItems(xml, label || 'MoneyControl');
 }
 
-export async function onRequestGet({ request }) {
+// ── KV-backed "last known good" cache ──────────────────────────────────────
+async function kvGetGood(env, key) {
+  if (!env.STOCKSENSE_KV) return null;
+  try {
+    const raw = await env.STOCKSENSE_KV.get(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+async function kvPutGood(env, key, payload) {
+  if (!env.STOCKSENSE_KV) return;
+  try { await env.STOCKSENSE_KV.put(key, JSON.stringify({ ...payload, ts: Date.now() }), { expirationTtl: 30 * 24 * 3600 }); }
+  catch (e) {}
+}
+
+export async function onRequestGet({ request, env }) {
   const url   = new URL(request.url);
   const q     = (url.searchParams.get('q') || '').trim();
   const sym   = (url.searchParams.get('sym') || '').trim().toUpperCase().replace(/\.(NS|BO)$/i, '');
   const exch  = (url.searchParams.get('exchange') || 'NSE').toUpperCase();
   const label = (url.searchParams.get('label') || '').trim();
 
-  const CACHE = { ...CORS, 'Cache-Control': 'public, max-age=900, s-maxage=900' }; // 15 min edge cache
+  const CACHE_OK   = { ...CORS, 'Cache-Control': 'public, max-age=900, s-maxage=900' };       // 15 min — only for genuine hits
+  const CACHE_MISS = { ...CORS, 'Cache-Control': 'no-store' };                                 // never cache a failure — so the next request gets a fresh attempt, not a baked-in "no news" for 15 min
 
-  // ── Market-wide mode: /api/news?q=...&label=... — returns full items (title/link/pubDate/source) ──
+  // ── Market-wide mode ──
   if (q && !sym) {
-    let debugInfo = null;
+    const kvKey = 'newsKV:q:' + q.toLowerCase();
     try {
       const xml = await fetchRSS(q);
       const items = parseRSSItems(xml, label);
       if (items.length) {
-        return new Response(
-          JSON.stringify({ ok: true, q, items, source: 'google-news', fetchedAt: Date.now() }),
-          { headers: { ...CACHE, 'Content-Type': 'application/json' } }
-        );
+        await kvPutGood(env, kvKey, { items, source: 'google-news' });
+        return new Response(JSON.stringify({ ok: true, q, items, source: 'google-news', fetchedAt: Date.now() }), { headers: { ...CACHE_OK, 'Content-Type': 'application/json' } });
       }
-      debugInfo = { xmlLen: xml.length, xmlPreview: xml.slice(0, 300) };
-    } catch (e) {
-      debugInfo = { error: e.message };
-    }
+    } catch (e) {}
 
-    // Google News is intermittently rate-limited from Cloudflare's IPs — fall
-    // back to MoneyControl's general market RSS feed rather than showing nothing.
     try {
       const items = await fetchMoneyControlItems(label);
       if (items.length) {
-        return new Response(
-          JSON.stringify({ ok: true, q, items, source: 'moneycontrol', fetchedAt: Date.now() }),
-          { headers: { ...CACHE, 'Content-Type': 'application/json' } }
-        );
+        await kvPutGood(env, kvKey, { items, source: 'moneycontrol' });
+        return new Response(JSON.stringify({ ok: true, q, items, source: 'moneycontrol', fetchedAt: Date.now() }), { headers: { ...CACHE_OK, 'Content-Type': 'application/json' } });
       }
-    } catch (e) { debugInfo = debugInfo || { error: e.message }; }
+    } catch (e) {}
 
-    return new Response(
-      JSON.stringify({ ok: true, q, items: [], source: 'none', fetchedAt: Date.now(), _debug: url.searchParams.get('debug') ? debugInfo : undefined }),
-      { headers: { ...CACHE, 'Content-Type': 'application/json' } }
-    );
+    // Both live sources failed — serve the last known-good result if we have one.
+    const good = await kvGetGood(env, kvKey);
+    if (good?.items?.length) {
+      return new Response(JSON.stringify({ ok: true, q, items: good.items, source: good.source + '-stale', staleSinceMs: Date.now() - good.ts, fetchedAt: good.ts }), { headers: { ...CACHE_MISS, 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ ok: true, q, items: [], source: 'none', fetchedAt: Date.now() }), { headers: { ...CACHE_MISS, 'Content-Type': 'application/json' } });
   }
 
-  // ── Per-stock mode (existing behaviour, unchanged shape) ──
+  // ── Per-stock mode ──
   if (!sym) {
     return Response.json({ ok: false, error: 'sym or q param required' }, { status: 400, headers: CORS });
   }
 
-  // Build two query variants — broader first for reliability
+  const kvKey = 'newsKV:sym:' + sym;
   const queries = [
     `${sym} ${exch === 'BSE' ? 'BSE' : 'NSE'} stock India`,
     `${sym} share price India`,
@@ -189,56 +178,38 @@ export async function onRequestGet({ request }) {
 
   for (const query of queries) {
     try {
-      const xml = await fetchRSS(query, 1); // 1 attempt per variant here — the 2nd query variant is itself a retry
+      const xml = await fetchRSS(query, 1); // 1 attempt per variant — the 2nd variant is itself a retry angle
       const titles = parseRSSTitles(xml);
       if (titles.length >= 2) {
-        return new Response(
-          JSON.stringify({ ok: true, sym, headlines: titles, source: 'google-news', fetchedAt: Date.now() }),
-          { headers: { ...CACHE, 'Content-Type': 'application/json' } }
-        );
+        await kvPutGood(env, kvKey, { headlines: titles, source: 'google-news' });
+        return new Response(JSON.stringify({ ok: true, sym, headlines: titles, source: 'google-news', fetchedAt: Date.now() }), { headers: { ...CACHE_OK, 'Content-Type': 'application/json' } });
       }
-    } catch (e) { /* try next query */ }
+    } catch (e) {}
   }
 
-  // Yahoo Finance fallback — not blocked from Cloudflare, works well for
-  // liquid/large-cap names. Try before MoneyControl (which is usually gated
-  // behind a login-consent redirect and rarely actually returns the feed).
+  // MoneyControl fallback (cheap; usually gated behind login-consent, rarely works, but worth a shot)
   try {
-    const titles = await fetchYahooNews(sym);
-    if (titles.length) {
-      return new Response(
-        JSON.stringify({ ok: true, sym, headlines: titles, source: 'yahoo-finance', fetchedAt: Date.now() }),
-        { headers: { ...CACHE, 'Content-Type': 'application/json' } }
-      );
-    }
-  } catch (e) {}
-
-  // MoneyControl RSS fallback
-  try {
-    const mcUrl = `https://www.moneycontrol.com/rss/buzzingstocks.xml`;
-    const r = await fetch(mcUrl, {
-      headers: { 'User-Agent': BROWSER_UA },
-      signal: AbortSignal.timeout(5000),
-    });
+    const r = await fetch('https://www.moneycontrol.com/rss/buzzingstocks.xml', { headers: { 'User-Agent': BROWSER_UA }, signal: AbortSignal.timeout(5000) });
     if (r.ok) {
       const xml = await r.text();
       const allTitles = parseRSSTitles(xml);
       const symLower = sym.toLowerCase();
       const relevant = allTitles.filter(t => t.toLowerCase().includes(symLower));
       if (relevant.length) {
-        return new Response(
-          JSON.stringify({ ok: true, sym, headlines: relevant.slice(0, 5), source: 'moneycontrol', fetchedAt: Date.now() }),
-          { headers: { ...CACHE, 'Content-Type': 'application/json' } }
-        );
+        await kvPutGood(env, kvKey, { headlines: relevant.slice(0, 5), source: 'moneycontrol' });
+        return new Response(JSON.stringify({ ok: true, sym, headlines: relevant.slice(0, 5), source: 'moneycontrol', fetchedAt: Date.now() }), { headers: { ...CACHE_OK, 'Content-Type': 'application/json' } });
       }
     }
   } catch (e) {}
 
-  // Empty response — caller falls back to AI knowledge mode
-  return new Response(
-    JSON.stringify({ ok: true, sym, headlines: [], source: 'none', fetchedAt: Date.now() }),
-    { headers: { ...CACHE, 'Content-Type': 'application/json' } }
-  );
+  // Everything live failed — serve the last known-good cached result if we have one,
+  // clearly marked as stale, rather than an empty "no headlines" dead end.
+  const good = await kvGetGood(env, kvKey);
+  if (good?.headlines?.length) {
+    return new Response(JSON.stringify({ ok: true, sym, headlines: good.headlines, source: good.source + '-stale', staleSinceMs: Date.now() - good.ts, fetchedAt: good.ts }), { headers: { ...CACHE_MISS, 'Content-Type': 'application/json' } });
+  }
+
+  return new Response(JSON.stringify({ ok: true, sym, headlines: [], source: 'none', fetchedAt: Date.now() }), { headers: { ...CACHE_MISS, 'Content-Type': 'application/json' } });
 }
 
 export async function onRequestOptions() {
