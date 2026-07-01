@@ -6380,7 +6380,13 @@ function stab(grp, id) {
   const p=document.getElementById(id); if(!p) return;
   p.parentElement.querySelectorAll('.tp').forEach(x=>x.classList.remove('on'));
   p.classList.add('on');
-  const tr=p.parentElement.previousElementSibling;
+  // The `.tabs` bar and the `.tp` panes are siblings under the same section
+  // (not the panes' parent's previous sibling — that was the bug: it made
+  // the active-tab underline never move once a page had more than one
+  // `.sec` before it, since previousElementSibling pointed at some unrelated
+  // section instead of the tabs bar). Look for `.tabs` among the panes'
+  // own siblings instead.
+  const tr = p.parentElement.querySelector(':scope > .tabs') || p.parentElement.previousElementSibling;
   if(tr&&tr.classList.contains('tabs')){
     const panes=Array.from(p.parentElement.querySelectorAll('.tp'));
     tr.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',panes[i]?.id===id));
