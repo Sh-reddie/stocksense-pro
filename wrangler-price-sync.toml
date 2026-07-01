@@ -18,12 +18,14 @@ head_sampling_rate = 1
 # The scheduled() handler dispatches by exact cron string:
 #   "25 3 * * 1-5" → morning brief (8:55 AM IST); Mondays also weekly digest
 #   "5 10 * * 1-5" → evening wrap   (3:35 PM IST)
+#   "0 13 * * 1-5" → FII/DII + bulk/block deals refresh (6:30 PM IST, after NSE EOD publish)
 #   any other cron → price sync + alert checks
-# These mirror the 3 cron triggers currently live on the deployed worker.
+# These mirror the cron triggers currently live on the deployed worker.
 [triggers]
 crons = [
   "25 3 * * 1-5",      # 08:55 IST  morning brief
   "5 10 * * 1-5",      # 15:35 IST  evening wrap
+  "0 13 * * 1-5",      # 18:30 IST  FII/DII + bulk/block deals refresh (NSE EOD data)
   "*/3 3-10 * * 1-5"   # 08:30-16:29 IST  price sync + alerts + AI queue every 3 min
 ]
 # NOTE (day-of-week): Cloudflare's UI humanizes "1-5" as "Sun–Thu" and shows the

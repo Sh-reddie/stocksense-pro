@@ -21,6 +21,154 @@ async function getYFSession(){
   return{cookies:ck,crumb};
 }
 
+// ── NSE session (cookie handshake) ─────────────────────────────────────────────
+// NSE's site blocks bare API calls (no session, no browser Referer). This
+// mirrors what a real browser does: hit the homepage first to receive the
+// nsit/nseappid cookies, then reuse those cookies + a Referer on the API call.
+// This only works server-side (a Worker) — it can't be done via a client-side
+// CORS proxy because a proxy can't carry the cookie jar across two hops.
+const NSE_UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
+
+async function getNSESession(){
+  const r=await fetch('https://www.nseindia.com/',{
+    headers:{
+      'User-Agent':NSE_UA,
+      'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language':'en-US,en;q=0.9',
+    },
+    redirect:'follow',
+  });
+  const vals=typeof r.headers.getAll==='function'?r.headers.getAll('set-cookie'):[];
+  const cookies=vals.map(c=>c.split(';')[0].trim()).join('; ');
+  if(!cookies)throw new Error('NSE session: no cookies received');
+  return{cookies};
+}
+
+// GET an NSE API path using an established session. Retries once with a fresh
+// session if the first attempt looks blocked (NSE sometimes 401/403s a stale
+// cookie, or returns an HTML challenge page instead of JSON).
+async function nseApiFetch(path, refererPath){
+  refererPath=refererPath||'/';
+  let lastErr=null;
+  for(let attempt=0;attempt<2;attempt++){
+    try{
+      const sess=await getNSESession();
+      const res=await fetch('https://www.nseindia.com'+path,{
+        headers:{
+          'User-Agent':NSE_UA,
+          'Accept':'application/json, text/plain, */*',
+          'Accept-Language':'en-US,en;q=0.9',
+          'Referer':'https://www.nseindia.com'+refererPath,
+          'X-Requested-With':'XMLHttpRequest',
+          'Cookie':sess.cookies,
+        },
+        signal:AbortSignal.timeout(10000),
+      });
+      const text=await res.text();
+      if(!res.ok||!text||text.trim()[0]==='<'){ lastErr=new Error('NSE '+path+' → HTTP '+res.status+' (attempt '+(attempt+1)+')'); continue; }
+      return JSON.parse(text);
+    }catch(e){ lastErr=e; }
+  }
+  throw lastErr||new Error('NSE fetch failed: '+path);
+}
+
+// ── FII / DII flows (live, EOD) ────────────────────────────────────────────────
+// NSE publishes the day's FII/FPI + DII net figures once trading closes
+// (~5:30-6:30pm IST). fiidiiTradeReact only ever returns the LATEST day, so we
+// accumulate a rolling history in KV, one real day at a time, instead of the
+// old approach of shipping a hardcoded seed array that never changed.
+function fmtNseDate(d){
+  // "2026-06-30" (ISO) — used as the de-dupe key regardless of NSE's own date format
+  return d.toISOString().slice(0,10);
+}
+function parseNseDMY(s){
+  // NSE dates look like "27-Jun-2026" or "27-06-2026" — normalize to ISO
+  if(!s)return null;
+  const m1=s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if(m1){
+    const months={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+    const mo=months[m1[2]];
+    if(mo==null)return null;
+    return fmtNseDate(new Date(Date.UTC(+m1[3],mo,+m1[1])));
+  }
+  const m2=s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if(m2)return fmtNseDate(new Date(Date.UTC(+m2[3],+m2[2]-1,+m2[1])));
+  const d=new Date(s);
+  return isNaN(d)?null:fmtNseDate(d);
+}
+
+async function fetchFiiDiiLive(env){
+  const raw=await nseApiFetch('/api/fiidiiTradeReact','/reports-fii-dii');
+  if(!Array.isArray(raw)||!raw.length)throw new Error('fiidiiTradeReact: unexpected shape');
+  // Rows come back as one entry per category for the latest date, e.g.
+  // {category:"FII/FPI", date:"27-Jun-2026", buyValue:"12345.67", sellValue:"11234.56", netValue:"1111.11"}
+  const byDate={};
+  for(const row of raw){
+    const cat=String(row.category||row.CATEGORY||'').toUpperCase();
+    const date=parseNseDMY(row.date||row.DATE);
+    if(!date)continue;
+    if(!byDate[date])byDate[date]={date};
+    const buy=parseFloat(row.buyValue??row.BUY_VALUE??row.buy_value)||0;
+    const sell=parseFloat(row.sellValue??row.SELL_VALUE??row.sell_value)||0;
+    if(cat.includes('FII')||cat.includes('FPI')){ byDate[date].fii_buy=buy; byDate[date].fii_sell=sell; }
+    else if(cat.includes('DII')){ byDate[date].dii_buy=buy; byDate[date].dii_sell=sell; }
+  }
+  const newRows=Object.values(byDate).filter(r=>r.fii_buy!=null&&r.dii_buy!=null);
+  if(!newRows.length)throw new Error('fiidiiTradeReact: no complete FII+DII rows parsed');
+
+  let history=[];
+  try{const r=await env.STOCKSENSE_KV.get('fiiDiiHistory');if(r)history=JSON.parse(r);}catch(e){}
+  const byDateExisting=new Map(history.map(r=>[r.date,r]));
+  for(const row of newRows)byDateExisting.set(row.date,row); // new day overwrites/adds
+  const merged=[...byDateExisting.values()].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,60);
+  await env.STOCKSENSE_KV.put('fiiDiiHistory',JSON.stringify(merged));
+  await env.STOCKSENSE_KV.put('fiiDiiMeta',JSON.stringify({ts:Date.now(),source:'nse-live'}));
+  return merged;
+}
+
+// ── Bulk / Block deals (live, EOD) ─────────────────────────────────────────────
+async function fetchDealsHistorical(kind){
+  // kind: 'bulk-deals' | 'block-deals'
+  const to=new Date();
+  const from=new Date(to.getTime()-10*86400000); // last 10 calendar days
+  const fmt=d=>String(d.getUTCDate()).padStart(2,'0')+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+d.getUTCFullYear();
+  const path='/api/historical/'+kind+'?from='+fmt(from)+'&to='+fmt(to);
+  const raw=await nseApiFetch(path,'/report-detail/eq_bulkblockdeals');
+  const arr=Array.isArray(raw)?raw:(raw?.data||[]);
+  return arr;
+}
+
+async function fetchBulkBlockDealsLive(env){
+  const [bulkRaw,blockRaw]=await Promise.all([
+    fetchDealsHistorical('bulk-deals').catch(e=>{console.warn('bulk-deals fetch failed:',e.message);return [];}),
+    fetchDealsHistorical('block-deals').catch(e=>{console.warn('block-deals fetch failed:',e.message);return [];}),
+  ]);
+  const norm=(rows,type)=>rows.map(d=>({
+    date: parseNseDMY(d.BD_DT_DATE||d.date||d.mTIMESTAMP) || (d.BD_DT_DATE||d.date||''),
+    sym: d.BD_SYMBOL||d.symbol||d.SYMBOL||'',
+    client: d.BD_CLIENT_NAME||d.client||d.clientName||'',
+    qty: parseFloat(d.BD_QTY_TRD??d.qty??d.quantityTraded)||0,
+    price: parseFloat(d.BD_TP_WATP??d.price??d.tradePrice)||0,
+    type,
+    side: /sell/i.test(d.BD_BUY_SELL||d.buySell||'')?'SELL':'BUY',
+  })).filter(d=>d.sym&&d.qty);
+  const deals=[...norm(bulkRaw,'Bulk'),...norm(blockRaw,'Block')]
+    .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  if(!deals.length)throw new Error('bulk/block deals: both endpoints returned nothing parseable');
+  await env.STOCKSENSE_KV.put('dealsCache',JSON.stringify({ts:Date.now(),source:'nse-live',deals}));
+  return deals;
+}
+
+// Shared: refresh both FII/DII and deals, tolerating either one failing independently.
+async function refreshMarketData(env){
+  const results={fiidii:null,deals:null};
+  try{ results.fiidii=await fetchFiiDiiLive(env); console.log('fiidii refreshed:',results.fiidii.length,'days'); }
+  catch(e){ console.warn('fiidii refresh failed:',e.message); }
+  try{ results.deals=await fetchBulkBlockDealsLive(env); console.log('deals refreshed:',results.deals.length,'rows'); }
+  catch(e){ console.warn('deals refresh failed:',e.message); }
+  return results;
+}
+
 async function tgSend(token,chatId,text,replyMarkup){
   try{
     const body={chat_id:chatId,text:'StockSense Pro\n\n'+text,parse_mode:'HTML'};
@@ -1643,7 +1791,7 @@ export default{
     const url=new URL(request.url);
     // ── Endpoint auth guard (added 2026-06-19): require secret on webhook + trigger URLs ──
     {const _p=url.pathname;
-     if(_p==='/telegram'||_p==='/sync'||_p==='/brief'||_p==='/evening'||_p==='/weekly'||_p==='/monthly'||_p==='/ai-start'||_p==='/ai-run'||_p==='/ai-stop'){
+     if(_p==='/telegram'||_p==='/sync'||_p==='/brief'||_p==='/evening'||_p==='/weekly'||_p==='/monthly'||_p==='/ai-start'||_p==='/ai-run'||_p==='/ai-stop'||_p==='/fiidii-refresh'||_p==='/deals-refresh'){
        let _sec=null;try{const _r=await env.STOCKSENSE_KV.get('portfolio');const _tok=env.TELEGRAM_TOKEN||(_r?(JSON.parse(_r).cfg||{}).tgToken:null);
          if(_tok){const _h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('ss-webhook:'+_tok));_sec=[...new Uint8Array(_h)].map(x=>x.toString(16).padStart(2,'0')).join('');}
        }catch(e){}
@@ -1660,6 +1808,30 @@ export default{
     if(url.pathname==='/weekly'){ctx.waitUntil((async()=>{let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}await sendWeeklyDigest(env,prices);})());return new Response('{"ok":true}',{headers:{'Content-Type':'application/json'}});}
     if(url.pathname==='/monthly'){ctx.waitUntil(sendMonthlyDigest(env));return new Response('{"ok":true}',{headers:{'Content-Type':'application/json'}});}
     if(url.pathname==='/indices'){const idx=await fetchIndexPrices();return new Response(JSON.stringify(idx||{}),{headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});}
+    const _MKTCORS={'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
+    if(url.pathname==='/fiidii'){
+      let history=[],meta=null;
+      try{const r=await env.STOCKSENSE_KV.get('fiiDiiHistory');if(r)history=JSON.parse(r);}catch(e){}
+      try{const r=await env.STOCKSENSE_KV.get('fiiDiiMeta');if(r)meta=JSON.parse(r);}catch(e){}
+      const staleMs=meta?Date.now()-meta.ts:Infinity;
+      if(staleMs>26*3600000){ ctx.waitUntil(fetchFiiDiiLive(env).catch(e=>console.warn('fiidii lazy refresh failed:',e.message))); }
+      return new Response(JSON.stringify({ok:true,history,fetchedAt:meta?.ts||null,source:meta?.source||'none'}),{headers:_MKTCORS});
+    }
+    if(url.pathname==='/fiidii-refresh'){
+      try{const history=await fetchFiiDiiLive(env);return new Response(JSON.stringify({ok:true,history}),{headers:_MKTCORS});}
+      catch(e){return new Response(JSON.stringify({ok:false,error:e.message}),{status:502,headers:_MKTCORS});}
+    }
+    if(url.pathname==='/deals'){
+      let cache=null;
+      try{const r=await env.STOCKSENSE_KV.get('dealsCache');if(r)cache=JSON.parse(r);}catch(e){}
+      const staleMs=cache?Date.now()-cache.ts:Infinity;
+      if(staleMs>26*3600000){ ctx.waitUntil(fetchBulkBlockDealsLive(env).catch(e=>console.warn('deals lazy refresh failed:',e.message))); }
+      return new Response(JSON.stringify({ok:true,deals:cache?.deals||[],fetchedAt:cache?.ts||null,source:cache?.source||'none'}),{headers:_MKTCORS});
+    }
+    if(url.pathname==='/deals-refresh'){
+      try{const deals=await fetchBulkBlockDealsLive(env);return new Response(JSON.stringify({ok:true,deals}),{headers:_MKTCORS});}
+      catch(e){return new Response(JSON.stringify({ok:false,error:e.message}),{status:502,headers:_MKTCORS});}
+    }
     const _AICORS={'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
     if(url.pathname==='/ai-start'){const m=url.searchParams.get('model');const job=await startAIJob(env,m);ctx.waitUntil(runAIQueue(env,null,{force:true}));return new Response(JSON.stringify({ok:true,status:job.status,total:job.total,model:job.model}),{headers:_AICORS});}
     if(url.pathname==='/ai-run'){ctx.waitUntil(runAIQueue(env,null,{force:true}));return new Response('{"ok":true}',{headers:_AICORS});}
@@ -1675,6 +1847,9 @@ export default{
         if(dow===1){let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}await sendWeeklyDigest(env,prices);}
       }else if(event.cron==='5 10 * * 1-5'){
         await sendEveningWrap(env);
+      }else if(event.cron==='0 13 * * 1-5'){
+        // 18:30 IST — after NSE publishes EOD FII/DII + bulk/block deal reports (~5:30-6:30pm IST)
+        await refreshMarketData(env);
       }else{
         const{prices,prevPrices}=await syncPrices(env);
         await checkAndSendAlerts(env,prices,prevPrices);

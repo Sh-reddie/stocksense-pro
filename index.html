@@ -11301,6 +11301,47 @@ function parseRSSItems(xml, sourceLabel) {
   });
   return items;
 }
+// Turn one raw {title,link,pubDate,source} item (from our own /api/news JSON)
+// into the same render-ready shape parseRSSItems() produces from raw XML.
+function _rawNewsItemToRenderItem(raw, fallbackLabel) {
+  const title = raw.title, link = raw.link, pubDate = raw.pubDate, source = raw.source || fallbackLabel;
+  if (!title || title.length < 10) return null;
+  let ago = '';
+  if (pubDate) {
+    const diff = (Date.now()-new Date(pubDate).getTime())/60000;
+    if (diff < 60) ago = Math.round(diff)+'m';
+    else if (diff < 1440) ago = Math.round(diff/60)+'h';
+    else ago = Math.round(diff/1440)+'d';
+  }
+  let imp='Neutral', ic='t-neu';
+  if (/surges?|rallies?|gain|rise|hits?\s+high|up\s+\d|record|strong|buy|wins?|order|profit|growth/i.test(title)) { imp='Positive'; ic='t-buy'; }
+  else if (/falls?|drops?|plunges?|sell|crash|low|decline|loss|weak|warns?|cut|probe|alert/i.test(title)) { imp='Negative'; ic='t-sell'; }
+  const mentioned = (STOCKS_DB||[]).filter(s => {
+    const sym = s.sym||'', name = (s.name||'').split(' ')[0];
+    return sym.length>=3 && (new RegExp(`\\b${sym}\\b`,'i').test(title) || (name.length>=4 && title.toLowerCase().includes(name.toLowerCase())));
+  }).map(s=>s.sym).slice(0,4);
+  return {t:title, link, s:source, ago, imp, ic, stocks:mentioned, ts: pubDate ? new Date(pubDate).getTime() : 0};
+}
+// Fetch one news query — tries our own server-side /api/news proxy first
+// (Cloudflare edge fetch, no CORS issue, no third-party proxy dependency),
+// and only falls back to the allorigins.win CORS-proxy chain — which is what
+// was causing weeks-old stale results — if our own endpoint comes back empty.
+async function fetchNewsQuery(q, label) {
+  try {
+    const r = await fetch(`/api/news?q=${encodeURIComponent(q)}&label=${encodeURIComponent(label||'')}`, { signal: AbortSignal.timeout(8000) });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.items?.length) {
+        const mapped = d.items.map(it => _rawNewsItemToRenderItem(it, label)).filter(Boolean);
+        if (mapped.length) return mapped;
+      }
+    }
+  } catch(e) {}
+  // Fallback: third-party proxy chain (kept for resilience if our own Function is down)
+  const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-IN&gl=IN&ceid=IN:en`;
+  const xml = await fetchRSSFeed(rssUrl);
+  return xml ? parseRSSItems(xml, label) : [];
+}
 // ═══════════════════════════════════════════════════
 // HOLDING CONVICTION NOTES
 // ═══════════════════════════════════════════════════
@@ -11539,21 +11580,19 @@ async function renderNews() {
     _renderNewsItems(_newsCache.items);
     return;
   }
-  allC.innerHTML='<div style="padding:20px;color:var(--t4);font-size:12px"><div class="spin" style="display:inline-block;margin-right:8px"></div> Fetching live news from Google News RSS…</div>';
+  allC.innerHTML='<div style="padding:20px;color:var(--t4);font-size:12px"><div class="spin" style="display:inline-block;margin-right:8px"></div> Fetching live news…</div>';
   const allItems = [];
   const portSyms = D.holdings.map(h=>h.symbol);
-  // Fetch market-wide news
+  // Fetch market-wide news (server-side /api/news first, allorigins fallback)
   await Promise.allSettled(NEWS_QUERIES.map(async ({q,label}) => {
-    const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-IN&gl=IN&ceid=IN:en`;
-    const xml = await fetchRSSFeed(rssUrl);
-    if (xml) allItems.push(...parseRSSItems(xml, label));
+    const items = await fetchNewsQuery(q, label);
+    if (items?.length) allItems.push(...items);
   }));
   // Fetch news for up to 5 portfolio stocks
   const topStocks = portSyms.slice(0,5);
   await Promise.allSettled(topStocks.map(async sym => {
-    const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(sym+' NSE India stock')}&hl=en-IN&gl=IN&ceid=IN:en`;
-    const xml = await fetchRSSFeed(rssUrl);
-    if (xml) allItems.push(...parseRSSItems(xml, sym));
+    const items = await fetchNewsQuery(sym+' NSE India stock', sym);
+    if (items?.length) allItems.push(...items);
   }));
   // Dedupe by title prefix and sort by time
   const seen = new Set();
@@ -16733,11 +16772,16 @@ const FII_SEED_DATA = [
 ];
 
 async function fetchFiiLive() {
-  // Try fetching live data from NSE via proxy
+  // Live data comes from our stocksense-price-sync Worker, which does the NSE
+  // cookie handshake server-side (a browser-side CORS proxy can't do this —
+  // NSE requires session cookies from its own homepage first) and refreshes
+  // once daily after NSE publishes EOD FII/DII figures (~5:30-6:30pm IST).
   try {
-    const url = 'https://www.nseindia.com/api/fiidiiTradeReact';
-    const data = await _proxyFetch(url, 8000);
-    if (data && Array.isArray(data)) return data;
+    const r = await fetch('https://stocksense-price-sync.sharathreddy-y001.workers.dev/fiidii',
+      { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (d?.history?.length) return { rows: d.history, fetchedAt: d.fetchedAt, source: d.source };
   } catch(e) {}
   return null;
 }
@@ -16751,8 +16795,17 @@ async function renderFiiDii() {
 
   summEl.innerHTML = '<div style="color:var(--t4);font-size:12px;padding:8px">Loading FII/DII data…</div>';
 
-  // Use seed data (live fetch often blocked by CORS even via proxy)
-  const raw = FII_SEED_DATA.slice(0, days).map(d => ({
+  // Try the Worker's live NSE-fetched history first; fall back to the static
+  // seed array only if that Worker call fails outright (e.g. Worker down).
+  const live = await fetchFiiLive();
+  let source = 'seed', fetchedAt = null;
+  let sourceRows;
+  if (live?.rows?.length) {
+    sourceRows = live.rows; source = live.source || 'nse-live'; fetchedAt = live.fetchedAt;
+  } else {
+    sourceRows = FII_SEED_DATA;
+  }
+  const raw = sourceRows.slice(0, days).map(d => ({
     date: d.date,
     fiiNet: d.fii_buy - d.fii_sell,
     diiNet: d.dii_buy - d.dii_sell,
@@ -16828,9 +16881,16 @@ async function renderFiiDii() {
     </tr>`;
   }).join('')}</tbody></table>`;
 
-  // Data source note
+  // Data source note — be honest about whether this is live or fallback data
   const noteEl = document.getElementById('fii-note');
-  if (noteEl) noteEl.innerHTML = `<div style="font-size:11px;color:var(--t4);margin-bottom:8px">📌 Historical seed data (30 days). Live NSE API data fetched when available.</div>`;
+  if (noteEl) {
+    if (source !== 'seed') {
+      const ageTxt = fetchedAt ? new Date(fetchedAt).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'}) + ' IST' : 'recently';
+      noteEl.innerHTML = `<div style="font-size:11px;color:var(--t3);margin-bottom:8px">✅ Live NSE data · fetched ${ageTxt} · refreshes daily after market close</div>`;
+    } else {
+      noteEl.innerHTML = `<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--yel);margin-bottom:8px">⚠ Live NSE fetch unavailable right now — showing older sample data. Will retry automatically.</div>`;
+    }
+  }
 
   // AI insight
   if (aiEl) {
@@ -25877,13 +25937,23 @@ async function renderDeals() {
 
   let deals = [];
   let source = 'mock';
+  let fetchedAt = null;
 
-  // Try NSE API (likely to fail due to cookies, use proxy)
+  // Live data comes from our stocksense-price-sync Worker, which does the NSE
+  // cookie handshake server-side and caches results, refreshed daily after
+  // NSE publishes its EOD bulk/block deal reports. A client-side CORS proxy
+  // can't do this — NSE requires session cookies established via its own
+  // homepage first.
   try {
-    const bulk = await _proxyFetch('https://www.nseindia.com/api/block-deal', 4000);
-    if (bulk && Array.isArray(bulk)) {
-      deals = bulk.map(d => ({ date: d.BD_DT_DATE||d.date, sym: d.BD_SYMBOL||d.symbol, client: d.BD_CLIENT_NAME||d.client, qty: d.BD_QTY_TRD||d.qty, price: d.BD_TRADE_PRICE||d.price, type: 'Block', side: d.BD_BUY_SELL==='B'?'BUY':'SELL' }));
-      source = 'live';
+    const r = await fetch('https://stocksense-price-sync.sharathreddy-y001.workers.dev/deals',
+      { signal: AbortSignal.timeout(6000) });
+    if (r.ok) {
+      const d = await r.json();
+      if (d?.deals?.length) {
+        deals = d.deals.map(x => ({ date: x.date, sym: x.sym, client: x.client, qty: x.qty, price: x.price, type: x.type, side: x.side }));
+        source = d.source || 'live';
+        fetchedAt = d.fetchedAt;
+      }
     }
   } catch(e) {}
 
@@ -25908,7 +25978,10 @@ async function renderDeals() {
     return;
   }
 
-  const notice = source === 'mock' ? `<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--yel);margin-bottom:12px">⚠ NSE live API unavailable (requires direct browser session). Showing representative sample data. Open NSE India directly for live deals.</div>` : `<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Live data from NSE</div>`;
+  const dealsAgeTxt = fetchedAt ? new Date(fetchedAt).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'}) + ' IST' : 'recently';
+  const notice = source === 'mock'
+    ? `<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--yel);margin-bottom:12px">⚠ Live NSE fetch unavailable right now. Showing representative sample data. Open NSE India directly for live deals.</div>`
+    : `<div style="font-size:11px;color:var(--t3);margin-bottom:8px">✅ Live data from NSE · fetched ${dealsAgeTxt} · refreshes daily after market close</div>`;
 
   el.innerHTML = notice + `<div style="overflow-x:auto"><table class="tbl">
     <thead><tr><th>Date</th><th>Stock</th><th>Client</th><th>Side</th><th>Qty</th><th>Price</th><th>Value</th><th>Type</th></tr></thead>
