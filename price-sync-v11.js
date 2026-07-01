@@ -1858,7 +1858,7 @@ export default{
         const hh={'User-Agent':UA,'Accept':'application/json','Referer':'https://finance.yahoo.com/'};
         if(sess&&sess.cookies)hh['Cookie']=sess.cookies;
         const cq=sess?('&crumb='+encodeURIComponent(sess.crumb)):'';
-        const res=await fetch('https://query1.finance.yahoo.com/v1/finance/search?q='+encodeURIComponent(q)+'&quotesCount=0&newsCount=10&enableFuzzyQuery=false'+cq,{headers:hh,signal:AbortSignal.timeout(8000)});
+        const res=await fetch('https://query1.finance.yahoo.com/v1/finance/search?q='+encodeURIComponent(q)+'&quotesCount=1&newsCount=10&enableFuzzyQuery=false'+cq,{headers:hh,signal:AbortSignal.timeout(8000)});
         const d=res.ok?await res.json():null;
         const news=(d&&d.news)||[];
         const items=news.map(n=>({
