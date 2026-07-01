@@ -85,6 +85,7 @@ export async function onRequestGet({ request }) {
 
   // ── Market-wide mode: /api/news?q=...&label=... — returns full items (title/link/pubDate/source) ──
   if (q && !sym) {
+    let debugInfo = null;
     try {
       const xml = await fetchRSS(q);
       const items = parseRSSItems(xml, label);
@@ -94,10 +95,13 @@ export async function onRequestGet({ request }) {
           { headers: { ...CACHE, 'Content-Type': 'application/json' } }
         );
       }
-    } catch (e) { /* fall through to empty response below */ }
+      debugInfo = { xmlLen: xml.length, xmlPreview: xml.slice(0, 300) };
+    } catch (e) {
+      debugInfo = { error: e.message };
+    }
 
     return new Response(
-      JSON.stringify({ ok: true, q, items: [], source: 'none', fetchedAt: Date.now() }),
+      JSON.stringify({ ok: true, q, items: [], source: 'none', fetchedAt: Date.now(), _debug: url.searchParams.get('debug') ? debugInfo : undefined }),
       { headers: { ...CACHE, 'Content-Type': 'application/json' } }
     );
   }
