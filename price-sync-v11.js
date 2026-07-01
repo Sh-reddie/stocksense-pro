@@ -1857,6 +1857,30 @@ export default{
       try{const deals=await fetchBulkBlockDealsLive(env);return new Response(JSON.stringify({ok:true,deals}),{headers:_MKTCORS});}
       catch(e){return new Response(JSON.stringify({ok:false,error:e.message}),{status:502,headers:_MKTCORS});}
     }
+    // TEMP diagnostic — remove once bulk/block-deals fetch is confirmed working.
+    // Echoes the raw NSE response (status + body snippet) so it can be inspected
+    // via a plain browser GET, without needing Cloudflare dashboard log access.
+    if(url.pathname==='/nse-debug'){
+      const p=url.searchParams.get('path')||'/api/historical/block-deals?from=21-06-2026&to=01-07-2026';
+      const rp=url.searchParams.get('ref')||'/report-detail/eq_bulkblockdeals';
+      if(!p.startsWith('/api/')&&!p.startsWith('/report'))return new Response('bad path',{status:400});
+      try{
+        const sess=await getNSESession(rp);
+        const res=await fetch('https://www.nseindia.com'+p,{
+          headers:{
+            'User-Agent':NSE_UA,'Accept':'application/json, text/plain, */*','Accept-Language':'en-US,en;q=0.9',
+            'Referer':'https://www.nseindia.com'+rp,'X-Requested-With':'XMLHttpRequest',
+            'Sec-Fetch-Mode':'cors','Sec-Fetch-Site':'same-origin','Sec-Fetch-Dest':'empty',
+            'Cookie':sess.cookies,
+          },
+          signal:AbortSignal.timeout(10000),
+        });
+        const text=await res.text();
+        return new Response(JSON.stringify({status:res.status,cookieCount:sess.cookies.split(';').length,cookiePreview:sess.cookies.slice(0,120),bodyPreview:text.slice(0,500)},null,2),{headers:{'Content-Type':'application/json'}});
+      }catch(e){
+        return new Response(JSON.stringify({error:e.message,stack:(e.stack||'').slice(0,500)}),{status:500,headers:{'Content-Type':'application/json'}});
+      }
+    }
     const _AICORS={'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
     if(url.pathname==='/ai-start'){const m=url.searchParams.get('model');const job=await startAIJob(env,m);ctx.waitUntil(runAIQueue(env,null,{force:true}));return new Response(JSON.stringify({ok:true,status:job.status,total:job.total,model:job.model}),{headers:_AICORS});}
     if(url.pathname==='/ai-run'){ctx.waitUntil(runAIQueue(env,null,{force:true}));return new Response('{"ok":true}',{headers:_AICORS});}
