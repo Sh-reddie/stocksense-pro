@@ -89,14 +89,32 @@ async function fetchRSS(query, attempts = 2) {
 }
 
 // Yahoo Finance's search API isn't blocked from Cloudflare's IPs the way
-// Google News is — used here as a per-symbol fallback. Its `news` array is
-// keyed to whatever Yahoo has indexed for that search term, so it works well
-// for liquid/well-covered names and returns little/nothing for thinly-traded
-// small-caps (a real coverage gap, not a fetch failure).
+// Google News is — used here as a per-symbol fallback. Requires a session
+// crumb (same handshake the price-sync Worker's getYFSession() does) —
+// without it, Yahoo silently degrades to generic trending news instead of
+// query-matched results (confirmed: without a crumb, searching "SUZLON"
+// returned Meta/Stryker/school-district headlines, nothing SUZLON-related).
+async function getYFSession() {
+  const r = await fetch('https://finance.yahoo.com/', {
+    headers: { 'User-Agent': BROWSER_UA, 'Accept': 'text/html,*/*', 'Accept-Language': 'en-US,en;q=0.9' },
+    redirect: 'follow',
+  });
+  const vals = typeof r.headers.getAll === 'function' ? r.headers.getAll('set-cookie') : [];
+  const cookies = vals.map(c => c.split(';')[0].trim()).join('; ');
+  const cr = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+    headers: { 'User-Agent': BROWSER_UA, 'Cookie': cookies, 'Referer': 'https://finance.yahoo.com/', 'Accept': '*/*' },
+  });
+  const crumb = (await cr.text()).trim();
+  if (!crumb || crumb.includes('Too Many') || crumb[0] === '<' || crumb[0] === '{') throw new Error('bad crumb: ' + crumb.slice(0, 60));
+  return { cookies, crumb };
+}
+
 async function fetchYahooNews(sym) {
+  const sess = await getYFSession();
+  const hh = { 'User-Agent': BROWSER_UA, 'Accept': 'application/json', 'Referer': 'https://finance.yahoo.com/', 'Cookie': sess.cookies };
   const r = await fetch(
-    `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(sym)}&quotesCount=1&newsCount=8&enableFuzzyQuery=false`,
-    { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json' }, signal: AbortSignal.timeout(8000) }
+    `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(sym)}&quotesCount=1&newsCount=8&enableFuzzyQuery=false&crumb=${encodeURIComponent(sess.crumb)}`,
+    { headers: hh, signal: AbortSignal.timeout(8000) }
   );
   if (!r.ok) throw new Error('yahoo http ' + r.status);
   const d = await r.json();
