@@ -272,10 +272,10 @@ async function warmNewsCache(env){
     for(const q of queries){
       try{
         const xml=await fetchGNewsRSS(q);
-        const titles=[...xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/gs)].slice(1,10).map(m=>m[1].trim())
-          .filter(t=>t&&t.length>8&&t.trim().toLowerCase()!=='google news').slice(0,8);
-        if(titles.length>=2){
-          await env.STOCKSENSE_KV.put('newsKV:sym:'+sym,JSON.stringify({headlines:titles,source:'google-news',ts:Date.now()}),{expirationTtl:30*24*3600});
+        const articles=parseGNewsItems(xml).slice(0,8);
+        if(articles.length>=2){
+          const headlines=articles.map(a=>a.title);
+          await env.STOCKSENSE_KV.put('newsKV:sym:'+sym,JSON.stringify({headlines,articles,source:'google-news',ts:Date.now()}),{expirationTtl:30*24*3600});
           got=true; ok++; break;
         }
       }catch(e){}

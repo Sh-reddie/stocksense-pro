@@ -11811,8 +11811,10 @@ async function renderPortfolioNewsFeed(forceRefresh = false) {
       if (!forceRefresh) {
         try {
           const cached = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
-          if (cached && Date.now() - cached.ts < NEWS_FEED_TTL) {
-            cached.headlines.forEach(title => allArticles.push({ sym: h.symbol, sector: h.sector, title, ts: cached.ts - Math.random() * 3600000 }));
+          // Only trust the cache if it actually has articles — an empty result
+          // getting cached and silently reused for 30 min was the earlier bug.
+          if (cached?.articles?.length && Date.now() - cached.ts < NEWS_FEED_TTL) {
+            cached.articles.forEach(a => allArticles.push({ sym: h.symbol, sector: h.sector, title: a.title, link: a.link, ts: cached.ts - Math.random() * 3600000 }));
             return;
           }
         } catch(e) {}
@@ -11821,9 +11823,10 @@ async function renderPortfolioNewsFeed(forceRefresh = false) {
         const r = await fetch(`/api/news?sym=${encodeURIComponent(h.symbol)}&exchange=${h.exchange||'NSE'}`, { signal: AbortSignal.timeout(8000) });
         if (r.ok) {
           const d = await r.json();
-          const headlines = d.headlines || [];
-          try { sessionStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), headlines })); } catch(e) {}
-          headlines.forEach(title => allArticles.push({ sym: h.symbol, sector: h.sector, title, ts: Date.now() - Math.random() * 7200000 }));
+          // articles carries {title, link}; fall back to headline-only (no link) for older cache shapes
+          const articles = d.articles?.length ? d.articles : (d.headlines || []).map(title => ({ title, link: null }));
+          if (articles.length) { try { sessionStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), articles })); } catch(e) {} }
+          articles.forEach(a => allArticles.push({ sym: h.symbol, sector: h.sector, title: a.title, link: a.link, ts: Date.now() - Math.random() * 7200000 }));
         }
       } catch(e) {}
     }));
@@ -11852,12 +11855,15 @@ async function renderPortfolioNewsFeed(forceRefresh = false) {
   const rows = unique.slice(0, 60).map(a => {
     const h = D.holdings.find(x => x.symbol === a.sym);
     const sent = h?._sentiment;
+    const titleHtml = a.link
+      ? `<a href="${a.link}" target="_blank" rel="noopener noreferrer" style="color:var(--t1);text-decoration:none" onmouseover="this.style.color='var(--ac)';this.style.textDecoration='underline'" onmouseout="this.style.color='var(--t1)';this.style.textDecoration='none'">${a.title}</a>`
+      : a.title;
     return `<div style="padding:10px 0;border-bottom:1px solid var(--b1);display:flex;gap:10px;align-items:flex-start">
       <div style="flex-shrink:0;padding-top:2px">
         <span style="font-size:9.5px;font-weight:800;background:rgba(79,142,247,.12);color:var(--ac);border:1px solid rgba(79,142,247,.25);border-radius:6px;padding:2px 6px;white-space:nowrap">${a.sym}</span>
       </div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:12.5px;line-height:1.45;color:var(--t1);margin-bottom:4px">${a.title}</div>
+        <div style="font-size:12.5px;line-height:1.45;margin-bottom:4px;cursor:${a.link?'pointer':'default'}">${titleHtml}</div>
         <div style="display:flex;gap:8px;align-items:center;font-size:10px;color:var(--t4);flex-wrap:wrap">
           <span>${a.sector||'—'}</span>
           ${sent ? `<span style="color:${sentColor(sent)};font-weight:700">${sentIcon(sent)} ${sent.sentiment||''}</span>` : ''}

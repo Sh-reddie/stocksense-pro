@@ -72,7 +72,7 @@ function parseRSSItems(xml, fallbackLabel) {
     const link = getTag('link') || getTag('guid');
     const pubDate = getTag('pubDate');
     const source = decodeEntities(getTag('source', fallbackLabel || ''));
-    if (!title || title.length < 10) return;
+    if (!title || title.length < 10 || title.trim().toLowerCase() === 'google news') return;
     items.push({ title, link, pubDate, source });
   });
   return items;
@@ -176,13 +176,17 @@ export async function onRequestGet({ request, env }) {
     `${sym} share price India`,
   ];
 
+  // articles carry {title, link, pubDate, source} so the UI can link out to the
+  // actual story; headlines stays a plain title array for backward compat
+  // (the AI Sentiment feature only ever wanted titles as text for a prompt).
   for (const query of queries) {
     try {
       const xml = await fetchRSS(query, 1); // 1 attempt per variant — the 2nd variant is itself a retry angle
-      const titles = parseRSSTitles(xml);
-      if (titles.length >= 2) {
-        await kvPutGood(env, kvKey, { headlines: titles, source: 'google-news' });
-        return new Response(JSON.stringify({ ok: true, sym, headlines: titles, source: 'google-news', fetchedAt: Date.now() }), { headers: { ...CACHE_OK, 'Content-Type': 'application/json' } });
+      const articles = parseRSSItems(xml).slice(0, 8);
+      if (articles.length >= 2) {
+        const headlines = articles.map(a => a.title);
+        await kvPutGood(env, kvKey, { headlines, articles, source: 'google-news' });
+        return new Response(JSON.stringify({ ok: true, sym, headlines, articles, source: 'google-news', fetchedAt: Date.now() }), { headers: { ...CACHE_OK, 'Content-Type': 'application/json' } });
       }
     } catch (e) {}
   }
@@ -192,12 +196,13 @@ export async function onRequestGet({ request, env }) {
     const r = await fetch('https://www.moneycontrol.com/rss/buzzingstocks.xml', { headers: { 'User-Agent': BROWSER_UA }, signal: AbortSignal.timeout(5000) });
     if (r.ok) {
       const xml = await r.text();
-      const allTitles = parseRSSTitles(xml);
+      const allArticles = parseRSSItems(xml, 'MoneyControl');
       const symLower = sym.toLowerCase();
-      const relevant = allTitles.filter(t => t.toLowerCase().includes(symLower));
+      const relevant = allArticles.filter(a => a.title.toLowerCase().includes(symLower)).slice(0, 5);
       if (relevant.length) {
-        await kvPutGood(env, kvKey, { headlines: relevant.slice(0, 5), source: 'moneycontrol' });
-        return new Response(JSON.stringify({ ok: true, sym, headlines: relevant.slice(0, 5), source: 'moneycontrol', fetchedAt: Date.now() }), { headers: { ...CACHE_OK, 'Content-Type': 'application/json' } });
+        const headlines = relevant.map(a => a.title);
+        await kvPutGood(env, kvKey, { headlines, articles: relevant, source: 'moneycontrol' });
+        return new Response(JSON.stringify({ ok: true, sym, headlines, articles: relevant, source: 'moneycontrol', fetchedAt: Date.now() }), { headers: { ...CACHE_OK, 'Content-Type': 'application/json' } });
       }
     }
   } catch (e) {}
@@ -206,10 +211,13 @@ export async function onRequestGet({ request, env }) {
   // clearly marked as stale, rather than an empty "no headlines" dead end.
   const good = await kvGetGood(env, kvKey);
   if (good?.headlines?.length) {
-    return new Response(JSON.stringify({ ok: true, sym, headlines: good.headlines, source: good.source + '-stale', staleSinceMs: Date.now() - good.ts, fetchedAt: good.ts }), { headers: { ...CACHE_MISS, 'Content-Type': 'application/json' } });
+    // Older cache entries (written before `articles` existed) only have headlines —
+    // degrade gracefully to link-less entries rather than erroring.
+    const articles = good.articles || good.headlines.map(title => ({ title, link: null, pubDate: null, source: null }));
+    return new Response(JSON.stringify({ ok: true, sym, headlines: good.headlines, articles, source: good.source + '-stale', staleSinceMs: Date.now() - good.ts, fetchedAt: good.ts }), { headers: { ...CACHE_MISS, 'Content-Type': 'application/json' } });
   }
 
-  return new Response(JSON.stringify({ ok: true, sym, headlines: [], source: 'none', fetchedAt: Date.now() }), { headers: { ...CACHE_MISS, 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: true, sym, headlines: [], articles: [], source: 'none', fetchedAt: Date.now() }), { headers: { ...CACHE_MISS, 'Content-Type': 'application/json' } });
 }
 
 export async function onRequestOptions() {
