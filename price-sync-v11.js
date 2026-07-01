@@ -65,7 +65,10 @@ async function nseApiFetch(path, refererPath){
         signal:AbortSignal.timeout(10000),
       });
       const text=await res.text();
-      if(!res.ok||!text||text.trim()[0]==='<'){ lastErr=new Error('NSE '+path+' → HTTP '+res.status+' (attempt '+(attempt+1)+')'); continue; }
+      if(!res.ok||!text||text.trim()[0]==='<'){
+        console.warn('NSE '+path+' → HTTP '+res.status+' (attempt '+(attempt+1)+') body[0:150]='+JSON.stringify(text.slice(0,150)));
+        lastErr=new Error('NSE '+path+' → HTTP '+res.status+' (attempt '+(attempt+1)+')'); continue;
+      }
       return JSON.parse(text);
     }catch(e){ lastErr=e; }
   }
