@@ -1961,6 +1961,12 @@ export default{
       const result=await warmNewsCache(env);
       return new Response(JSON.stringify({ok:true,...result}),{headers:_MKTCORS});
     }
+    if(url.pathname==='/news-peek'){
+      // TEMP diagnostic — read-only KV peek, no side effects, safe to leave briefly.
+      const k=url.searchParams.get('k')||'newsKV:q:indian stock market nse bse nifty sensex';
+      const raw=await env.STOCKSENSE_KV.get(k);
+      return new Response(JSON.stringify({key:k,found:!!raw,value:raw?JSON.parse(raw):null}),{headers:_MKTCORS});
+    }
     const _AICORS={'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
     if(url.pathname==='/ai-start'){const m=url.searchParams.get('model');const job=await startAIJob(env,m);ctx.waitUntil(runAIQueue(env,null,{force:true}));return new Response(JSON.stringify({ok:true,status:job.status,total:job.total,model:job.model}),{headers:_AICORS});}
     if(url.pathname==='/ai-run'){ctx.waitUntil(runAIQueue(env,null,{force:true}));return new Response('{"ok":true}',{headers:_AICORS});}
