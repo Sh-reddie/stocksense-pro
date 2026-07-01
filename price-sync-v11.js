@@ -1845,6 +1845,15 @@ export default{
     if(url.pathname==='/weekly'){ctx.waitUntil((async()=>{let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}await sendWeeklyDigest(env,prices);})());return new Response('{"ok":true}',{headers:{'Content-Type':'application/json'}});}
     if(url.pathname==='/monthly'){ctx.waitUntil(sendMonthlyDigest(env));return new Response('{"ok":true}',{headers:{'Content-Type':'application/json'}});}
     if(url.pathname==='/indices'){const idx=await fetchIndexPrices();return new Response(JSON.stringify(idx||{}),{headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});}
+    if(url.pathname==='/gnews-test'){
+      try{
+        const q=url.searchParams.get('q')||'Indian stock market NSE BSE Nifty Sensex';
+        const rssUrl='https://news.google.com/rss/search?q='+encodeURIComponent(q)+'&hl=en-IN&gl=IN&ceid=IN:en';
+        const r=await fetch(rssUrl,{headers:{'User-Agent':UA,'Accept':'application/rss+xml, application/xml, text/xml, */*'},signal:AbortSignal.timeout(9000)});
+        const text=await r.text();
+        return new Response(JSON.stringify({status:r.status,len:text.length,hasItem:text.includes('<item>'),preview:text.slice(0,300)}),{headers:{'Content-Type':'application/json'}});
+      }catch(e){ return new Response(JSON.stringify({error:e.message}),{status:500,headers:{'Content-Type':'application/json'}}); }
+    }
     const _MKTCORS={'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
     if(url.pathname==='/fiidii'){
       let history=[],meta=null;
