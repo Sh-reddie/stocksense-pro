@@ -88,6 +88,22 @@ async function fetchRSS(query, attempts = 2) {
   throw lastErr;
 }
 
+// Yahoo Finance's search API isn't blocked from Cloudflare's IPs the way
+// Google News is — used here as a per-symbol fallback. Its `news` array is
+// keyed to whatever Yahoo has indexed for that search term, so it works well
+// for liquid/well-covered names and returns little/nothing for thinly-traded
+// small-caps (a real coverage gap, not a fetch failure).
+async function fetchYahooNews(sym) {
+  const r = await fetch(
+    `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(sym)}&quotesCount=1&newsCount=8&enableFuzzyQuery=false`,
+    { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json' }, signal: AbortSignal.timeout(8000) }
+  );
+  if (!r.ok) throw new Error('yahoo http ' + r.status);
+  const d = await r.json();
+  const news = d?.news || [];
+  return news.map(n => n.title).filter(t => t && t.length > 8).slice(0, 8);
+}
+
 async function fetchMoneyControlItems(label) {
   const r = await fetch('https://www.moneycontrol.com/rss/buzzingstocks.xml', {
     headers: { 'User-Agent': BROWSER_UA },
@@ -155,7 +171,7 @@ export async function onRequestGet({ request }) {
 
   for (const query of queries) {
     try {
-      const xml = await fetchRSS(query);
+      const xml = await fetchRSS(query, 1); // 1 attempt per variant here — the 2nd query variant is itself a retry
       const titles = parseRSSTitles(xml);
       if (titles.length >= 2) {
         return new Response(
@@ -165,6 +181,19 @@ export async function onRequestGet({ request }) {
       }
     } catch (e) { /* try next query */ }
   }
+
+  // Yahoo Finance fallback — not blocked from Cloudflare, works well for
+  // liquid/large-cap names. Try before MoneyControl (which is usually gated
+  // behind a login-consent redirect and rarely actually returns the feed).
+  try {
+    const titles = await fetchYahooNews(sym);
+    if (titles.length) {
+      return new Response(
+        JSON.stringify({ ok: true, sym, headlines: titles, source: 'yahoo-finance', fetchedAt: Date.now() }),
+        { headers: { ...CACHE, 'Content-Type': 'application/json' } }
+      );
+    }
+  } catch (e) {}
 
   // MoneyControl RSS fallback
   try {
