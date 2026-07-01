@@ -52,7 +52,7 @@ function parseRSSTitles(xml) {
       .map(m => m[1].replace(/<[^>]+>/g, '').trim());
   }
   return titles
-    .filter(t => t.length > 8)
+    .filter(t => t.length > 8 && t.trim().toLowerCase() !== 'google news')
     .map(decodeEntities)
     .slice(0, 8);
 }
