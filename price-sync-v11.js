@@ -1909,7 +1909,7 @@ export default{
     const url=new URL(request.url);
     // ── Endpoint auth guard (added 2026-06-19): require secret on webhook + trigger URLs ──
     {const _p=url.pathname;
-     if(_p==='/telegram'||_p==='/sync'||_p==='/brief'||_p==='/evening'||_p==='/weekly'||_p==='/monthly'||_p==='/ai-start'||_p==='/ai-run'||_p==='/ai-stop'||_p==='/fiidii-refresh'||_p==='/deals-refresh'){
+     if(_p==='/telegram'||_p==='/sync'||_p==='/brief'||_p==='/evening'||_p==='/weekly'||_p==='/monthly'||_p==='/ai-start'||_p==='/ai-run'||_p==='/ai-stop'||_p==='/fiidii-refresh'||_p==='/deals-refresh'||_p==='/news-warm'){
        let _sec=null;try{const _r=await env.STOCKSENSE_KV.get('portfolio');const _tok=env.TELEGRAM_TOKEN||(_r?(JSON.parse(_r).cfg||{}).tgToken:null);
          if(_tok){const _h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('ss-webhook:'+_tok));_sec=[...new Uint8Array(_h)].map(x=>x.toString(16).padStart(2,'0')).join('');}
        }catch(e){}
@@ -1960,12 +1960,6 @@ export default{
     if(url.pathname==='/news-warm'){
       const result=await warmNewsCache(env);
       return new Response(JSON.stringify({ok:true,...result}),{headers:_MKTCORS});
-    }
-    if(url.pathname==='/news-peek'){
-      // TEMP diagnostic — read-only KV peek, no side effects, safe to leave briefly.
-      const k=url.searchParams.get('k')||'newsKV:q:indian stock market nse bse nifty sensex';
-      const raw=await env.STOCKSENSE_KV.get(k);
-      return new Response(JSON.stringify({key:k,found:!!raw,value:raw?JSON.parse(raw):null}),{headers:_MKTCORS});
     }
     const _AICORS={'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
     if(url.pathname==='/ai-start'){const m=url.searchParams.get('model');const job=await startAIJob(env,m);ctx.waitUntil(runAIQueue(env,null,{force:true}));return new Response(JSON.stringify({ok:true,status:job.status,total:job.total,model:job.model}),{headers:_AICORS});}
