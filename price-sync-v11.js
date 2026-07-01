@@ -1909,7 +1909,7 @@ export default{
     const url=new URL(request.url);
     // ── Endpoint auth guard (added 2026-06-19): require secret on webhook + trigger URLs ──
     {const _p=url.pathname;
-     if(_p==='/telegram'||_p==='/sync'||_p==='/brief'||_p==='/evening'||_p==='/weekly'||_p==='/monthly'||_p==='/ai-start'||_p==='/ai-run'||_p==='/ai-stop'||_p==='/fiidii-refresh'||_p==='/deals-refresh'||_p==='/news-warm'){
+     if(_p==='/telegram'||_p==='/sync'||_p==='/brief'||_p==='/evening'||_p==='/weekly'||_p==='/monthly'||_p==='/ai-start'||_p==='/ai-run'||_p==='/ai-stop'||_p==='/fiidii-refresh'||_p==='/deals-refresh'){
        let _sec=null;try{const _r=await env.STOCKSENSE_KV.get('portfolio');const _tok=env.TELEGRAM_TOKEN||(_r?(JSON.parse(_r).cfg||{}).tgToken:null);
          if(_tok){const _h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('ss-webhook:'+_tok));_sec=[...new Uint8Array(_h)].map(x=>x.toString(16).padStart(2,'0')).join('');}
        }catch(e){}
