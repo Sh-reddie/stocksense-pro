@@ -60,18 +60,42 @@ function parseRSSItems(xml, fallbackLabel) {
   return items;
 }
 
-async function fetchRSS(query) {
-  const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-IN&gl=IN&ceid=IN:en`;
-  const r = await fetch(rssUrl, {
-    headers: {
-      'User-Agent': BROWSER_UA,
-      'Accept': 'application/rss+xml, application/xml, text/xml, */*',
-      'Accept-Language': 'en-IN,en;q=0.9',
-    },
-    signal: AbortSignal.timeout(18000),
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+// Google News RSS from Cloudflare's shared IP ranges gets intermittently
+// rate-limited (503, or a hang until timeout) — not a hard block, since it
+// does succeed on retry. Two attempts with a short gap clears most of these.
+async function fetchRSS(query, attempts = 2) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-IN&gl=IN&ceid=IN:en`;
+      const r = await fetch(rssUrl, {
+        headers: {
+          'User-Agent': BROWSER_UA,
+          'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+          'Accept-Language': 'en-IN,en;q=0.9',
+        },
+        signal: AbortSignal.timeout(9000),
+      });
+      if (!r.ok) throw new Error('rss http ' + r.status);
+      return await r.text();
+    } catch (e) {
+      lastErr = e;
+      if (i < attempts - 1) await sleep(400);
+    }
+  }
+  throw lastErr;
+}
+
+async function fetchMoneyControlItems(label) {
+  const r = await fetch('https://www.moneycontrol.com/rss/buzzingstocks.xml', {
+    headers: { 'User-Agent': BROWSER_UA },
+    signal: AbortSignal.timeout(9000),
   });
-  if (!r.ok) throw new Error('rss http ' + r.status);
-  return r.text();
+  if (!r.ok) throw new Error('moneycontrol http ' + r.status);
+  const xml = await r.text();
+  return parseRSSItems(xml, label || 'MoneyControl');
 }
 
 export async function onRequestGet({ request }) {
@@ -99,6 +123,18 @@ export async function onRequestGet({ request }) {
     } catch (e) {
       debugInfo = { error: e.message };
     }
+
+    // Google News is intermittently rate-limited from Cloudflare's IPs — fall
+    // back to MoneyControl's general market RSS feed rather than showing nothing.
+    try {
+      const items = await fetchMoneyControlItems(label);
+      if (items.length) {
+        return new Response(
+          JSON.stringify({ ok: true, q, items, source: 'moneycontrol', fetchedAt: Date.now() }),
+          { headers: { ...CACHE, 'Content-Type': 'application/json' } }
+        );
+      }
+    } catch (e) { debugInfo = debugInfo || { error: e.message }; }
 
     return new Response(
       JSON.stringify({ ok: true, q, items: [], source: 'none', fetchedAt: Date.now(), _debug: url.searchParams.get('debug') ? debugInfo : undefined }),
