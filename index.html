@@ -2224,15 +2224,19 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="sec-head">
       <div class="sec-title">📅 Earnings Calendar</div>
       <div style="display:flex;gap:8px;align-items:center">
+        <div id="cal-view-toggle" style="display:flex;border:1px solid var(--b2);border-radius:8px;overflow:hidden">
+          <button class="btn btn-g btn-sm" id="cal-vt-month" style="border:none;border-radius:0" onclick="_calSetView('month')">🗓 Month</button>
+          <button class="btn btn-g btn-sm" id="cal-vt-agenda" style="border:none;border-radius:0" onclick="_calSetView('agenda')">📋 Agenda</button>
+        </div>
         <button class="btn btn-g btn-sm" onclick="calNav(-1)">← Prev</button>
         <span id="cal-month-lbl" style="font-family:var(--mono);font-size:12px;color:var(--t2);min-width:110px;text-align:center"></span>
         <button class="btn btn-g btn-sm" onclick="calNav(1)">Next →</button>
-        <button class="btn btn-g btn-sm" onclick="autoPopulateResults()" title="Add estimated Q results dates for all holdings">📅 Populate Estimates</button>
+        <button class="btn btn-g btn-sm" onclick="autoPopulateResults()" title="Sync real earnings dates, estimated dividend ex-dates and market events from your portfolio data">⟳ Sync Portfolio Events</button>
         <button class="btn btn-red btn-sm" onclick="clearSection('calendar')">🗑 Clear</button>
         <button class="btn btn-p" onclick="openCalEventModal()">+ Add Event</button>
       </div>
     </div>
-    <div class="pn" style="margin-bottom:14px">
+    <div class="pn" id="cal-month-panel" style="margin-bottom:14px">
       <div class="pn-b" style="padding:0">
         <div class="cal-grid">
           <div class="cal-head">SUN</div><div class="cal-head">MON</div><div class="cal-head">TUE</div>
@@ -2241,6 +2245,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div id="cal-days" style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--b1)"></div>
       </div>
     </div>
+    <div id="cal-agenda" style="display:none;margin-bottom:14px"></div>
     <div class="g2">
       <div class="pn">
         <div class="pn-h"><div class="pn-t">📋 Upcoming Events (30 days)</div></div>
@@ -4886,11 +4891,13 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="sec-head">
       <div class="sec-title">🚀 IPO Tracker</div>
       <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn btn-g btn-sm" onclick="_fetchIPOs(true)">↻ Refresh</button>
-        <button class="btn btn-p btn-sm" onclick="_addManualIPO()">+ Add IPO</button>
+        <span id="ipo-updated" style="font-size:11px;color:var(--t4)"></span>
+        <button class="btn btn-p btn-sm" onclick="_fetchIPOs(true)">↻ Refresh IPOs</button>
+        <button class="btn btn-g btn-sm" onclick="_addManualIPO()">+ Add IPO</button>
       </div>
     </div>
-    <div id="ipo-stats" style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap"></div>
+    <div id="ipo-stats" style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap"></div>
+    <div id="ipo-filters"></div>
     <div id="ipo-content"><div style="padding:40px;text-align:center;color:var(--t4)"><div class="spin" style="margin:0 auto 12px"></div>Loading IPOs…</div></div>
   </div>
 
@@ -6332,7 +6339,7 @@ function go(id) {
   if(id==='pf-heatmap') renderPfHeatmap();
   if(id==='alerts') renderAlerts();
   if(id==='notifications') { renderNotifs(); setTimeout(()=>{ markAllNotifsRead(); renderNotifs(); }, 1500); }
-  if(id==='calendar') { renderCalendar(); renderFoExpiry(); }
+  if(id==='calendar') { _calSeedFromServer(); renderCalendar(); renderFoExpiry(); }
   if(id==='benchmark') loadBenchmark();
   if(id==='planner') { calcPositionSize(); calcSIP(); renderPsConc(); }
   if(id==='heatmap') buildHeatmap();
@@ -17080,7 +17087,7 @@ const FIXED_MKT_EVENTS = [
 ];
 
 function loadCalEvents() { return JSON.parse(localStorage.getItem('ss_cal_events')||'[]'); }
-function saveCalEvents(e) { localStorage.setItem('ss_cal_events', JSON.stringify(e)); }
+function saveCalEvents(e) { localStorage.setItem('ss_cal_events', JSON.stringify(e)); _calPushServer(e); }
 
 function renderCalendar() {
   const yr = _calDate.getFullYear(), mo = _calDate.getMonth();
@@ -17144,6 +17151,15 @@ function renderCalendar() {
     { c:'var(--cyn)',   l:'Q3 Results', d:'January–February' },
     { c:'var(--pink)',  l:'Q4 Results', d:'April–May' },
   ].map(r=>`<div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:${r.c};flex-shrink:0"></span><span style="color:var(--t1)">${r.l}</span><span style="color:var(--t4);font-size:11px;margin-left:auto">${r.d}</span></div>`).join('');
+  // Apply Month/Agenda view
+  const _vtM = document.getElementById('cal-vt-month'), _vtA = document.getElementById('cal-vt-agenda');
+  if (_vtM && _vtA) {
+    _vtM.classList.toggle('btn-p', _calView === 'month'); _vtM.classList.toggle('btn-g', _calView !== 'month');
+    _vtA.classList.toggle('btn-p', _calView === 'agenda'); _vtA.classList.toggle('btn-g', _calView !== 'agenda');
+  }
+  const _mp = document.getElementById('cal-month-panel'), _ag = document.getElementById('cal-agenda');
+  if (_mp) _mp.style.display = _calView === 'month' ? '' : 'none';
+  if (_ag) { _ag.style.display = _calView === 'agenda' ? '' : 'none'; if (_calView === 'agenda') _renderCalAgenda(events); }
 }
 
 function calNav(dir) { _calDate.setMonth(_calDate.getMonth()+dir); renderCalendar(); }
@@ -17300,36 +17316,148 @@ function _syncEarningsToCalendar() {
 }
 
 // Pre-populate with result dates for current holdings quarter
+// ⟳ Sync Portfolio Events — redesigned 2026-07-02. No more fake "spread across
+// the month" estimates: pulls REAL dates already in the app's data —
+//   • confirmed earnings dates (h.earningsTs from Yahoo quote refreshes)
+//   • estimated dividend ex-dates (Corp Actions archive, ss_corpact_v2)
+//   • fixed market events (F&O expiries etc. via _getFixedMarketEvents)
+// Auto events carry _auto + a stable key, so re-syncing replaces them in place
+// (no duplicates); manually added events are never touched.
 function autoPopulateResults() {
-  const events = loadCalEvents();
-  const existingTitles = new Set(events.map(e => e.title));
-  const now = new Date();
-  const mo = now.getMonth() + 1; // 1-12
-  // Indian results seasons: Q4(Apr-May), Q1(Jul-Aug), Q2(Oct-Nov), Q3(Jan-Feb)
-  // Pick next upcoming season start
-  let resMonthNum, resYear;
-  if (mo <= 2)      { resMonthNum = 1;  resYear = now.getFullYear(); }  // Jan results
-  else if (mo <= 5) { resMonthNum = 4;  resYear = now.getFullYear(); }  // Apr results
-  else if (mo <= 8) { resMonthNum = 7;  resYear = now.getFullYear(); }  // Jul results
-  else if (mo <= 11){ resMonthNum = 10; resYear = now.getFullYear(); }  // Oct results
-  else              { resMonthNum = 1;  resYear = now.getFullYear()+1; } // Jan next year
+  let events = loadCalEvents().filter(e => !e._auto);   // drop old auto set, keep manual
+  const manualKeys = new Set(events.map(e => e.title + '|' + e.date));
+  const add = (title, date, type, key) => {
+    if (manualKeys.has(title + '|' + date)) return;
+    events.push({ id: 'auto-' + key, title, date, type, _auto: true });
+  };
+  const now = Date.now();
+  let nEarn = 0, nEst = 0, nDiv = 0;
 
-  // Spread results across the month: days 10–31, 3 stocks per day
-  const holdings = D.holdings.filter(h => !existingTitles.has(`${h.symbol} Q Results`));
-  holdings.forEach((h, i) => {
-    const dayOfMonth = Math.min(10 + Math.floor(i / 3) * 2, 31); // 10,10,10, 12,12,12, 14...
-    const date = `${resYear}-${String(resMonthNum).padStart(2,'0')}-${String(dayOfMonth).padStart(2,'0')}`;
-    events.push({ id: Date.now() + Math.random(), title: `${h.symbol} Q Results`, date, type: 'res', _auto: true });
+  // 1) Real earnings dates
+  D.holdings.forEach(h => {
+    if (!h.earningsTs) return;
+    const ts = h.earningsTs * 1000;
+    const dd = (ts - now) / 86400000;
+    if (dd < -14 || dd > 120) return;
+    add(`${h.symbol} Q Results`, new Date(ts).toISOString().slice(0, 10), 'res', 'res-' + h.symbol);
+    nEarn++;
   });
 
-  // Also add fixed market events for the next 12 months if not already present
+  // 2) Fallback: holdings with NO confirmed date get one clearly-marked estimate
+  //    at the middle of the next results season window
+  const nd = new Date(); const mo = nd.getMonth() + 1;
+  let estDate;
+  if (mo <= 2)      estDate = `${nd.getFullYear()}-01-25`;
+  else if (mo <= 5) estDate = `${nd.getFullYear()}-04-25`;
+  else if (mo <= 8) estDate = `${nd.getFullYear()}-07-25`;
+  else if (mo <= 11)estDate = `${nd.getFullYear()}-10-25`;
+  else              estDate = `${nd.getFullYear() + 1}-01-25`;
+  D.holdings.forEach(h => {
+    if (h.earningsTs) return;
+    add(`${h.symbol} Q Results (est.)`, estDate, 'res', 'est-' + h.symbol);
+    nEst++;
+  });
+
+  // 3) Estimated dividend ex-dates from the Corp Actions archive
+  try {
+    const ca = JSON.parse(localStorage.getItem('ss_corpact_v2') || 'null');
+    if (ca?.bySym) Object.entries(ca.bySym).forEach(([sym, e]) => {
+      if (!D.holdings.some(h => h.symbol === sym)) return;
+      const ts = new Date(e.nextEstExDate).getTime();
+      const dd = (ts - now) / 86400000;
+      if (dd < 0 || dd > 180) return;
+      add(`${sym} ex-div ~₹${e.amount}/sh (est.)`, new Date(ts).toISOString().slice(0, 10), 'div', 'div-' + sym);
+      nDiv++;
+    });
+  } catch(e) {}
+
+  // 4) Fixed market events (F&O expiry etc.)
   const mktEvents = _getFixedMarketEvents();
-  const existingDates = new Set(events.filter(e=>e._mkt).map(e=>e.title+'|'+e.date));
-  mktEvents.forEach(e => { if (!existingDates.has(e.title+'|'+e.date)) events.push(e); });
+  const have = new Set(events.map(e => e.title + '|' + e.date));
+  mktEvents.forEach(e => { if (!have.has(e.title + '|' + e.date)) { e._auto = true; events.push(e); } });
 
   saveCalEvents(events);
   renderCalendar();
-  toast(`📅 Added estimates for ${holdings.length} holdings (${_monthName(resMonthNum)} ${resYear} results season)`, 'ok');
+  toast(`📅 Synced: ${nEarn} confirmed earnings, ${nEst} estimated, ${nDiv} est. dividends + market events`, 'ok');
+}
+
+// ── Calendar view toggle + agenda ───────────────────────────────────────────
+let _calView = localStorage.getItem('ss_cal_view') || 'month';
+function _calSetView(v) {
+  _calView = v;
+  localStorage.setItem('ss_cal_view', v);
+  renderCalendar();
+}
+function _renderCalAgenda(events) {
+  const el = document.getElementById('cal-agenda');
+  if (!el) return;
+  const now = new Date(); now.setHours(0,0,0,0);
+  const horizon = new Date(now); horizon.setDate(horizon.getDate() + 90);
+  const TYPE_COLOR = {res:'var(--ac)',div:'var(--grn)',mkt:'var(--yel)',exp:'var(--red)',cu:'var(--ac2)'};
+  const TYPE_LABEL = {res:'Results',div:'Dividend',mkt:'Market',exp:'Expiry',cu:'Custom'};
+  const upcoming = events
+    .filter(ev => { const d = new Date(ev.date); return d >= now && d <= horizon; })
+    .sort((a,b) => new Date(a.date) - new Date(b.date));
+  if (!upcoming.length) {
+    el.innerHTML = '<div class="pn"><div class="pn-b" style="padding:30px;text-align:center;color:var(--t4);font-size:12px">No events in the next 90 days. Hit <strong>⟳ Sync Portfolio Events</strong>.</div></div>';
+    return;
+  }
+  // Group by week
+  const weekKey = d => { const x = new Date(d); const day = (x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x.getTime(); };
+  const groups = new Map();
+  upcoming.forEach(ev => { const k = weekKey(ev.date); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(ev); });
+  const thisWk = weekKey(now), nextWk = thisWk + 7*86400000;
+  const held = new Set(D.holdings.map(h=>h.symbol));
+  let html = '';
+  [...groups.entries()].forEach(([wk, evs]) => {
+    const lbl = wk === thisWk ? 'This Week' : wk === nextWk ? 'Next Week' :
+      'Week of ' + new Date(wk).toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+    html += `<div style="font-size:11px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.6px;padding:14px 0 6px">${lbl} <span style="font-weight:400;color:var(--t4)">(${evs.length})</span></div>`;
+    html += evs.map(ev => {
+      const d = new Date(ev.date);
+      const diff = Math.round((d - now) / 86400000);
+      const sym = (ev.title.match(/^([A-Z0-9&.-]{2,})\s/)||[])[1];
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;margin-bottom:6px">
+        <div style="text-align:center;min-width:44px">
+          <div style="font-size:14px;font-weight:800;font-family:var(--mono)">${d.getDate()}</div>
+          <div style="font-size:9px;color:var(--t4);text-transform:uppercase">${d.toLocaleDateString('en-IN',{month:'short'})} · ${d.toLocaleDateString('en-IN',{weekday:'short'})}</div>
+        </div>
+        <span class="cal-ev-dot" style="background:${TYPE_COLOR[ev.type]||'var(--t3)'};width:8px;height:8px;border-radius:50%;flex-shrink:0"></span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:600">${ev.title}${sym&&held.has(sym)?' <span style="font-size:9px;font-weight:800;color:var(--ac);border:1px solid rgba(79,142,247,.3);border-radius:4px;padding:0 4px;vertical-align:1px">HELD</span>':''}</div>
+          <div style="font-size:10px;color:var(--t4)">${TYPE_LABEL[ev.type]||ev.type}${ev._auto?' · auto-synced':''}</div>
+        </div>
+        <span style="font-size:10.5px;font-family:var(--mono);font-weight:700;color:${diff<=3?'var(--red)':diff<=7?'var(--yel)':'var(--t4)'}">${diff===0?'Today':diff===1?'Tmrw':'in '+diff+'d'}</span>
+        <button onclick="deleteCalEvent('${ev.id}')" style="background:none;border:none;color:var(--t4);cursor:pointer;font-size:13px">×</button>
+      </div>`;
+    }).join('');
+  });
+  el.innerHTML = `<div class="pn"><div class="pn-h"><div class="pn-t">📋 Next 90 Days — Agenda</div></div><div class="pn-b">${html}</div></div>`;
+}
+
+// ── Server mirror (D1 via /api/snapstore, sec=calendar) ─────────────────────
+let _calServerSeeded = false;
+function _calPushServer(events) {
+  try {
+    fetch('/api/snapstore', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ sec:'calendar', items:[{ id:'events', events }] }) }).catch(()=>{});
+  } catch(e) {}
+}
+async function _calSeedFromServer() {
+  if (_calServerSeeded) return;
+  _calServerSeeded = true;
+  if (loadCalEvents().length) return;   // local data wins
+  try {
+    const r = await fetch('/api/snapstore?sec=calendar', { signal: AbortSignal.timeout(8000) });
+    if (r.ok) {
+      const d = await r.json();
+      const blob = (d.items||[]).find(it => it.id === 'events');
+      if (blob?.events?.length) {
+        localStorage.setItem('ss_cal_events', JSON.stringify(blob.events));
+        renderCalendar();
+      }
+    }
+  } catch(e) {}
 }
 
 function _monthName(m) { return ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m]; }
@@ -21313,7 +21441,62 @@ End with: **Verdict**: "Your statistical edge is ___ (${winRate}% WR with ${rrRa
 // 🌐 MACRO & INSTITUTIONAL
 // ═══════════════════════════════════════════════════
 
-async function renderMacro() { await refreshMacro(); }
+// Macro & Institutional — redesigned 2026-07-02: refresh-only + persisted.
+// Opening the section restores the last saved snapshot (localStorage → D1 via
+// /api/snapstore) and recomputes the two local panels (pledging, macro impact,
+// no network). ONLY the 🔄 Refresh button fetches live indicator + FII/DII data.
+const MACRO_LS = 'ss_macro_v1';
+const _MACRO_IND_IDS = ['mac-vix','mac-usdinr','mac-gsec','mac-gold','mac-crude','mac-us10y'];
+
+function _macroLocalPanels() { try { _macroPledging(); _macroImpact(); } catch(e) {} }
+
+function _macroCaptureSnapshot() {
+  try {
+    const snap = { id:'snapshot', ts: Date.now(), ind: {}, fiidii: document.getElementById('mac-fiidii')?.innerHTML || '' };
+    _MACRO_IND_IDS.forEach(id => {
+      const el = document.getElementById(id), lel = document.getElementById(id + 'l');
+      if (el) snap.ind[id] = { txt: el.textContent, color: el.style.color, lbl: lel?.textContent || '' };
+    });
+    localStorage.setItem(MACRO_LS, JSON.stringify(snap));
+    fetch('/api/snapstore', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ sec:'macro', items:[snap] }) }).catch(()=>{});
+  } catch(e) {}
+}
+
+function _macroApplySnapshot(snap) {
+  if (!snap) return false;
+  _MACRO_IND_IDS.forEach(id => {
+    const v = snap.ind?.[id]; if (!v) return;
+    const el = document.getElementById(id), lel = document.getElementById(id + 'l');
+    if (el) { el.textContent = v.txt; el.style.color = v.color || ''; }
+    if (lel) lel.textContent = v.lbl || '';
+  });
+  const f = document.getElementById('mac-fiidii');
+  if (f && snap.fiidii) f.innerHTML = snap.fiidii;
+  const note = snap.ts ? `restored snapshot from ${_nwAgo(snap.ts)} ago — hit 🔄 Refresh for live values` : '';
+  const impactHdr = document.querySelector('#sec-macro .sec-head .sec-title');
+  if (impactHdr && note) impactHdr.innerHTML = `🌐 Macro &amp; Institutional <span style="font-size:10px;font-weight:400;color:var(--t4)">· ${note}</span>`;
+  return true;
+}
+
+async function renderMacro() {
+  _macroLocalPanels();
+  try {
+    const saved = JSON.parse(localStorage.getItem(MACRO_LS) || 'null');
+    if (saved && _macroApplySnapshot(saved)) return;
+  } catch(e) {}
+  try {
+    const r = await fetch('/api/snapstore?sec=macro', { signal: AbortSignal.timeout(8000) });
+    if (r.ok) {
+      const d = await r.json();
+      const snap = (d.items||[]).find(it => it.id === 'snapshot');
+      if (snap && _macroApplySnapshot(snap)) { localStorage.setItem(MACRO_LS, JSON.stringify(snap)); return; }
+    }
+  } catch(e) {}
+  // Nothing saved yet — leave the "—" placeholders; the panels explain Refresh.
+  const f = document.getElementById('mac-fiidii');
+  if (f) f.innerHTML = '<div style="color:var(--t4);font-size:12px">No saved data yet — hit 🔄 Refresh to fetch live indicators and FII/DII flows.</div>';
+}
 
 async function refreshMacro() {
   // Fetch macro indicators in parallel
@@ -21359,31 +21542,51 @@ async function refreshMacro() {
     }
   }));
 
-  // FII/DII flows (recent curated data + context)
+  // FII/DII flows — LIVE from the price-sync Worker's NSE-fetched rolling
+  // history (was: a hardcoded May seed array that never updated).
   const fiiEl = document.getElementById('mac-fiidii');
   if (fiiEl) {
-    // Recent NSE FII/DII data (updated periodically — shown as indicative)
-    const flows = [
-      { date:'May 26', fii: 2140, dii: -890,  net: 1250 },
-      { date:'May 23', fii: -580, dii: 1240,  net: 660  },
-      { date:'May 22', fii: 3200, dii: 320,   net: 3520 },
-      { date:'May 21', fii: -1100,dii: 2100,  net: 1000 },
-      { date:'May 20', fii: 890,  dii: -210,  net: 680  },
-    ];
-    const totalFII = flows.reduce((s,f)=>s+f.fii,0);
-    const totalDII = flows.reduce((s,f)=>s+f.dii,0);
-    fiiEl.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;text-align:center">
-        <div><div style="font-size:18px;font-weight:700;color:${totalFII>=0?'var(--grn)':'var(--red)'}">${totalFII>=0?'+':''}₹${Math.abs(Math.round(totalFII)).toLocaleString('en-IN')}Cr</div><div style="font-size:10px;color:var(--t4)">FII 5-day net</div></div>
-        <div><div style="font-size:18px;font-weight:700;color:${totalDII>=0?'var(--grn)':'var(--red)'}">${totalDII>=0?'+':''}₹${Math.abs(Math.round(totalDII)).toLocaleString('en-IN')}Cr</div><div style="font-size:10px;color:var(--t4)">DII 5-day net</div></div>
-        <div><div style="font-size:18px;font-weight:700;color:${(totalFII+totalDII)>=0?'var(--grn)':'var(--red)'}">${(totalFII+totalDII)>=0?'+':''}₹${Math.abs(Math.round(totalFII+totalDII)).toLocaleString('en-IN')}Cr</div><div style="font-size:10px;color:var(--t4)">Net combined</div></div>
-      </div>
-      <table class="tbl"><thead><tr><th>Date</th><th>FII (₹Cr)</th><th>DII (₹Cr)</th><th>Net</th></tr></thead><tbody>
-        ${flows.map(f=>`<tr><td style="padding:4px 8px;font-size:11px">${f.date}</td><td style="text-align:right;padding:4px 8px;color:${f.fii>=0?'var(--grn)':'var(--red)'}">${f.fii>=0?'+':''}${f.fii}</td><td style="text-align:right;padding:4px 8px;color:${f.dii>=0?'var(--grn)':'var(--red)'}">${f.dii>=0?'+':''}${f.dii}</td><td style="text-align:right;padding:4px 8px;font-weight:600;color:${f.net>=0?'var(--grn)':'var(--red)'}">${f.net>=0?'+':''}${f.net}</td></tr>`).join('')}
-      </tbody></table>
-      <div style="font-size:10px;color:var(--t4);margin-top:6px">Source: NSE indicative data. Refresh for latest.</div>`;
+    fiiEl.innerHTML = '<div style="color:var(--t4);font-size:12px">Fetching live FII/DII flows…</div>';
+    let flows = null, liveSrc = null;
+    try {
+      const live = await fetchFiiLive();
+      if (live?.rows?.length) {
+        liveSrc = live.source || 'nse-live';
+        flows = live.rows.slice(0, 5).map(d => ({
+          date: d.date, fii: Math.round(d.fii_buy - d.fii_sell), dii: Math.round(d.dii_buy - d.dii_sell),
+        })).map(f => ({ ...f, net: f.fii + f.dii }));
+      }
+    } catch(e) {}
+    if (!flows && typeof FII_SEED_DATA !== 'undefined') {
+      flows = FII_SEED_DATA.slice(0, 5).map(d => ({
+        date: d.date, fii: Math.round(d.fii_buy - d.fii_sell), dii: Math.round(d.dii_buy - d.dii_sell),
+      })).map(f => ({ ...f, net: f.fii + f.dii }));
+    }
+    if (flows?.length) {
+      const totalFII = flows.reduce((s,f)=>s+f.fii,0);
+      const totalDII = flows.reduce((s,f)=>s+f.dii,0);
+      fiiEl.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;text-align:center">
+          <div><div style="font-size:18px;font-weight:700;color:${totalFII>=0?'var(--grn)':'var(--red)'}">${totalFII>=0?'+':''}₹${Math.abs(Math.round(totalFII)).toLocaleString('en-IN')}Cr</div><div style="font-size:10px;color:var(--t4)">FII 5-day net</div></div>
+          <div><div style="font-size:18px;font-weight:700;color:${totalDII>=0?'var(--grn)':'var(--red)'}">${totalDII>=0?'+':''}₹${Math.abs(Math.round(totalDII)).toLocaleString('en-IN')}Cr</div><div style="font-size:10px;color:var(--t4)">DII 5-day net</div></div>
+          <div><div style="font-size:18px;font-weight:700;color:${(totalFII+totalDII)>=0?'var(--grn)':'var(--red)'}">${(totalFII+totalDII)>=0?'+':''}₹${Math.abs(Math.round(totalFII+totalDII)).toLocaleString('en-IN')}Cr</div><div style="font-size:10px;color:var(--t4)">Net combined</div></div>
+        </div>
+        <table class="tbl"><thead><tr><th>Date</th><th>FII (₹Cr)</th><th>DII (₹Cr)</th><th>Net</th></tr></thead><tbody>
+          ${flows.map(f=>`<tr><td style="padding:4px 8px;font-size:11px">${f.date}</td><td style="text-align:right;padding:4px 8px;color:${f.fii>=0?'var(--grn)':'var(--red)'}">${f.fii>=0?'+':''}${f.fii.toLocaleString('en-IN')}</td><td style="text-align:right;padding:4px 8px;color:${f.dii>=0?'var(--grn)':'var(--red)'}">${f.dii>=0?'+':''}${f.dii.toLocaleString('en-IN')}</td><td style="text-align:right;padding:4px 8px;font-weight:600;color:${f.net>=0?'var(--grn)':'var(--red)'}">${f.net>=0?'+':''}${f.net.toLocaleString('en-IN')}</td></tr>`).join('')}
+        </tbody></table>
+        <div style="font-size:10px;color:var(--t4);margin-top:6px">${liveSrc ? 'Source: NSE via price-sync Worker (live)' : '⚠ Live feed unreachable — indicative seed data shown'} · <a href="javascript:void(0)" onclick="go('fii-dii')" style="color:var(--ac)">full FII/DII tracker →</a></div>`;
+    } else {
+      fiiEl.innerHTML = '<div style="color:var(--t4);font-size:12px">FII/DII data unavailable — try Refresh again.</div>';
+    }
   }
 
+  _macroLocalPanels();
+  _macroCaptureSnapshot();
+  const hdr = document.querySelector('#sec-macro .sec-head .sec-title');
+  if (hdr) hdr.innerHTML = '🌐 Macro &amp; Institutional <span style="font-size:10px;font-weight:400;color:var(--t4)">· live · saved ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) + '</span>';
+}
+
+function _macroPledging() {
   // Promoter pledging check on holdings
   const pledgeEl = document.getElementById('mac-pledging');
   if (pledgeEl) {
@@ -21403,6 +21606,9 @@ async function refreshMacro() {
     }
   }
 
+}
+
+function _macroImpact() {
   // Macro impact on portfolio
   const impactEl = document.getElementById('mac-impact');
   if (impactEl) {
@@ -29779,182 +29985,200 @@ function _showPBResult(h, ltp, addQty) {
 // ██  FEATURE: IPO TRACKER
 // Fetches current IPOs from NSE + lets users add manually. AI analysis per IPO.
 // ═══════════════════════════════════════════════════════════════════════════════
+// ═══ IPO TRACKER — redesigned 2026-07-02 ═══════════════════════════════════
+// Refresh-only + database-backed, same pattern as the news archive:
+//  • display always comes from the stored archive (localStorage → /api/snapstore
+//    D1 server copy); NOTHING external is fetched until "↻ Refresh IPOs".
+//  • Refresh hits /api/ipo (Chittorgarh JSON: full-year pipeline + listed
+//    performance), merges by IPO id — old IPOs stay archived, evolving fields
+//    (subscription, market price) update in place, duplicates impossible.
+//  • Listed IPOs show issue price → listing-day close (+gain%) → current price.
 let _ipoData = [];
+const IPO_LS = 'ss_ipo_v2';
+const _ipoState = { loaded:false, lastRefresh:0, grp:'ALL', cat:'ALL', q:'' };
+
+function _ipoStatusNow(i){
+  // Recompute from timestamps so an archived "Open" goes Closed/Listed correctly
+  const now = Date.now();
+  if (i.listTs && i.listTs <= now) return 'Listed';
+  if (i.openTs && i.openTs > now) return 'Upcoming';
+  if (i.closeTs && i.closeTs < now) return 'Closed';
+  if (i.openTs && i.openTs <= now && (!i.closeTs || i.closeTs >= now)) return 'Open';
+  return i.status || 'Upcoming';
+}
+function _ipoSaveLocal(){
+  try { localStorage.setItem(IPO_LS, JSON.stringify({ ts: _ipoState.lastRefresh, items: _ipoData })); } catch(e) {}
+}
+async function _ipoLoadStore(){
+  if (_ipoState.loaded) return;
+  try {
+    const saved = JSON.parse(localStorage.getItem(IPO_LS) || 'null');
+    if (saved?.items?.length) { _ipoData = saved.items; _ipoState.lastRefresh = saved.ts || 0; _ipoState.loaded = true; return; }
+  } catch(e) {}
+  try {
+    const r = await fetch('/api/snapstore?sec=ipo', { signal: AbortSignal.timeout(9000) });
+    if (r.ok) { const d = await r.json(); if (d.items?.length) { _ipoData = d.items; _ipoState.lastRefresh = d.lastRefresh || 0; _ipoSaveLocal(); } }
+  } catch(e) {}
+  _ipoState.loaded = true;
+}
 
 async function _fetchIPOs(force = false) {
   const el = document.getElementById('ipo-content');
   if (!el) return;
-  if (!force && _ipoData.length) { _renderIPOs(); return; }
+  await _ipoLoadStore();
+  if (!force) { _renderIPOs(); return; }
 
-  el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t4)"><div class="spin" style="margin:0 auto 12px"></div>Fetching IPO data from NSE…</div>';
-
-  // 1. Try server-side /api/ipo (Cloudflare Pages Function — no CORS issues)
+  el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t4)"><div class="spin" style="margin:0 auto 12px"></div>Fetching IPO pipeline + listed performance…</div>';
+  let fresh = [];
   try {
-    const r = await fetch('/api/ipo', { signal: AbortSignal.timeout(7000) });
-    if (r.ok) {
-      const d = await r.json();
-      if (d.ok && d.ipos?.length) {
-        _ipoData = d.ipos;
-      }
-    }
-  } catch(e) { /* fall through to proxy */ }
+    const r = await fetch('/api/ipo', { signal: AbortSignal.timeout(15000) });
+    if (r.ok) { const d = await r.json(); if (d.ipos?.length) fresh = d.ipos; }
+  } catch(e) {}
 
-  // 2. Browser-side proxy fallback (allorigins.win)
-  if (!_ipoData.length) {
-    try {
-      const _ipoEndpoints = [
-        'https://www.nseindia.com/api/ipo-current-allotment-detail',
-        'https://www.nseindia.com/api/ipo',
-      ];
-      for (const endpoint of _ipoEndpoints) {
-        try {
-          const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(endpoint)}`;
-          const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(4000) });
-          const raw = await res.json();
-          let data; try { data = JSON.parse(raw.contents || 'null'); } catch(e2) { continue; }
-          const arr = Array.isArray(data) ? data : (data?.data || data?.result || []);
-          if (arr.length) {
-            _ipoData = arr.slice(0, 20).map(d => ({
-              name: d.companyName || d.name || '—',
-              sym: (d.symbol || (d.companyName||'').split(' ')[0] || '—').toUpperCase(),
-              openDate: d.openDate || d.ipoOpenDate || '—',
-              closeDate: d.closeDate || d.ipoCloseDate || '—',
-              price: d.issuePrice || d.price || '—',
-              lotSize: d.lotSize || '—',
-              gmp: d.gmp || null,
-              status: d.listingDate ? (new Date(d.listingDate) < new Date() ? 'Listed' : 'Upcoming') : 'Open',
-              listDate: d.listingDate || '—',
-              subscription: d.totalSubscription || d.subscriptionTimes || null,
-              source: 'Live'
-            }));
-            break;
-          }
-        } catch(e2) { continue; }
-      }
-    } catch(e) {}
+  if (!fresh.length) {
+    toast('⚠ IPO sources unreachable right now — showing archived data. Try again in a minute.', 'warn');
+    _renderIPOs();
+    return;
   }
-
-  // 3. Manual IPOs from localStorage, then seed data
-  if (!_ipoData.length) {
-    _ipoData = JSON.parse(localStorage.getItem('ss_ipo_manual') || '[]');
-    if (!_ipoData.length) {
-      el.innerHTML = `
-      <div style="max-width:520px;margin:0 auto;padding:24px 16px">
-        <div style="text-align:center;margin-bottom:20px;color:var(--t3);font-size:12px">
-          Live NSE feed unavailable from browser. Add IPOs you want to track — all fields except name are optional.
-          <a href="https://www.nseindia.com/market-data/all-upcoming-issues-ipo" target="_blank"
-             style="color:var(--ac);margin-left:6px;text-decoration:none">View on NSE ↗</a>
-        </div>
-        <div style="display:grid;gap:10px">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-            <div><label class="fl">Company Name *</label><input class="fi" id="iq-name" placeholder="e.g. Reliance Industries"></div>
-            <div><label class="fl">Issue Price (₹)</label><input class="fi" id="iq-price" type="number" placeholder="e.g. 450"></div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-            <div><label class="fl">Open Date</label><input class="fi" id="iq-open" type="date"></div>
-            <div><label class="fl">Close Date</label><input class="fi" id="iq-close" type="date"></div>
-            <div><label class="fl">Listing Date</label><input class="fi" id="iq-list" type="date"></div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-            <div><label class="fl">Lot Size</label><input class="fi" id="iq-lot" type="number" placeholder="e.g. 30"></div>
-            <div><label class="fl">GMP (₹, optional)</label><input class="fi" id="iq-gmp" type="number" placeholder="Grey market premium"></div>
-          </div>
-          <button class="btn btn-p" style="width:100%;margin-top:4px" onclick="
-            const n=document.getElementById('iq-name').value.trim();
-            if(!n){toast('Company name required','warn');return;}
-            const price=document.getElementById('iq-price').value;
-            const open=document.getElementById('iq-open').value;
-            const close=document.getElementById('iq-close').value;
-            const list=document.getElementById('iq-list').value;
-            const lot=document.getElementById('iq-lot').value;
-            const gmp=document.getElementById('iq-gmp').value;
-            const now=new Date();
-            let status='Open';
-            if(list&&new Date(list)<now) status='Listed';
-            else if(close&&new Date(close)<now) status='Closed';
-            else if(open&&new Date(open)>now) status='Upcoming';
-            _ipoData.unshift({name:n,sym:n.split(' ')[0].toUpperCase(),price:price||'—',openDate:open||'—',closeDate:close||'—',listDate:list||'—',lotSize:lot||'—',gmp:gmp?+gmp:null,status,subscription:null,source:'Manual'});
-            const manuals=_ipoData.filter(i=>i.source==='Manual');
-            localStorage.setItem('ss_ipo_manual',JSON.stringify(manuals));
-            _renderIPOs();
-          ">+ Add IPO</button>
-        </div>
-      </div>`;
-      return;
-    }
-  }
+  // Merge: fresh replaces same-id (updates subscription/market price/status),
+  // archived IPOs that dropped off the live feed are kept, manual entries kept.
+  const map = new Map(_ipoData.map(i => [String(i.id || i.name), i]));
+  let added = 0;
+  fresh.forEach(i => { const k = String(i.id); if (!map.has(k)) added++; map.set(k, { ...(map.get(k)||{}), ...i }); });
+  _ipoData = [...map.values()];
+  _ipoState.lastRefresh = Date.now();
+  _ipoSaveLocal();
+  try {
+    await fetch('/api/snapstore', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ sec:'ipo', items: fresh }), signal: AbortSignal.timeout(12000) });
+  } catch(e) {}
+  toast(`🚀 IPOs refreshed — ${added} new, ${_ipoData.length} archived`, 'ok');
   _renderIPOs();
 }
+
+function _ipoSetFilter(key, val){ _ipoState[key] = val; _renderIPOs(); }
 
 function _renderIPOs() {
   const el = document.getElementById('ipo-content');
   const statsEl = document.getElementById('ipo-stats');
+  const filtEl = document.getElementById('ipo-filters');
+  const stampEl = document.getElementById('ipo-updated');
   if (!el) return;
 
-  const open = _ipoData.filter(i => i.status === 'Open' || i.status === 'Upcoming');
-  const listed = _ipoData.filter(i => i.status === 'Listed');
+  const items = _ipoData.map(i => ({ ...i, status: _ipoStatusNow(i) }));
+  const open = items.filter(i => i.status === 'Open');
+  const upcoming = items.filter(i => i.status === 'Upcoming');
+  const closed = items.filter(i => i.status === 'Closed');
+  const listed = items.filter(i => i.status === 'Listed');
+  const gains = listed.map(i => i.listingGainPct).filter(g => typeof g === 'number');
+  const avgGain = gains.length ? gains.reduce((s,g)=>s+g,0)/gains.length : null;
 
-  if (statsEl) {
-    statsEl.innerHTML = [
-      ['🟢 Open / Upcoming', open.length],
-      ['✅ Recently Listed', listed.length],
-      ['📋 Total Tracked', _ipoData.length],
-    ].map(([l,v])=>`<div class="sc c1" style="min-width:120px"><div class="sc-lbl">${l}</div><div class="sc-val">${v}</div></div>`).join('');
+  if (stampEl) stampEl.textContent = _ipoState.lastRefresh ? `${items.length} archived · refreshed ${_nwAgo(_ipoState.lastRefresh)} ago` : '';
+  if (statsEl) statsEl.innerHTML = [
+    ['🟢 Open Now', open.length, 'var(--grn)'],
+    ['🔜 Upcoming', upcoming.length, 'var(--yel)'],
+    ['⏳ Awaiting Listing', closed.length, 'var(--ac2)'],
+    ['✅ Listed ' + new Date().getFullYear(), listed.length, 'var(--ac)'],
+    ['📈 Avg Listing Gain', avgGain==null?'—':(avgGain>=0?'+':'')+avgGain.toFixed(1)+'%', avgGain==null?'var(--t3)':avgGain>=0?'var(--grn)':'var(--red)'],
+  ].map(([l,v,c])=>`<div class="sc c1" style="min-width:118px"><div class="sv">${l}</div><div class="sn" style="font-size:18px;color:${c}">${v}</div></div>`).join('');
+
+  if (filtEl) {
+    const chip = (key,id,lbl,on) => `<button class="btn ${on?'btn-p':'btn-g'} btn-xs" style="border-radius:20px" onclick="_ipoSetFilter('${key}','${id}')">${lbl}</button>`;
+    filtEl.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0 12px">
+      ${chip('grp','ALL','All ('+items.length+')',_ipoState.grp==='ALL')}
+      ${chip('grp','Open','🟢 Open ('+open.length+')',_ipoState.grp==='Open')}
+      ${chip('grp','Upcoming','🔜 Upcoming ('+upcoming.length+')',_ipoState.grp==='Upcoming')}
+      ${chip('grp','Closed','⏳ Awaiting ('+closed.length+')',_ipoState.grp==='Closed')}
+      ${chip('grp','Listed','✅ Listed ('+listed.length+')',_ipoState.grp==='Listed')}
+      <span style="width:1px;height:18px;background:var(--b2)"></span>
+      ${chip('cat','ALL','All types',_ipoState.cat==='ALL')}
+      ${chip('cat','Mainboard','Mainboard',_ipoState.cat==='Mainboard')}
+      ${chip('cat','SME','SME',_ipoState.cat==='SME')}
+      <input class="fi" type="text" placeholder="🔍 search company…" value="${(_ipoState.q||'').replace(/"/g,'&quot;')}" style="width:170px;padding:4px 8px;font-size:11px;margin-left:auto" oninput="_ipoState.q=this.value;clearTimeout(_ipoState._qt);_ipoState._qt=setTimeout(()=>_renderIPOs(),250)">
+    </div>`;
   }
 
-  if (!_ipoData.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--t4)">No IPOs tracked. Click + Add IPO.</div>'; return; }
+  if (!items.length) {
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--t4)">No IPOs stored yet.<br><br><button class="btn btn-p" onclick="_fetchIPOs(true)">↻ Refresh IPOs</button><br><br><span style="font-size:11px">Fetches the full ${new Date().getFullYear()} pipeline — upcoming, open, and already-listed with listing prices — and archives it.</span></div>`;
+    return;
+  }
 
-  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
-    ${_ipoData.map((ipo,i) => {
-      const statusCol = ipo.status==='Open'?'var(--grn)':ipo.status==='Listed'?'var(--ac)':'var(--yel)';
-      return `<div class="pn" id="ipo-card-${i}">
-        <div style="display:grid;grid-template-columns:1fr auto;gap:12px;padding:12px 16px;align-items:start">
-          <div>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <span class="sym" style="font-size:14px">${ipo.sym!=='—'?ipo.sym:ipo.name.split(' ')[0]}</span>
-              <span style="font-size:11px;font-weight:700;color:${statusCol};padding:2px 8px;border-radius:10px;background:${statusCol}22">${ipo.status}</span>
-              ${ipo.gmp?`<span style="font-size:11px;color:var(--grn);font-weight:700">GMP: ₹${ipo.gmp}</span>`:''}
-            </div>
-            <div style="font-size:12px;color:var(--t2);margin-top:3px">${ipo.name}</div>
-            <div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;font-size:11px;color:var(--t3)">
-              ${ipo.price!=='—'?`<span>💰 Price: <strong style="color:var(--t1)">₹${ipo.price}</strong></span>`:''}
-              ${ipo.openDate!=='—'?`<span>📅 Open: <strong style="color:var(--t1)">${ipo.openDate}</strong></span>`:''}
-              ${ipo.closeDate!=='—'?`<span>📅 Close: <strong style="color:var(--t1)">${ipo.closeDate}</strong></span>`:''}
-              ${ipo.lotSize!=='—'?`<span>📦 Lot: <strong style="color:var(--t1)">${ipo.lotSize}</strong></span>`:''}
-              ${ipo.subscription?`<span>📊 Sub: <strong style="color:var(--ac)">${ipo.subscription}×</strong></span>`:''}
-              ${ipo.listDate!=='—'?`<span>📈 Lists: <strong style="color:var(--t1)">${ipo.listDate}</strong></span>`:''}
-            </div>
+  let show = items;
+  if (_ipoState.grp !== 'ALL') show = show.filter(i => i.status === _ipoState.grp);
+  if (_ipoState.cat !== 'ALL') show = show.filter(i => (i.category||'Mainboard').toUpperCase().includes(_ipoState.cat.toUpperCase()));
+  if (_ipoState.q) { const q=_ipoState.q.toLowerCase(); show = show.filter(i => (i.name||'').toLowerCase().includes(q) || (i.sym||'').toLowerCase().includes(q)); }
+
+  const rank = { Open:0, Upcoming:1, Closed:2, Listed:3 };
+  show = show.slice().sort((a,b) => {
+    if (rank[a.status] !== rank[b.status]) return rank[a.status]-rank[b.status];
+    if (a.status==='Listed') return (b.listTs||0)-(a.listTs||0);          // newest listings first
+    if (a.status==='Upcoming') return (a.openTs||9e15)-(b.openTs||9e15);  // soonest first
+    return (a.closeTs||a.listTs||9e15)-(b.closeTs||b.listTs||9e15);
+  });
+
+  if (!show.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--t4);font-size:12px">Nothing matches this filter.</div>'; return; }
+
+  const stCol = s => s==='Open'?'var(--grn)':s==='Listed'?'var(--ac)':s==='Closed'?'var(--ac2)':'var(--yel)';
+  const esc = t => String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const fmtSub = v => v==null?null:(v>=100?Math.round(v):v.toFixed(1))+'×';
+
+  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px">${show.slice(0,80).map(ipo => {
+    const sid = esc(String(ipo.id||ipo.name));
+    const isListed = ipo.status==='Listed';
+    const gainCol = g => g==null?'var(--t3)':g>=0?'var(--grn)':'var(--red)';
+    const sinceIssue = (isListed && ipo.marketPrice && ipo.issuePrice) ? (ipo.marketPrice-ipo.issuePrice)/ipo.issuePrice*100 : null;
+    const priceRow = isListed
+      ? `<span>💰 Issue: <strong style="color:var(--t1)">₹${ipo.issuePrice ?? '—'}</strong></span>
+         <span>📊 Listed at: <strong style="color:${gainCol(ipo.listingGainPct)}">₹${ipo.listingClose ?? '—'}${typeof ipo.listingGainPct==='number' ? ' ('+(ipo.listingGainPct>=0?'+':'')+ipo.listingGainPct.toFixed(1)+'%)' : ''}</strong></span>
+         ${ipo.marketPrice ? `<span>📈 Now: <strong style="color:${gainCol(sinceIssue)}">₹${ipo.marketPrice}${sinceIssue!=null ? ' ('+(sinceIssue>=0?'+':'')+sinceIssue.toFixed(1)+'% vs issue)' : ''}</strong></span>` : ''}`
+      : `${ipo.priceBand ? `<span>💰 Band: <strong style="color:var(--t1)">₹${esc(ipo.priceBand)}</strong></span>` : ''}
+         ${ipo.issueAmtCr ? `<span>🏦 Size: <strong style="color:var(--t1)">₹${ipo.issueAmtCr.toLocaleString('en-IN')}Cr</strong></span>` : ''}`;
+    return `<div class="pn" id="ipo-card-${sid}">
+      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;padding:12px 16px;align-items:start">
+        <div style="min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-weight:800;font-size:13.5px">${esc(ipo.name)}</span>
+            ${ipo.sym?`<span class="sym" style="font-size:11px">${esc(ipo.sym)}</span>`:''}
+            <span style="font-size:10.5px;font-weight:700;color:${stCol(ipo.status)};padding:2px 8px;border-radius:10px;background:${stCol(ipo.status)}22">${ipo.status==='Closed'?'Awaiting Listing':ipo.status}</span>
+            <span style="font-size:9.5px;font-weight:700;color:var(--t4);border:1px solid var(--b2);padding:1px 6px;border-radius:8px">${esc(ipo.category||'Mainboard')}</span>
+            ${ipo.gmp?`<span style="font-size:11px;color:var(--grn);font-weight:700">GMP ₹${ipo.gmp}</span>`:''}
           </div>
-          <div style="display:flex;flex-direction:column;gap:5px;min-width:90px">
-            <button class="btn btn-p btn-xs" onclick="_ipoAIAnalysis(${i})">🤖 AI Verdict</button>
-            <button class="btn btn-red btn-xs" onclick="_removeIPO(${i})">✕ Remove</button>
+          <div style="display:flex;gap:14px;margin-top:8px;flex-wrap:wrap;font-size:11px;color:var(--t3)">
+            ${priceRow}
+            ${ipo.subscription?`<span>🔥 Sub: <strong style="color:var(--ac)">${fmtSub(ipo.subscription)}</strong></span>`:''}
+            ${ipo.openDate&&!isListed?`<span>📅 ${esc(ipo.openDate)} → ${esc(ipo.closeDate||'?')}</span>`:''}
+            ${ipo.listDate?`<span>🔔 Lists: <strong style="color:var(--t1)">${esc(ipo.listDate)}</strong></span>`:''}
+            ${isListed&&ipo.h52?`<span>52W: ₹${ipo.l52??'—'}–₹${ipo.h52}</span>`:''}
           </div>
         </div>
-        <div id="ipo-ai-${i}" style="display:none;padding:0 16px 12px"></div>
-      </div>`;
-    }).join('')}
-  </div>`;
+        <div style="display:flex;flex-direction:column;gap:5px;min-width:90px">
+          <button class="btn btn-p btn-xs" onclick="_ipoAIAnalysis('${sid}')">🤖 AI Verdict</button>
+          ${ipo.source==='Manual'?`<button class="btn btn-red btn-xs" onclick="_removeIPO('${sid}')">✕ Remove</button>`:''}
+        </div>
+      </div>
+      <div id="ipo-ai-${sid}" style="display:none;padding:0 16px 12px"></div>
+    </div>`;
+  }).join('')}${show.length>80?`<div style="padding:10px;text-align:center;color:var(--t4);font-size:11px">Showing 80 of ${show.length} — narrow with filters.</div>`:''}</div>`;
 }
 
-async function _ipoAIAnalysis(idx) {
-  const ipo = _ipoData[idx];
+async function _ipoAIAnalysis(id) {
+  const ipo = _ipoData.find(i => String(i.id||i.name) === String(id));
   if (!ipo) return;
-  const el = document.getElementById(`ipo-ai-${idx}`);
+  const el = document.getElementById(`ipo-ai-${id}`);
   if (!el) return;
-  const btn = document.querySelector(`#ipo-card-${idx} button`);
-  if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
   el.style.display = 'block';
   el.innerHTML = '<div class="ai-ld"><div class="spin"></div> Getting AI verdict…</div>';
-
-  const prompt = `IPO analysis for Indian retail investor. Company: ${ipo.name} (${ipo.sym}).
-Issue Price: ₹${ipo.price}. Lot Size: ${ipo.lotSize}. Status: ${ipo.status}. Subscription: ${ipo.subscription||'?'}×.
+  const status = _ipoStatusNow(ipo);
+  const perf = status==='Listed'
+    ? `Already LISTED: issue ₹${ipo.issuePrice??'?'}, listing close ₹${ipo.listingClose??'?'} (${ipo.listingGainPct!=null?ipo.listingGainPct.toFixed(1)+'% listing day':''}), current ₹${ipo.marketPrice??'?'}.`
+    : `Price band ₹${ipo.priceBand||'?'}. Issue size ₹${ipo.issueAmtCr||'?'}Cr. Subscription ${ipo.subscription||'?'}×.`;
+  const prompt = `IPO analysis for an Indian retail investor. Company: ${ipo.name}${ipo.sym?' ('+ipo.sym+')':''}. Category: ${ipo.category||'Mainboard'}. Status: ${status}. ${perf}
 Market regime: ${_marketRegime?.label || 'Neutral'}.
-Provide: (1) APPLY / AVOID / WAIT FOR LISTING verdict, (2) key business strength, (3) main risk, (4) listing gain estimate if any. 3-4 sentences total. Be specific.`;
-
+Provide: (1) ${status==='Listed'?'BUY NOW / WAIT / AVOID verdict on the listed stock':'APPLY / AVOID / WAIT FOR LISTING verdict'}, (2) key business strength, (3) main risk, (4) ${status==='Listed'?'valuation view vs issue price':'listing gain estimate'}. 3-4 sentences total. Be specific.`;
   try {
     const r = await claudeJSON(prompt);
     const text = typeof r === 'string' ? r.replace(/^\{.*\}$/s,'').trim() || r : JSON.stringify(r);
-    const verdict = text.includes('APPLY')?'🟢 APPLY':text.includes('AVOID')?'🔴 AVOID':text.includes('WAIT')?'🟡 WAIT FOR LISTING':'—';
+    const verdict = text.includes('APPLY')?'🟢 APPLY':text.includes('AVOID')?'🔴 AVOID':text.includes('BUY')?'🟢 BUY':text.includes('WAIT')?'🟡 WAIT':'—';
     el.innerHTML = `<div style="border-top:1px solid var(--b1);padding-top:10px">
       <div style="font-weight:700;margin-bottom:6px;color:var(--t1)">${verdict} · AI Analysis</div>
       <div style="font-size:12px;color:var(--t2);line-height:1.7">${text}</div>
@@ -29962,26 +30186,26 @@ Provide: (1) APPLY / AVOID / WAIT FOR LISTING verdict, (2) key business strength
   } catch(e) {
     el.innerHTML = '<div style="color:var(--t4);font-size:12px">AI analysis failed — check API key in Settings.</div>';
   }
-  if (btn) { btn.disabled = false; btn.textContent = '🔄 Re-analyse'; }
 }
 
 function _addManualIPO() {
   const name = prompt('Company name:'); if (!name) return;
-  const price = prompt('Issue price (₹):') || '—';
-  const openDate = prompt('Open date (DD-Mon-YYYY):') || '—';
-  const closeDate = prompt('Close date (DD-Mon-YYYY):') || '—';
-  const lotSize = prompt('Lot size:') || '—';
+  const price = prompt('Issue price / band (₹):') || null;
+  const openDate = prompt('Open date (YYYY-MM-DD):') || null;
+  const closeDate = prompt('Close date (YYYY-MM-DD):') || null;
   const gmp = prompt('GMP (₹, or leave blank):') || null;
-  _ipoData.unshift({ name, sym: name.split(' ')[0].toUpperCase(), price, openDate, closeDate, lotSize, gmp: gmp?+gmp:null, status:'Open', listDate:'—', source:'Manual' });
-  const manuals = _ipoData.filter(i=>i.source==='Manual');
-  localStorage.setItem('ss_ipo_manual', JSON.stringify(manuals));
+  const openTs = openDate ? new Date(openDate).getTime() : null;
+  const closeTs = closeDate ? new Date(closeDate).getTime() : null;
+  _ipoData.unshift({ id: 'manual-'+name.toLowerCase().replace(/[^a-z0-9]+/g,'-'), name, sym: null,
+    category:'Manual', priceBand: price, openDate, closeDate, openTs, closeTs,
+    gmp: gmp?+gmp:null, status: _ipoStatusNow({openTs, closeTs}), source:'Manual' });
+  _ipoSaveLocal();
   _renderIPOs();
 }
 
-function _removeIPO(idx) {
-  _ipoData.splice(idx, 1);
-  const manuals = _ipoData.filter(i=>i.source==='Manual');
-  localStorage.setItem('ss_ipo_manual', JSON.stringify(manuals));
+function _removeIPO(id) {
+  _ipoData = _ipoData.filter(i => String(i.id||i.name) !== String(id));
+  _ipoSaveLocal();
   _renderIPOs();
 }
 
