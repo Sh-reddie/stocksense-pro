@@ -75,7 +75,7 @@ async function tryChittorgarh(year) {
     const openTs = parseTs(d['~Issue_Open_Date']), closeTs = parseTs(d['~IssueCloseDate']), listTs = parseTs(d['~ListingDate']);
     map.set(keyOf(d), {
       id: keyOf(d),
-      name: stripHtml(d.Company).replace(/\s*\(.*IPO\)\s*$/, '').trim() || stripHtml(d['~IPO']),
+      name: stripHtml(d.Company).replace(/\s*\(.*IPO\)\s*$/, '').replace(/\s+[A-Z]{1,2}$/, '').trim() || stripHtml(d['~IPO']),
       sym: (d['~nse_symbol'] || '').toUpperCase() || null,
       bseCode: d['~bse_script_code'] || null,
       isin: d['~isin'] || null,
@@ -94,7 +94,7 @@ async function tryChittorgarh(year) {
     const k = keyOf(d);
     const base = map.get(k) || {
       id: k,
-      name: stripHtml(d.Company),
+      name: stripHtml(d.Company).replace(/\s*\(.*IPO\)\s*$/, '').replace(/\s+[A-Z]{1,2}$/, '').trim(),
       sym: (d['~nse_symbol'] || '').toUpperCase() || null,
       bseCode: d['~bse_script_code'] || null,
       isin: d['~isin'] || null,
