@@ -11386,8 +11386,9 @@ async function refreshAllNews(){
 
   // Batches of 3 with a pause between — deliberately gentle, Google rate-limits
   // bursts from Cloudflare IPs; /api/news also serves last-known-good on failure.
-  for (let i = 0; i < jobs.length; i += 3) {
-    const batch = jobs.slice(i, i+3);
+  const NW_BATCH = 6;   // 6 concurrent is still gentle; server KV fallback covers rate-limited feeds
+  for (let i = 0; i < jobs.length; i += NW_BATCH) {
+    const batch = jobs.slice(i, i+NW_BATCH);
     await Promise.allSettled(batch.map(async job => {
       try {
         const url = job.type === 'q'
@@ -11414,7 +11415,7 @@ async function refreshAllNews(){
       } catch(e) { failed++; }
       finally { done++; setProg(job.type==='q' ? `Fetched: ${job.label} news` : `Fetched: ${job.sym}`); }
     }));
-    if (i + 3 < jobs.length) await new Promise(r => setTimeout(r, 400));
+    if (i + NW_BATCH < jobs.length) await new Promise(r => setTimeout(r, 250));
   }
 
   // Merge into the archive: old items stay, duplicates collapse, syms union up
@@ -11431,8 +11432,8 @@ async function refreshAllNews(){
     } else { map.set(it.id, it); NW.newIds.add(it.id); added++; }
   });
   NW.items = _nwPrune([...map.values()]);
-  NW.lastRefresh = fetchedAt;
-  localStorage.setItem('ss_news_lastrefresh', String(fetchedAt));
+  NW.lastRefresh = Date.now();   // completion time, not start — long refreshes shouldn't say "9m ago" immediately
+  localStorage.setItem('ss_news_lastrefresh', String(NW.lastRefresh));
   await _newsDB.replaceAll(NW.items);
   // Persist to the server database (D1 → KV fallback); non-fatal if offline
   try {
