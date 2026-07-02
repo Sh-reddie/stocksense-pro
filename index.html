@@ -2012,15 +2012,22 @@ textarea.fi{resize:vertical;min-height:70px;}
   <!-- ═══ NEWS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-news">
     <div class="sec-head">
-      <div class="sec-title">News & Events</div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-g" onclick="renderNews(true)">↻ Market</button>
-        <button class="btn btn-p btn-sm" onclick="renderPortfolioNewsFeed(true)" title="Fetch latest headlines for all your holdings">📰 My Holdings Feed</button>
+      <div class="sec-title">News &amp; Events</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span id="nw-updated" style="font-size:11px;color:var(--t4)"></span>
+        <button id="nw-refresh-btn" class="btn btn-p" onclick="refreshAllNews()" title="Fetch latest headlines for the market + every holding &amp; watchlist stock, and archive them">↻ Refresh News</button>
       </div>
     </div>
-    <div class="tabs"><div class="tab on" onclick="stab('nt','n-all')">All News</div><div class="tab" onclick="stab('nt','n-port');renderPortfolioNewsFeed()">My Portfolio</div><div class="tab" onclick="stab('nt','n-res')">Results Cal.</div><div class="tab" onclick="stab('nt','n-corp')">Corp Actions</div></div>
-    <div id="n-all" class="tp on"><div id="n-all-c"></div></div>
-    <div id="n-port" class="tp"><div id="n-port-c"><div style="padding:40px;text-align:center;color:var(--t4);font-size:12px">Click the tab to load news for all your holdings.</div></div></div>
+    <!-- Refresh progress (hidden unless a refresh is running) -->
+    <div id="nw-progress" style="display:none;margin-bottom:12px;background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:10px 14px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-bottom:6px">
+        <span id="nw-progress-txt">Starting…</span><span id="nw-progress-pct"></span>
+      </div>
+      <div style="height:6px;background:var(--b1);border-radius:3px;overflow:hidden"><div id="nw-progress-bar" style="height:100%;width:0%;background:var(--ac);border-radius:3px;transition:width .3s"></div></div>
+    </div>
+    <div class="tabs"><div class="tab on" onclick="stab('nt','n-all');renderNews()">All News</div><div class="tab" onclick="stab('nt','n-port');renderPortfolioNewsFeed()">My Portfolio</div><div class="tab" onclick="stab('nt','n-res')">Results Cal.</div><div class="tab" onclick="stab('nt','n-corp')">Corp Actions</div></div>
+    <div id="n-all" class="tp on"><div id="nw-filter-all"></div><div id="n-all-c"></div></div>
+    <div id="n-port" class="tp"><div id="nw-filter-port"></div><div id="n-port-c"></div></div>
     <div id="n-res" class="tp"><div class="pn"><div class="pn-b" id="n-res-c"></div></div></div>
     <div id="n-corp" class="tp"><div class="pn"><div class="pn-b" id="n-corp-c"></div></div></div>
   </div>
@@ -11251,102 +11258,296 @@ async function genRiskAI(){const box=document.getElementById('risk-ai');box.inne
 // ═══════════════════════════════════════════════════
 // NEWS
 // ═══════════════════════════════════════════════════
-const _newsCache = {ts:0, items:[]};
+// Redesigned 2026-07-02 — refresh-only, database-backed live feed.
+//  • Nothing fetches automatically: the ONLY thing that hits Google News is the
+//    "↻ Refresh News" button, which fetches the 3 market-wide queries plus one
+//    query per holding AND watchlist symbol, in small batches with delays
+//    (Google intermittently rate-limits Cloudflare's shared IPs, so we go slow
+//    and rely on /api/news's per-symbol KV last-known-good fallback).
+//  • Every fetched headline is archived: IndexedDB locally (instant loads) +
+//    POST /api/newsstore → D1/KV server-side. Old news stays; new refreshes
+//    merge in on top; duplicates collapse via a normalised-title hash id.
+//  • All tabs render from the same store — "My Portfolio" is just a filter,
+//    and every feed tab gets a per-stock selector.
 const NEWS_QUERIES = [
   {q:'Indian stock market NSE BSE Nifty Sensex',label:'Market'},
   {q:'SEBI RBI India economy monetary policy',label:'Macro'},
   {q:'Nifty 50 earnings results India quarterly',label:'Earnings'},
 ];
-async function fetchRSSFeed(rssUrl) {
-  const proxies = [
-    u => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,{signal:AbortSignal.timeout(7000)}).then(r=>r.json()).then(j=>j.contents||''),
-    u => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,{signal:AbortSignal.timeout(7000)}).then(r=>r.text()),
-  ];
-  for (const proxy of proxies) {
-    try {
-      const xml = await proxy(rssUrl);
-      if (!xml || !xml.includes('<item>')) continue;
-      return xml;
-    } catch(e) {}
-  }
-  return '';
+const NW = {
+  items: [],               // in-memory copy of the archive, sorted pubTs desc
+  lastRefresh: +(localStorage.getItem('ss_news_lastrefresh')||0),
+  newIds: new Set(),       // ids first seen in the latest refresh → "NEW" badge
+  loaded: false, loading: false, refreshing: false,
+  filter: { all: {grp:'ALL', sym:'', q:''}, port: {grp:'HOLD', sym:'', q:''} },
+};
+const NW_MAX_ITEMS = 1500, NW_MAX_AGE_MS = 45*86400000;
+
+// ── IndexedDB (the local database) ─────────────────────────────────────────
+const _newsDB = {
+  _db: null,
+  open() {
+    if (this._db) return Promise.resolve(this._db);
+    return new Promise((res, rej) => {
+      const rq = indexedDB.open('ss-news', 1);
+      rq.onupgradeneeded = () => { const d = rq.result; if (!d.objectStoreNames.contains('items')) d.createObjectStore('items', { keyPath:'id' }); };
+      rq.onsuccess = () => { this._db = rq.result; res(this._db); };
+      rq.onerror = () => rej(rq.error);
+    });
+  },
+  async getAll() {
+    try { const db = await this.open(); return await new Promise((res, rej) => { const rq = db.transaction('items').objectStore('items').getAll(); rq.onsuccess = () => res(rq.result||[]); rq.onerror = () => rej(rq.error); }); }
+    catch(e) { return []; }
+  },
+  async putMany(items) {
+    if (!items.length) return;
+    try { const db = await this.open(); await new Promise((res, rej) => { const tx = db.transaction('items','readwrite'); const os = tx.objectStore('items'); items.forEach(it => os.put(it)); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); } catch(e) {}
+  },
+  async replaceAll(items) {
+    try { const db = await this.open(); await new Promise((res, rej) => { const tx = db.transaction('items','readwrite'); const os = tx.objectStore('items'); os.clear(); items.forEach(it => os.put(it)); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); } catch(e) {}
+  },
+};
+
+// ── Pure helpers ────────────────────────────────────────────────────────────
+function _nwNorm(t){ return (t||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().slice(0,90); }
+function _nwId(t){ const s=_nwNorm(t); let h=5381; for(let i=0;i<s.length;i++) h=((h<<5)+h+s.charCodeAt(i))>>>0; return 'n'+h.toString(36)+'_'+(s.length%36).toString(36); }
+function _nwSenti(title){
+  if (/surges?|rallies?|gain|rise|hits?\s+high|up\s+\d|record|strong|buy|wins?|order|profit|growth|upgrade|bonus|dividend/i.test(title)) return 'Positive';
+  if (/falls?|drops?|plunges?|sell|crash|low|decline|loss|weak|warns?|cut|probe|alert|downgrade|fraud|penalty/i.test(title)) return 'Negative';
+  return 'Neutral';
 }
-function parseRSSItems(xml, sourceLabel) {
-  const items = [];
-  const blocks = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
-  blocks.slice(0, 15).forEach(block => {
-    const getTag = (tag, fallback='') => {
-      const m = block.match(new RegExp(`<${tag}(?:[^>]*)><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`))||
-                block.match(new RegExp(`<${tag}(?:[^>]*)>([\\s\\S]*?)<\\/${tag}>`));
-      return m ? m[1].replace(/<[^>]+>/g,'').trim() : fallback;
-    };
-    const title = getTag('title');
-    const link  = getTag('link')||getTag('guid');
-    const pubDate = getTag('pubDate');
-    const source = getTag('source', sourceLabel);
-    if (!title || title.length < 10) return;
-    // Parse relative time
-    let ago = '';
-    if (pubDate) {
-      const diff = (Date.now()-new Date(pubDate).getTime())/60000;
-      if (diff < 60) ago = Math.round(diff)+'m';
-      else if (diff < 1440) ago = Math.round(diff/60)+'h';
-      else ago = Math.round(diff/1440)+'d';
-    }
-    // Basic sentiment from title keywords
-    const lc = title.toLowerCase();
-    let imp='Neutral', ic='t-neu';
-    if (/surges?|rallies?|gain|rise|hits?\s+high|up\s+\d|record|strong|buy|wins?|order|profit|growth/i.test(title)) { imp='Positive'; ic='t-buy'; }
-    else if (/falls?|drops?|plunges?|sell|crash|low|decline|loss|weak|warns?|cut|probe|alert/i.test(title)) { imp='Negative'; ic='t-sell'; }
-    // Detect mentioned stocks from our STOCKS_DB
-    const mentioned = (STOCKS_DB||[]).filter(s => {
-      const sym = s.sym||'', name = (s.name||'').split(' ')[0];
-      return sym.length>=3 && (new RegExp(`\\b${sym}\\b`,'i').test(title) || (name.length>=4 && title.toLowerCase().includes(name.toLowerCase())));
-    }).map(s=>s.sym).slice(0,4);
-    items.push({t:title, link, s:source, ago, imp, ic, stocks:mentioned, ts: pubDate ? new Date(pubDate).getTime() : 0});
+function _nwSentiCls(s){ return s==='Positive'?'t-buy':s==='Negative'?'t-sell':'t-neu'; }
+function _nwEsc(t){ return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _nwAgo(ts){ if(!ts) return ''; const diff=(Date.now()-ts)/60000; if(diff<1) return 'now'; if(diff<60) return Math.round(diff)+'m'; if(diff<1440) return Math.round(diff/60)+'h'; return Math.round(diff/1440)+'d'; }
+// The user's own universe: holdings ∪ watchlist (this is what refresh fetches for)
+function _nwUniverse(){
+  const seen = new Set(), out = [];
+  (D.holdings||[]).forEach(h => { if(h.symbol && !seen.has(h.symbol)){ seen.add(h.symbol); out.push({sym:h.symbol, exchange:h.exchange||'NSE', held:true, name:h.name||''}); } });
+  (D.watchlist||[]).forEach(w => { if(w.symbol && !seen.has(w.symbol)){ seen.add(w.symbol); out.push({sym:w.symbol, exchange:w.exchange||'NSE', held:false, name:w.name||''}); } });
+  return out;
+}
+// Tag which of the user's stocks a headline mentions (symbol or company-name word)
+function _nwTagSyms(title, universe){
+  const lc = title.toLowerCase(), tags = [];
+  universe.forEach(u => {
+    const nm = (u.name||'').split(/\s+/)[0];
+    if ((u.sym.length>=3 && new RegExp(`\\b${u.sym.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\b`,'i').test(title)) ||
+        (nm && nm.length>=4 && lc.includes(nm.toLowerCase()))) tags.push(u.sym);
   });
-  return items;
+  return tags.slice(0,6);
 }
-// Turn one raw {title,link,pubDate,source} item (from our own /api/news JSON)
-// into the same render-ready shape parseRSSItems() produces from raw XML.
-function _rawNewsItemToRenderItem(raw, fallbackLabel) {
-  const title = raw.title, link = raw.link, pubDate = raw.pubDate, source = raw.source || fallbackLabel;
-  if (!title || title.length < 10) return null;
-  let ago = '';
-  if (pubDate) {
-    const diff = (Date.now()-new Date(pubDate).getTime())/60000;
-    if (diff < 60) ago = Math.round(diff)+'m';
-    else if (diff < 1440) ago = Math.round(diff/60)+'h';
-    else ago = Math.round(diff/1440)+'d';
-  }
-  let imp='Neutral', ic='t-neu';
-  if (/surges?|rallies?|gain|rise|hits?\s+high|up\s+\d|record|strong|buy|wins?|order|profit|growth/i.test(title)) { imp='Positive'; ic='t-buy'; }
-  else if (/falls?|drops?|plunges?|sell|crash|low|decline|loss|weak|warns?|cut|probe|alert/i.test(title)) { imp='Negative'; ic='t-sell'; }
-  const mentioned = (STOCKS_DB||[]).filter(s => {
-    const sym = s.sym||'', name = (s.name||'').split(' ')[0];
-    return sym.length>=3 && (new RegExp(`\\b${sym}\\b`,'i').test(title) || (name.length>=4 && title.toLowerCase().includes(name.toLowerCase())));
-  }).map(s=>s.sym).slice(0,4);
-  return {t:title, link, s:source, ago, imp, ic, stocks:mentioned, ts: pubDate ? new Date(pubDate).getTime() : 0};
+function _nwPrune(items){
+  const cutoff = Date.now() - NW_MAX_AGE_MS;
+  return items.filter(it => Math.max(it.pubTs||0, it.fetchedAt||0) >= cutoff)
+    .sort((a,b) => (b.pubTs||b.fetchedAt) - (a.pubTs||a.fetchedAt)).slice(0, NW_MAX_ITEMS);
 }
-// Fetch one news query — tries our own server-side /api/news proxy first
-// (Cloudflare edge fetch, no CORS issue, no third-party proxy dependency),
-// and only falls back to the allorigins.win CORS-proxy chain — which is what
-// was causing weeks-old stale results — if our own endpoint comes back empty.
-async function fetchNewsQuery(q, label) {
+
+// ── Load archive on boot: IndexedDB first, server (D1/KV) as seed fallback ──
+async function _nwLoadStore(){
+  if (NW.loaded || NW.loading) return;
+  NW.loading = true;
   try {
-    const r = await fetch(`/api/news?q=${encodeURIComponent(q)}&label=${encodeURIComponent(label||'')}`, { signal: AbortSignal.timeout(8000) });
-    if (r.ok) {
-      const d = await r.json();
-      if (d.items?.length) {
-        const mapped = d.items.map(it => _rawNewsItemToRenderItem(it, label)).filter(Boolean);
-        if (mapped.length) return mapped;
-      }
+    let items = await _newsDB.getAll();
+    if (!items.length) {
+      try {
+        const r = await fetch('/api/newsstore', { signal: AbortSignal.timeout(9000) });
+        if (r.ok) { const d = await r.json(); if (d.items?.length) { items = d.items; await _newsDB.putMany(items); if (d.lastRefresh) NW.lastRefresh = d.lastRefresh; } }
+      } catch(e) {}
     }
+    NW.items = _nwPrune(items);
+    NW.loaded = true;
+  } finally { NW.loading = false; }
+}
+
+// ── THE refresh: market queries + every holding & watchlist stock ──────────
+async function refreshAllNews(){
+  if (NW.refreshing) return;
+  NW.refreshing = true;
+  await _nwLoadStore();
+  const btn = document.getElementById('nw-refresh-btn');
+  const prog = document.getElementById('nw-progress'), progTxt = document.getElementById('nw-progress-txt'),
+        progPct = document.getElementById('nw-progress-pct'), progBar = document.getElementById('nw-progress-bar');
+  if (btn){ btn.disabled = true; btn.textContent = '⏳ Fetching…'; }
+  if (prog) prog.style.display = '';
+
+  const universe = _nwUniverse();
+  const jobs = [
+    ...NEWS_QUERIES.map(x => ({type:'q', q:x.q, label:x.label})),
+    ...universe.map(u => ({type:'sym', sym:u.sym, exchange:u.exchange})),
+  ];
+  const fetchedAt = Date.now();
+  const collected = []; let done = 0, failed = 0;
+  const setProg = msg => {
+    if (progTxt) progTxt.textContent = msg;
+    if (progPct) progPct.textContent = `${done}/${jobs.length}`;
+    if (progBar) progBar.style.width = Math.round(done/jobs.length*100)+'%';
+  };
+  setProg(`Fetching market news + ${universe.length} stocks (holdings + watchlist)…`);
+
+  // Batches of 3 with a pause between — deliberately gentle, Google rate-limits
+  // bursts from Cloudflare IPs; /api/news also serves last-known-good on failure.
+  for (let i = 0; i < jobs.length; i += 3) {
+    const batch = jobs.slice(i, i+3);
+    await Promise.allSettled(batch.map(async job => {
+      try {
+        const url = job.type === 'q'
+          ? `/api/news?q=${encodeURIComponent(job.q)}&label=${encodeURIComponent(job.label)}`
+          : `/api/news?sym=${encodeURIComponent(job.sym)}&exchange=${job.exchange}`;
+        const r = await fetch(url, { signal: AbortSignal.timeout(12000) });
+        if (!r.ok) throw new Error('http '+r.status);
+        const d = await r.json();
+        const raw = job.type === 'q' ? (d.items||[]) : (d.articles||[]);
+        if (!raw.length) { failed++; return; }
+        raw.forEach(a => {
+          if (!a.title || a.title.length < 10) return;
+          const pubTs = a.pubDate ? (new Date(a.pubDate).getTime()||0) : 0;
+          const tagged = _nwTagSyms(a.title, universe);
+          if (job.type === 'sym' && !tagged.includes(job.sym)) tagged.unshift(job.sym);
+          collected.push({
+            id: _nwId(a.title), title: a.title.trim(), link: a.link||null,
+            source: a.source || (job.type==='q'?job.label:''),
+            syms: tagged.slice(0,6), scope: job.type==='q'?'market':'stock',
+            label: job.type==='q'?job.label:'', senti: _nwSenti(a.title),
+            pubTs: pubTs || fetchedAt, fetchedAt,
+          });
+        });
+      } catch(e) { failed++; }
+      finally { done++; setProg(job.type==='q' ? `Fetched: ${job.label} news` : `Fetched: ${job.sym}`); }
+    }));
+    if (i + 3 < jobs.length) await new Promise(r => setTimeout(r, 400));
+  }
+
+  // Merge into the archive: old items stay, duplicates collapse, syms union up
+  setProg('Merging & saving to database…');
+  const map = new Map(NW.items.map(it => [it.id, it]));
+  NW.newIds = new Set();
+  let added = 0;
+  collected.forEach(it => {
+    const ex = map.get(it.id);
+    if (ex) {
+      const merged = new Set([...(ex.syms||[]), ...it.syms]);
+      ex.syms = [...merged].slice(0,8);
+      if (!ex.link && it.link) ex.link = it.link;
+    } else { map.set(it.id, it); NW.newIds.add(it.id); added++; }
+  });
+  NW.items = _nwPrune([...map.values()]);
+  NW.lastRefresh = fetchedAt;
+  localStorage.setItem('ss_news_lastrefresh', String(fetchedAt));
+  await _newsDB.replaceAll(NW.items);
+  // Persist to the server database (D1 → KV fallback); non-fatal if offline
+  try {
+    // send only this refresh's unique items — server INSERT OR IGNOREs the rest
+    const uniq = [...new Map(collected.map(it => [it.id, it])).values()];
+    await fetch('/api/newsstore', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ items: uniq }), signal: AbortSignal.timeout(15000) });
   } catch(e) {}
-  // Fallback: third-party proxy chain (kept for resilience if our own Function is down)
-  const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-IN&gl=IN&ceid=IN:en`;
-  const xml = await fetchRSSFeed(rssUrl);
-  return xml ? parseRSSItems(xml, label) : [];
+
+  NW.refreshing = false;
+  if (btn){ btn.disabled = false; btn.textContent = '↻ Refresh News'; }
+  if (prog) prog.style.display = 'none';
+  _nwRenderTab('all'); _nwRenderTab('port'); _nwUpdatedStamp();
+  const failNote = failed > jobs.length*0.3 ? ' ⚠ Google rate-limited some feeds — hit Refresh again in a minute for the stragglers.' : '';
+  toast(`📰 ${added} new headlines · ${NW.items.length} archived${failed?` · ${failed} feed(s) served cached/none`:''}${failNote}`, added ? 'ok' : 'info');
+}
+
+function _nwUpdatedStamp(){
+  const el = document.getElementById('nw-updated');
+  if (el) el.textContent = NW.items.length
+    ? `${NW.items.length} stored · ${NW.lastRefresh ? 'refreshed ' + _nwAgo(NW.lastRefresh) + ' ago' : 'from archive'}`
+    : '';
+}
+
+// ── Filter bar (per-stock selector — shared by All News & My Portfolio) ────
+function _nwSetFilter(tab, key, val){
+  NW.filter[tab][key] = val;
+  if (key === 'grp') NW.filter[tab].sym = '';
+  _nwRenderTab(tab);
+}
+function _nwFilterBar(tab){
+  const f = NW.filter[tab];
+  const universe = _nwUniverse();
+  const holdSyms = universe.filter(u=>u.held).map(u=>u.sym);
+  const watchSyms = universe.filter(u=>!u.held).map(u=>u.sym);
+  const counts = {};
+  NW.items.forEach(it => (it.syms||[]).forEach(s => counts[s]=(counts[s]||0)+1));
+  const symList = (tab==='port' ? holdSyms : universe.map(u=>u.sym)).filter(s=>counts[s]);
+  const chip = (id,lbl,on) => `<button class="btn ${on?'btn-p':'btn-g'} btn-xs" style="border-radius:20px" onclick="_nwSetFilter('${tab}','grp','${id}')">${lbl}</button>`;
+  const chips = tab==='port'
+    ? [chip('HOLD','📁 All Holdings', f.grp==='HOLD' && !f.sym)]
+    : [chip('ALL','All', f.grp==='ALL' && !f.sym),
+       chip('HOLD',`📁 Holdings (${holdSyms.length})`, f.grp==='HOLD' && !f.sym),
+       chip('WATCH',`👁 Watchlist (${watchSyms.length})`, f.grp==='WATCH' && !f.sym),
+       chip('MKT','🌐 Market', f.grp==='MKT' && !f.sym)];
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--b1);margin-bottom:6px">
+    ${chips.join('')}
+    <select class="fi" style="width:auto;min-width:130px;padding:4px 8px;font-size:11px" onchange="_nwSetFilter('${tab}','sym',this.value)">
+      <option value="">— specific stock —</option>
+      ${symList.map(s=>`<option value="${s}" ${f.sym===s?'selected':''}>${s} (${counts[s]})</option>`).join('')}
+    </select>
+    ${f.sym?`<span class="tag t-buy" style="cursor:pointer" onclick="_nwSetFilter('${tab}','sym','')">${f.sym} ✕</span>`:''}
+    <input class="fi" type="text" placeholder="🔍 search headlines…" value="${(f.q||'').replace(/"/g,'&quot;')}" style="width:170px;padding:4px 8px;font-size:11px;margin-left:auto" oninput="NW.filter['${tab}'].q=this.value;clearTimeout(NW._qt);NW._qt=setTimeout(()=>_nwRenderTab('${tab}'),250)">
+  </div>`;
+}
+
+// ── Renderers ───────────────────────────────────────────────────────────────
+function _nwMatch(it, tab){
+  const f = NW.filter[tab];
+  const holdSet = new Set((D.holdings||[]).map(h=>h.symbol));
+  const watchSet = new Set((D.watchlist||[]).map(w=>w.symbol));
+  if (tab === 'port' || f.grp === 'HOLD') { if (!(it.syms||[]).some(s=>holdSet.has(s))) return false; }
+  else if (f.grp === 'WATCH') { if (!(it.syms||[]).some(s=>watchSet.has(s))) return false; }
+  else if (f.grp === 'MKT') { if (it.scope !== 'market') return false; }
+  if (f.sym && !(it.syms||[]).includes(f.sym)) return false;
+  if (f.q && !it.title.toLowerCase().includes(f.q.toLowerCase())) return false;
+  return true;
+}
+function _nwRow(it){
+  const isNew = NW.newIds.has(it.id);
+  const holdSet = new Set((D.holdings||[]).map(h=>h.symbol));
+  const symChips = (it.syms||[]).slice(0,4).map(s =>
+    `<span onclick="event.stopPropagation();_nwSetFilter(document.getElementById('n-port').classList.contains('on')?'port':'all','sym','${s}')"
+      style="font-size:9px;font-weight:800;background:${holdSet.has(s)?'rgba(79,142,247,.12)':'rgba(148,163,184,.1)'};color:${holdSet.has(s)?'var(--ac)':'var(--t3)'};border:1px solid ${holdSet.has(s)?'rgba(79,142,247,.3)':'var(--b2)'};border-radius:5px;padding:1px 6px;cursor:pointer">${s}</span>`).join(' ');
+  const safeTitle = _nwEsc(it.title);
+  const title = it.link
+    ? `<a href="${String(it.link).replace(/"/g,'&quot;')}" target="_blank" rel="noopener noreferrer" style="color:var(--t1);text-decoration:none" onmouseover="this.style.color='var(--ac)'" onmouseout="this.style.color='var(--t1)'">${safeTitle}</a>`
+    : safeTitle;
+  return `<div style="padding:11px 0;border-bottom:1px solid rgba(30,37,64,.4)">
+    <div style="font-size:12.5px;font-weight:500;line-height:1.45;margin-bottom:4px">${isNew?'<span style="font-size:8.5px;font-weight:900;color:var(--grn);border:1px solid var(--grn);border-radius:4px;padding:0 4px;margin-right:6px;vertical-align:1px">NEW</span>':''}${title}</div>
+    <div style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      ${it.source?`<span>${it.source}</span>`:''}<span>${_nwAgo(it.pubTs)} ago</span>
+      <span class="tag ${_nwSentiCls(it.senti)}" style="font-size:9px">${it.senti}</span>
+      ${it.scope==='market'&&it.label?`<span class="tag t-neu" style="font-size:9px">${it.label}</span>`:''}
+      ${symChips}
+    </div></div>`;
+}
+function _nwRenderTab(tab){
+  const el = document.getElementById(tab==='port' ? 'n-port-c' : 'n-all-c');
+  const fbar = document.getElementById(tab==='port' ? 'nw-filter-port' : 'nw-filter-all');
+  if (!el) return;
+  if (fbar) fbar.innerHTML = _nwFilterBar(tab);
+  if (!NW.items.length) {
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--t4);font-size:12px">No news stored yet.<br><br><button class="btn btn-p" onclick="refreshAllNews()">↻ Refresh News</button><br><br><span style="font-size:11px">Fetches the market feed + every holding &amp; watchlist stock, and archives everything.</span></div>`;
+    return;
+  }
+  const matched = NW.items.filter(it => _nwMatch(it, tab));
+  if (!matched.length) {
+    el.innerHTML = `<div style="padding:30px;text-align:center;color:var(--t4);font-size:12px">Nothing matches this filter. ${tab==='port'?'News for your holdings appears here after a refresh in any tab.':''}</div>`;
+    return;
+  }
+  // Date separators: Today / Yesterday / older
+  const dayKey = ts => new Date(ts).toDateString();
+  const todayK = dayKey(Date.now()), yestK = dayKey(Date.now()-86400000);
+  let lastK = null, html = '';
+  matched.slice(0, 150).forEach(it => {
+    const k = dayKey(it.pubTs||it.fetchedAt);
+    if (k !== lastK) {
+      lastK = k;
+      const lbl = k===todayK?'Today':k===yestK?'Yesterday':new Date(it.pubTs||it.fetchedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+      html += `<div style="font-size:10px;font-weight:800;color:var(--t4);text-transform:uppercase;letter-spacing:.6px;padding:12px 0 4px">${lbl}</div>`;
+    }
+    html += _nwRow(it);
+  });
+  const shown = Math.min(matched.length,150);
+  el.innerHTML = html + (matched.length>150?`<div style="padding:12px;text-align:center;color:var(--t4);font-size:11px">Showing ${shown} of ${matched.length} — narrow with a stock filter or search.</div>`:'');
 }
 // ═══════════════════════════════════════════════════
 // HOLDING CONVICTION NOTES
@@ -11382,19 +11583,33 @@ function saveHoldNote() {
 // ═══════════════════════════════════════════════════
 // CORPORATE ACTIONS — dividend fetch from Yahoo Finance
 // ═══════════════════════════════════════════════════
+// Redesigned 2026-07-02 — dividends now come through our own /api/chart
+// proxy (?events=div, server-side Yahoo fetch, no flaky third-party CORS
+// proxy), results persist to localStorage so the tab loads instantly from
+// the saved copy, and ONLY the Refresh button re-fetches.
+const CORPACT_LS = 'ss_corpact_v2';
 const _corpActCache = { ts: 0, data: {} };
 
 async function _fetchDividendHistory(symbol, exchange) {
   const yfSym = (exchange === 'BSE' ? symbol + '.BO' : symbol + '.NS');
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfSym)}?interval=1d&range=3y&events=div`;
+  // 1) Our own Pages Function — reliable, edge-cached, no CORS
   try {
-    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-    const res = await fetch(proxy, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(`/api/chart?sym=${encodeURIComponent(yfSym)}&interval=1mo&range=3y&events=div`, { signal: AbortSignal.timeout(9000) });
+    if (res.ok) {
+      const data = await res.json();
+      const divs = data?.chart?.result?.[0]?.events?.dividends;
+      if (divs) return Object.values(divs).sort((a, b) => b.date - a.date);
+      if (data?.chart?.result?.[0]) return [];   // valid chart, genuinely no dividends
+    }
+  } catch(e) {}
+  // 2) Last-resort legacy proxy path
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfSym)}?interval=1d&range=3y&events=div`;
+    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
     const j = await res.json();
     const data = JSON.parse(j.contents || '{}');
     const divs = data?.chart?.result?.[0]?.events?.dividends;
-    if (!divs) return null;
-    return Object.values(divs).sort((a, b) => b.date - a.date);
+    return divs ? Object.values(divs).sort((a, b) => b.date - a.date) : null;
   } catch(e) { return null; }
 }
 
@@ -11426,13 +11641,27 @@ async function renderCorporateActions(forceRefresh = false) {
     el.innerHTML = '<div style="padding:20px;color:var(--t4);font-size:12px">Add holdings to see corporate actions.</div>';
     return;
   }
-  // Once fetched, keep showing it until the user explicitly hits Refresh —
-  // no time-based auto-expiry, so switching tabs/sections never silently re-fetches.
-  if (!forceRefresh && Object.keys(_corpActCache.data).length) {
-    _renderCorpActions(_corpActCache.data);
-    return;
+  // 1) In-memory (this session)
+  if (!forceRefresh && Object.keys(_corpActCache.data).length) { _renderCorpActions(_corpActCache.data, _corpActCache.ts); return; }
+  // 2) Saved copy from a previous session (localStorage) — instant, no fetch
+  if (!forceRefresh) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CORPACT_LS) || 'null');
+      if (saved?.bySym && Object.keys(saved.bySym).length) {
+        const data = {};
+        D.holdings.forEach(h => { const e = saved.bySym[h.symbol]; if (e) data[h.id] = { h, info: {
+          lastExDate: new Date(e.lastExDate), amount: e.amount, nextEstExDate: new Date(e.nextEstExDate),
+          frequency: e.frequency, avgGapDays: e.avgGapDays } }; });
+        if (Object.keys(data).length) {
+          _corpActCache.data = data; _corpActCache.ts = saved.ts || 0;
+          _renderCorpActions(data, saved.ts || 0);
+          return;
+        }
+      }
+    } catch(e) {}
   }
-  el.innerHTML = '<div style="padding:20px;color:var(--t4);font-size:12px"><div class="spin" style="display:inline-block;margin-right:8px"></div> Fetching dividend data…</div>';
+  // 3) Explicit refresh — fetch via our own /api/chart in gentle batches
+  el.innerHTML = '<div style="padding:20px;color:var(--t4);font-size:12px"><div class="spin" style="display:inline-block;margin-right:8px"></div> Fetching dividend history for ' + D.holdings.length + ' holdings…</div>';
   const results = {};
   for (let i = 0; i < D.holdings.length; i += 3) {
     const batch = D.holdings.slice(i, i+3);
@@ -11441,36 +11670,53 @@ async function renderCorporateActions(forceRefresh = false) {
       const info = _estimateNextDiv(divs);
       if (info) results[h.id] = { h, info };
     }));
+    if (i + 3 < D.holdings.length) await new Promise(r => setTimeout(r, 250));
   }
   _corpActCache.ts = Date.now();
   _corpActCache.data = results;
-  _renderCorpActions(results);
+  // Persist by SYMBOL so it survives reloads and holding-id churn
+  try {
+    const bySym = {};
+    Object.values(results).forEach(({h, info}) => { bySym[h.symbol] = {
+      amount: info.amount, lastExDate: info.lastExDate.toISOString(), nextEstExDate: info.nextEstExDate.toISOString(),
+      frequency: info.frequency, avgGapDays: info.avgGapDays }; });
+    localStorage.setItem(CORPACT_LS, JSON.stringify({ ts: _corpActCache.ts, bySym }));
+  } catch(e) {}
+  _renderCorpActions(results, _corpActCache.ts);
 }
 
-function _renderCorpActions(data) {
+function _renderCorpActions(data, fetchedTs) {
   const el = document.getElementById('n-corp-c');
   if (!el) return;
   const today = new Date();
   const fmtDate = d => d.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'2-digit' });
   const daysTo = d => Math.round((d - today) / 86400000);
+  const stamp = fetchedTs ? `fetched ${_nwAgo(fetchedTs)} ago` : '';
 
   const entries = Object.values(data);
-  const refreshBtn = `<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-g btn-xs" onclick="renderCorporateActions(true)">↻ Refresh</button></div>`;
+  const head = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <span style="font-size:11px;color:var(--t4)">${stamp} · saved locally, refresh for latest</span>
+    <button class="btn btn-g btn-xs" onclick="renderCorporateActions(true)">↻ Refresh</button></div>`;
   if (!entries.length) {
-    el.innerHTML = refreshBtn + `<div style="padding:20px;color:var(--t4);font-size:12px">⚠ No dividend data found. Holdings may be growth stocks or data unavailable via proxy.</div>
+    el.innerHTML = head + `<div style="padding:20px;color:var(--t4);font-size:12px">⚠ No dividend data found. Holdings may be growth stocks or data unavailable.</div>
       <div style="padding:0 20px 20px;font-size:11px;color:var(--t4)">Check <a href="https://www.nseindia.com/companies-listing/corporate-filings-announcements" target="_blank" style="color:var(--ac)">NSE Announcements</a> for recent corporate actions.</div>`;
     return;
   }
 
-  const upcoming = entries.filter(({info}) => info.nextEstExDate > today)
-    .sort((a,b) => a.info.nextEstExDate - b.info.nextEstExDate);
-  const past = entries.filter(({info}) => info.nextEstExDate <= today)
-    .sort((a,b) => b.info.nextEstExDate - a.info.nextEstExDate);
+  const upcoming = entries.filter(({info}) => info.nextEstExDate > today).sort((a,b) => a.info.nextEstExDate - b.info.nextEstExDate);
+  const past = entries.filter(({info}) => info.nextEstExDate <= today).sort((a,b) => b.info.nextEstExDate - a.info.nextEstExDate);
 
-  let html = '';
+  // Summary cards: payers, est. income next 12m, next ex-date
+  const est12m = entries.reduce((s, {h, info}) => s + (info.amount * h.qty * (365 / Math.max(info.avgGapDays||365, 30))), 0);
+  const next = upcoming[0];
+  let html = head + `<div class="sg sg-3" style="margin-bottom:14px">
+    <div class="sc c1"><div class="sv">Next Est. Ex-Date</div><div class="sn" style="font-size:16px">${next?next.h.symbol:'—'}</div><div class="sv">${next?fmtDate(next.info.nextEstExDate)+' · in '+daysTo(next.info.nextEstExDate)+'d':'none upcoming'}</div></div>
+    <div class="sc c2"><div class="sv">Est. Dividend Income</div><div class="sn" style="color:var(--grn)">₹${fI(est12m)}</div><div class="sv">next 12 months (est.)</div></div>
+    <div class="sc c3"><div class="sv">Dividend Payers</div><div class="sn">${entries.length}<span style="font-size:13px;color:var(--t4)">/${D.holdings.length}</span></div><div class="sv">of your holdings</div></div>
+  </div>`;
 
   if (upcoming.length) {
-    html += `<div class="pn-h" style="margin-bottom:10px"><div class="pn-t">📅 Upcoming Dividends <span style="font-weight:400;font-size:11px;color:var(--t4)">(estimated from history)</span></div></div>`;
+    html += `<div class="pn-h" style="margin-bottom:10px"><div class="pn-t">📅 Upcoming Dividends <span style="font-weight:400;font-size:11px;color:var(--t4)">(estimated from 3-year history)</span></div></div>`;
     html += upcoming.map(({h, info}) => {
       const days = daysTo(info.nextEstExDate);
       const urgCol = days <= 30 ? 'var(--grn)' : days <= 90 ? 'var(--yel)' : 'var(--t3)';
@@ -11478,7 +11724,7 @@ function _renderCorpActions(data) {
       return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--bdr)">
         <div style="flex:1;min-width:0">
           <div style="font-weight:700;font-size:13px">${h.symbol}</div>
-          <div style="font-size:10px;color:var(--t4)">${h.name} · ${info.frequency} · last ex ${fmtDate(info.lastExDate)}</div>
+          <div style="font-size:10px;color:var(--t4)">${h.name||''} · ${info.frequency} · last ex ${fmtDate(info.lastExDate)}</div>
         </div>
         <div style="text-align:right;white-space:nowrap">
           <div style="font-size:11px;color:var(--t3)">~${fmtDate(info.nextEstExDate)}</div>
@@ -11486,7 +11732,7 @@ function _renderCorpActions(data) {
         </div>
         <div style="text-align:right;white-space:nowrap;min-width:70px">
           <div style="font-size:12px;font-weight:700;color:var(--grn)">₹${f(info.amount)}/sh</div>
-          <div style="font-size:10px;color:var(--t4)">~₹${fI(income)} total</div>
+          <div style="font-size:10px;color:var(--t4)">~₹${fI(income)} on ${h.qty} sh</div>
         </div>
       </div>`;
     }).join('');
@@ -11494,7 +11740,7 @@ function _renderCorpActions(data) {
 
   if (past.length) {
     html += `<div style="margin-top:${upcoming.length?16:0}px;margin-bottom:8px;font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">Recently Paid</div>`;
-    html += past.slice(0,5).map(({h, info}) => {
+    html += past.slice(0,8).map(({h, info}) => {
       const ago = Math.abs(daysTo(info.nextEstExDate));
       return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--bdr);opacity:.65">
         <div style="flex:1"><div style="font-weight:600;font-size:13px">${h.symbol}</div><div style="font-size:10px;color:var(--t4)">${info.frequency}</div></div>
@@ -11504,119 +11750,100 @@ function _renderCorpActions(data) {
     }).join('');
   }
 
-  // No-dividend holdings
   const allSyms = D.holdings.map(h=>h.symbol);
   const foundSyms = entries.map(({h})=>h.symbol);
   const noDivSyms = allSyms.filter(s => !foundSyms.includes(s));
   if (noDivSyms.length) {
-    html += `<div style="margin-top:14px;font-size:11px;color:var(--t4)">📊 No dividend history found for: ${noDivSyms.join(', ')} (may be growth stocks)</div>`;
+    html += `<div style="margin-top:14px;font-size:11px;color:var(--t4)">📊 No dividend history: ${noDivSyms.join(', ')} (growth stocks or no data)</div>`;
   }
 
   html += `<div style="margin-top:14px;font-size:10px;color:var(--t4);padding:10px;background:var(--bg2);border-radius:8px">
     ⚠ Dates are <strong>estimated</strong> from historical ex-dividend frequency. Always verify on
     <a href="https://www.nseindia.com/companies-listing/corporate-filings-corporate-actions" target="_blank" style="color:var(--ac)">NSE Corporate Actions</a> before trading.
   </div>`;
-  el.innerHTML = refreshBtn + html;
+  el.innerHTML = html;
 }
 
-// ═══════════════════════════════════════════════════
-// RESULTS CALENDAR
-// ═══════════════════════════════════════════════════
 function renderResultsCalendar() {
+  // Redesigned 2026-07-02 — uses REAL earnings dates (h.earningsTs, fetched
+  // from Yahoo with every price refresh) instead of a generic FY-quarter
+  // window. No extra network calls: dates ride along with quote refreshes.
   const el = document.getElementById('n-res-c');
   if (!el) return;
   if (!D.holdings.length) {
-    el.innerHTML = '<div style="padding:20px;color:var(--t4);font-size:12px">Add holdings to see results calendar.</div>';
+    el.innerHTML = '<div style="padding:20px;color:var(--t4);font-size:12px">Add holdings to see the results calendar.</div>';
     return;
   }
-  const now = new Date();
-  const month = now.getMonth() + 1; // 1–12
-  const yr = now.getFullYear();
+  const now = Date.now(), day = 86400000;
+  const fmtD = ts => new Date(ts).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
 
-  // Indian FY quarters: Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar
+  // FY-quarter season context (kept as a banner — useful even with real dates)
+  const nd = new Date(); const month = nd.getMonth()+1, yr = nd.getFullYear();
   let qLabel, resStart, resEnd;
-  if (month >= 4 && month <= 6)       { qLabel='Q1 FY'; resStart=new Date(yr,6,15); resEnd=new Date(yr,7,31); }
-  else if (month >= 7 && month <= 9)  { qLabel='Q2 FY'; resStart=new Date(yr,9,15); resEnd=new Date(yr,10,30); }
-  else if (month >= 10 && month <= 12){ qLabel='Q3 FY'; resStart=new Date(yr+1,0,15); resEnd=new Date(yr+1,1,28); }
-  else                                 { qLabel='Q4 FY'; resStart=new Date(yr,3,15); resEnd=new Date(yr,4,31); }
+  if (month>=4 && month<=6)      { qLabel='Q1 FY'; resStart=new Date(yr,6,15); resEnd=new Date(yr,7,31); }
+  else if (month>=7 && month<=9) { qLabel='Q2 FY'; resStart=new Date(yr,9,15); resEnd=new Date(yr,10,30); }
+  else if (month>=10)            { qLabel='Q3 FY'; resStart=new Date(yr+1,0,15); resEnd=new Date(yr+1,1,28); }
+  else                            { qLabel='Q4 FY'; resStart=new Date(yr,3,15); resEnd=new Date(yr,4,31); }
+  const inSeason = nd >= resStart && nd <= resEnd;
 
-  const fmtDate = d => d.toLocaleDateString('en-IN',{day:'numeric',month:'short'});
-  const inSeason = now >= resStart && now <= resEnd;
-  const daysTo = Math.max(0, Math.round((resStart - now) / 86400000));
+  // Bucket holdings by real earnings date
+  const rows = D.holdings.map(h => {
+    const ts = h.earningsTs ? h.earningsTs*1000 : null;
+    const dd = ts ? Math.round((ts-now)/day) : null;
+    return { h, ts, dd };
+  });
+  const announced = rows.filter(r => r.ts && r.dd < 0 && r.dd >= -21).sort((a,b)=>b.ts-a.ts);
+  const thisWeek  = rows.filter(r => r.ts && r.dd >= 0 && r.dd <= 7).sort((a,b)=>a.ts-b.ts);
+  const upcoming  = rows.filter(r => r.ts && r.dd > 7 && r.dd <= 60).sort((a,b)=>a.ts-b.ts);
+  const later     = rows.filter(r => r.ts && (r.dd > 60 || r.dd < -21)).sort((a,b)=>a.ts-b.ts);
+  const noDate    = rows.filter(r => !r.ts);
+  const next = thisWeek[0] || upcoming[0] || later.find(r=>r.dd>0);
 
-  let html = '';
-  if (inSeason) {
-    html += `<div style="background:var(--grn)1a;border:1px solid var(--grn)44;border-radius:10px;padding:14px;margin-bottom:14px">
-      <div style="font-weight:700;color:var(--grn);font-size:14px">📢 Results Season Active</div>
-      <div style="font-size:12px;color:var(--t3);margin-top:4px">${qLabel} results — watch for announcements through ${fmtDate(resEnd)}</div>
-    </div>`;
-  } else {
-    html += `<div style="background:var(--yel)1a;border:1px solid var(--yel)44;border-radius:10px;padding:14px;margin-bottom:14px">
-      <div style="font-weight:700;color:var(--yel);font-size:14px">📅 Next Results Season</div>
-      <div style="font-size:12px;color:var(--t3);margin-top:4px">${qLabel}: ${fmtDate(resStart)} – ${fmtDate(resEnd)} <span style="color:var(--t4)">(in ${daysTo}d)</span></div>
-    </div>`;
-  }
+  // Summary strip
+  let html = `<div class="sg sg-3" style="margin-bottom:14px">
+    <div class="sc c1"><div class="sv">Next Earnings</div><div class="sn" style="font-size:16px">${next?next.h.symbol:'—'}</div><div class="sv">${next?fmtD(next.ts)+' · in '+next.dd+'d':'no confirmed dates'}</div></div>
+    <div class="sc c2" style="--cc:var(--yel)"><div class="sv">Next 7 Days</div><div class="sn" style="color:var(--yel)">${thisWeek.length}</div><div class="sv">of your holdings report</div></div>
+    <div class="sc c3"><div class="sv">Confirmed Dates</div><div class="sn" style="color:var(--grn)">${rows.length-noDate.length}<span style="font-size:13px;color:var(--t4)">/${rows.length}</span></div><div class="sv">from Yahoo · updates with price refresh</div></div>
+  </div>`;
 
-  html += `<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Holdings — Expected Results Window</div>`;
-  html += D.holdings.map(h => {
-    const statusTxt = inSeason ? 'Due Now' : `In ~${daysTo}d`;
-    const statusCol = inSeason ? 'var(--grn)' : 'var(--yel)';
-    return `<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--bdr)">
+  html += inSeason
+    ? `<div style="background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.25);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px"><strong style="color:var(--grn)">📢 ${qLabel} results season is live</strong> <span style="color:var(--t3)">— announcements through ${resEnd.toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</span></div>`
+    : `<div style="background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.2);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px"><strong style="color:var(--yel)">📅 ${qLabel} season</strong> <span style="color:var(--t3)">starts ${resStart.toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</span></div>`;
+
+  const row = (r, chipTxt, chipCol, dateTxt) => `
+    <div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--bdr)">
       <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:13px">${h.symbol}</div>
-        <div style="font-size:11px;color:var(--t4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.name}</div>
+        <div style="font-weight:700;font-size:13px">${r.h.symbol}</div>
+        <div style="font-size:10.5px;color:var(--t4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.h.name||''}</div>
       </div>
       <div style="text-align:right;white-space:nowrap">
-        <div style="font-size:11px;font-weight:700;color:${statusCol}">${statusTxt}</div>
-        <div style="font-size:10px;color:var(--t4)">${qLabel}</div>
+        <div style="font-size:11.5px;color:var(--t2);font-weight:600">${dateTxt}</div>
+        <div style="font-size:10.5px;font-weight:800;color:${chipCol}">${chipTxt}</div>
       </div>
-      <a href="https://www.nseindia.com/companies-listing/corporate-filings-financial-results?symbol=${encodeURIComponent(h.symbol)}" target="_blank"
-        style="font-size:10px;color:var(--ac);text-decoration:none;white-space:nowrap;padding:3px 7px;border:1px solid var(--ac)44;border-radius:6px">NSE →</a>
+      <a href="https://www.nseindia.com/companies-listing/corporate-filings-financial-results?symbol=${encodeURIComponent(r.h.symbol)}" target="_blank"
+        style="font-size:10px;color:var(--ac);text-decoration:none;white-space:nowrap;padding:3px 7px;border:1px solid rgba(79,142,247,.3);border-radius:6px">NSE →</a>
     </div>`;
-  }).join('');
+  const grpHead = (t) => `<div style="font-size:11px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.6px;margin:16px 0 4px">${t}</div>`;
 
-  html += `<div style="margin-top:14px;font-size:10px;color:var(--t4)">⚠ Dates are approximate based on Indian FY quarterly cycle. Check NSE for exact announcement dates.</div>`;
+  if (thisWeek.length) { html += grpHead('🔥 This Week'); html += thisWeek.map(r => row(r, r.dd===0?'TODAY':'in '+r.dd+'d', 'var(--grn)', fmtD(r.ts))).join(''); }
+  if (upcoming.length) { html += grpHead('📅 Coming Up (next 60 days)'); html += upcoming.map(r => row(r, 'in '+r.dd+'d', 'var(--yel)', fmtD(r.ts))).join(''); }
+  if (announced.length){ html += grpHead('📢 Recently Announced'); html += announced.map(r => row(r, Math.abs(r.dd)+'d ago', 'var(--t4)', fmtD(r.ts))).join(''); }
+  if (later.length)    { html += grpHead('⏳ Later'); html += later.map(r => row(r, r.dd>0?'in '+r.dd+'d':'past', 'var(--t4)', fmtD(r.ts))).join(''); }
+  if (noDate.length) {
+    html += grpHead('❓ No Confirmed Date Yet');
+    html += `<div style="font-size:11px;color:var(--t4);padding:6px 0 2px">Yahoo has no earnings timestamp for these — expect them in the ${qLabel} window (${resStart.toLocaleDateString('en-IN',{day:'numeric',month:'short'})} – ${resEnd.toLocaleDateString('en-IN',{day:'numeric',month:'short'})}). Dates appear after the next price refresh once announced.</div>`;
+    html += noDate.map(r => row(r, qLabel+' window', 'var(--t4)', '~'+resStart.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+'+')).join('');
+  }
+  html += `<div style="margin-top:14px;font-size:10px;color:var(--t4)">Dates come from Yahoo Finance with every quote refresh (↻ in the top bar) — no extra API calls. Always verify on NSE before trading around results.</div>`;
   el.innerHTML = html;
 }
 
 async function renderNews(forceRefresh = false) {
-  const allC = document.getElementById('n-all-c');
-  const portC = document.getElementById('n-port-c');
-  if (!allC) return;
-  // Once fetched, keep showing it until the user explicitly hits Refresh —
-  // no time-based auto-expiry, so switching tabs/sections never silently re-fetches.
-  if (!forceRefresh && _newsCache.items.length) {
-    _renderNewsItems(_newsCache.items);
-    return;
-  }
-  allC.innerHTML='<div style="padding:20px;color:var(--t4);font-size:12px"><div class="spin" style="display:inline-block;margin-right:8px"></div> Fetching live news…</div>';
-  const allItems = [];
-  const portSyms = D.holdings.map(h=>h.symbol);
-  // Fetch market-wide news (server-side /api/news first, allorigins fallback)
-  await Promise.allSettled(NEWS_QUERIES.map(async ({q,label}) => {
-    const items = await fetchNewsQuery(q, label);
-    if (items?.length) allItems.push(...items);
-  }));
-  // Fetch news for up to 5 portfolio stocks
-  const topStocks = portSyms.slice(0,5);
-  await Promise.allSettled(topStocks.map(async sym => {
-    const items = await fetchNewsQuery(sym+' NSE India stock', sym);
-    if (items?.length) allItems.push(...items);
-  }));
-  // Dedupe by title prefix and sort by time
-  const seen = new Set();
-  const unique = allItems.filter(item => {
-    const key = item.t.slice(0,60).toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key); return true;
-  }).sort((a,b) => b.ts-a.ts);
-  _newsCache.items = unique.length ? unique : allItems;
-  _newsCache.ts = Date.now();
-  if (!unique.length) {
-    allC.innerHTML='<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:8px;padding:14px;font-size:12px;color:var(--yel)">⚠ Google News is rate-limiting this request right now (not a bug on our end — it intermittently blocks server traffic). Click Refresh to retry, it usually succeeds within a try or two.</div>';
-    return;
-  }
-  _renderNewsItems(unique);
+  if (forceRefresh) return refreshAllNews();
+  if (!document.getElementById('n-all-c')) return;
+  await _nwLoadStore();
+  _nwRenderTab('all');
+  _nwUpdatedStamp();
 }
 // ── ATR-Based Stop-Loss Optimizer ─────────────────────────────────────────────
 // Average True Range (14-day) gives a volatility-adjusted stop:
@@ -11767,137 +11994,15 @@ function _showAtrSummary(improved, loosened, noSl) {
   document.body.appendChild(div);
 }
 
-function _renderNewsItems(items) {
-  const allC = document.getElementById('n-all-c');
-  const portC = document.getElementById('n-port-c');
-  if (!allC) return;
-  const portSyms = D.holdings.map(h=>h.symbol);
-  const mk = n => `<div style="padding:11px 0;border-bottom:1px solid rgba(30,37,64,.4);cursor:pointer" onclick="${n.link?`window.open('${n.link.replace(/'/g,'%27')}','_blank')`:''}">
-    <div style="font-size:12.5px;font-weight:500;line-height:1.45;margin-bottom:4px">${n.t}</div>
-    <div style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span>${n.s||''}</span>${n.ago?`<span>${n.ago} ago</span>`:''}
-      <span class="tag ${n.ic}" style="font-size:9px">${n.imp}</span>
-      ${n.stocks.length?`<span style="color:var(--ac);font-size:10px">${n.stocks.slice(0,4).join(' · ')}</span>`:''}
-    </div></div>`;
-  allC.innerHTML = items.slice(0,30).map(mk).join('') || '<div style="color:var(--t4);font-size:12px;padding:20px">No news fetched.</div>';
-  const portNews = items.filter(n => n.stocks.some(s=>portSyms.includes(s)) || portSyms.some(sym => n.t.toLowerCase().includes(sym.toLowerCase())));
-  if (portC) portC.innerHTML = portNews.slice(0,20).map(mk).join('') || '<div style="color:var(--t4);font-size:12px;padding:20px">No relevant news for your holdings yet — try refreshing.</div>';
-}
-
-// ── Portfolio News Aggregator Feed ───────────────────────────────────────────
-// Fetches headlines for ALL held stocks via /api/news in parallel batches.
-// Renders a single chronological feed with per-stock badges + sentiment chips.
-// Cached per-stock in sessionStorage (30 min) to avoid re-fetching on tab switch.
-
-const NEWS_FEED_TTL = 30 * 60 * 1000;
-// Once a full "My Portfolio" feed is built, keep showing it until the user
-// explicitly hits Refresh — no time-based auto-expiry, so switching tabs/
-// sections never silently re-fetches or re-flashes the loading spinner.
-const _portNewsCache = { unique: null, refreshTime: null };
-
+// renderPortfolioNewsFeed — display-only view over the SAME stored archive,
+// filtered to holdings. Populated by the one global "↻ Refresh News" (which
+// fetches every holding + watchlist symbol); no separate fetch of its own.
 async function renderPortfolioNewsFeed(forceRefresh = false) {
-  const el = document.getElementById('n-port-c');
-  if (!el) return;
-  if (!D.holdings.length) {
-    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t4)">Add holdings to see your personalised news feed.</div>';
-    return;
-  }
-  if (!forceRefresh && _portNewsCache.unique) {
-    _renderPortfolioNewsRows(_portNewsCache.unique, _portNewsCache.refreshTime);
-    return;
-  }
-
-  el.innerHTML = `<div style="padding:16px;color:var(--t4);font-size:12px;display:flex;align-items:center;gap:10px">
-    <div class="spin"></div> Fetching news for ${D.holdings.length} holdings…
-  </div>`;
-
-  const allArticles = [];
-  const stocks = D.holdings.slice(0, 20); // cap at 20 to avoid too many requests
-
-  // Fetch in batches of 4 using the /api/news endpoint
-  for (let i = 0; i < stocks.length; i += 4) {
-    const batch = stocks.slice(i, i + 4);
-    await Promise.allSettled(batch.map(async h => {
-      const cacheKey = `ss_news_feed_${h.symbol}`;
-      if (!forceRefresh) {
-        try {
-          const cached = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
-          // Only trust the cache if it actually has articles — an empty result
-          // getting cached and silently reused for 30 min was the earlier bug.
-          if (cached?.articles?.length && Date.now() - cached.ts < NEWS_FEED_TTL) {
-            cached.articles.forEach(a => allArticles.push({ sym: h.symbol, sector: h.sector, title: a.title, link: a.link, ts: cached.ts - Math.random() * 3600000 }));
-            return;
-          }
-        } catch(e) {}
-      }
-      try {
-        const r = await fetch(`/api/news?sym=${encodeURIComponent(h.symbol)}&exchange=${h.exchange||'NSE'}`, { signal: AbortSignal.timeout(8000) });
-        if (r.ok) {
-          const d = await r.json();
-          // articles carries {title, link}; fall back to headline-only (no link) for older cache shapes
-          const articles = d.articles?.length ? d.articles : (d.headlines || []).map(title => ({ title, link: null }));
-          if (articles.length) { try { sessionStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), articles })); } catch(e) {} }
-          articles.forEach(a => allArticles.push({ sym: h.symbol, sector: h.sector, title: a.title, link: a.link, ts: Date.now() - Math.random() * 7200000 }));
-        }
-      } catch(e) {}
-    }));
-    if (i + 4 < stocks.length) await new Promise(r => setTimeout(r, 200));
-  }
-
-  if (!allArticles.length) {
-    el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--t4);font-size:12px">
-      No headlines found — market may be closed or news unavailable.<br>
-      <button class="btn btn-g btn-sm" style="margin-top:12px" onclick="renderPortfolioNewsFeed(true)">↻ Try Again</button>
-    </div>`;
-    return;
-  }
-
-  // Dedupe and sort newest first (approximate, since we don't have real timestamps)
-  const seen = new Set();
-  const unique = allArticles.filter(a => {
-    const k = a.title.slice(0, 50).toLowerCase();
-    if (seen.has(k)) return false;
-    seen.add(k); return true;
-  }).sort((a, b) => b.ts - a.ts);
-
-  const refreshTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-  _portNewsCache.unique = unique;
-  _portNewsCache.refreshTime = refreshTime;
-  _renderPortfolioNewsRows(unique, refreshTime);
-}
-
-function _renderPortfolioNewsRows(unique, refreshTime) {
-  const el = document.getElementById('n-port-c');
-  if (!el) return;
-  const sentColor = s => !s ? 'var(--t4)' : s.sentiment === 'Bullish' ? 'var(--grn)' : s.sentiment === 'Bearish' ? 'var(--red)' : 'var(--yel)';
-  const sentIcon  = s => !s ? '' : s.sentiment === 'Bullish' ? '▲' : s.sentiment === 'Bearish' ? '▼' : '↔';
-
-  const rows = unique.slice(0, 60).map(a => {
-    const h = D.holdings.find(x => x.symbol === a.sym);
-    const sent = h?._sentiment;
-    const titleHtml = a.link
-      ? `<a href="${a.link}" target="_blank" rel="noopener noreferrer" style="color:var(--t1);text-decoration:none" onmouseover="this.style.color='var(--ac)';this.style.textDecoration='underline'" onmouseout="this.style.color='var(--t1)';this.style.textDecoration='none'">${a.title}</a>`
-      : a.title;
-    return `<div style="padding:10px 0;border-bottom:1px solid var(--b1);display:flex;gap:10px;align-items:flex-start">
-      <div style="flex-shrink:0;padding-top:2px">
-        <span style="font-size:9.5px;font-weight:800;background:rgba(79,142,247,.12);color:var(--ac);border:1px solid rgba(79,142,247,.25);border-radius:6px;padding:2px 6px;white-space:nowrap">${a.sym}</span>
-      </div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:12.5px;line-height:1.45;margin-bottom:4px;cursor:${a.link?'pointer':'default'}">${titleHtml}</div>
-        <div style="display:flex;gap:8px;align-items:center;font-size:10px;color:var(--t4);flex-wrap:wrap">
-          <span>${a.sector||'—'}</span>
-          ${sent ? `<span style="color:${sentColor(sent)};font-weight:700">${sentIcon(sent)} ${sent.sentiment||''}</span>` : ''}
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-
-  el.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0 14px;border-bottom:1px solid var(--b2);margin-bottom:4px">
-      <span style="font-size:11px;color:var(--t4)">${unique.length} headlines across ${new Set(unique.map(a=>a.sym)).size} stocks · Updated ${refreshTime}</span>
-      <button class="btn btn-g btn-xs" onclick="renderPortfolioNewsFeed(true)">↻ Refresh</button>
-    </div>
-    ${rows}`;
+  if (forceRefresh) return refreshAllNews();
+  if (!document.getElementById('n-port-c')) return;
+  await _nwLoadStore();
+  _nwRenderTab('port');
+  _nwUpdatedStamp();
 }
 
 // ═══════════════════════════════════════════════════

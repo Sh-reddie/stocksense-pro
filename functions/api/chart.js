@@ -23,6 +23,9 @@ export async function onRequestGet({ request }) {
   const sym      = url.searchParams.get('sym') || '';
   const range    = url.searchParams.get('range')    || '1d';
   const interval = url.searchParams.get('interval') || '1d';
+  // Optional Yahoo events passthrough (e.g. events=div for dividend history,
+  // events=div%7Csplit for splits too) — used by the Corp Actions tab.
+  const events   = (url.searchParams.get('events') || '').replace(/[^a-z|,]/gi, '');
 
   if (!sym) {
     return Response.json({ error: 'sym param required' }, { status: 400, headers: CORS });
@@ -31,7 +34,7 @@ export async function onRequestGet({ request }) {
   for (const host of ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com']) {
     try {
       const r = await fetch(
-        `${host}/v8/finance/chart/${encodeURIComponent(sym)}?interval=${interval}&range=${range}`,
+        `${host}/v8/finance/chart/${encodeURIComponent(sym)}?interval=${interval}&range=${range}${events ? '&events=' + encodeURIComponent(events) : ''}`,
         { headers: YF_HEADERS, signal: AbortSignal.timeout(8000) }
       );
       if (r.ok) {
