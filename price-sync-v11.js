@@ -470,7 +470,7 @@ async function fetchIndexCsv(csvName){
   return lines.slice(1).map(l=>l.split(',')[iSym]).map(x=>(x||'').trim().toUpperCase()).filter(x=>x&&x.length>=2);
 }
 async function fetchIndexConstituents(env){
-  const out={};let okCount=0;
+  const out={};let okCount=0;const diag=[];
   for(const idx of IDX_LIST){
     let done=false;
     // 1) live API — gives free-float weights when it works
@@ -482,8 +482,8 @@ async function fetchIndexConstituents(env){
         out[idx.key]={label:idx.label,asOf:new Date().toISOString().slice(0,10),src:'api',
           stocks:rows.map(r=>({sym:r.symbol,w:totFfmc>0?+((+r.ffmc||0)/totFfmc*100).toFixed(3):null})).sort((a,b)=>(b.w||0)-(a.w||0))};
         okCount++;done=true;
-      }else{console.warn('indexConst '+idx.key+' api: only '+rows.length+' rows');}
-    }catch(e){console.warn('indexConst '+idx.key+' api failed:',e.message);}
+      }else{diag.push(idx.key+' api: only '+rows.length+' rows');}
+    }catch(e){diag.push(idx.key+' api: '+String(e.message).slice(0,120));}
     // 2) archives CSV — constituents only (no weights), rock-solid availability
     if(!done){
       try{
@@ -494,7 +494,7 @@ async function fetchIndexConstituents(env){
           okCount++;done=true;
           console.log('indexConst '+idx.key+': csv fallback, '+syms.length+' symbols');
         }
-      }catch(e){console.warn('indexConst '+idx.key+' csv failed:',e.message);}
+      }catch(e){diag.push(idx.key+' csv: '+String(e.message).slice(0,120));}
     }
     await new Promise(r=>setTimeout(r,400));
   }
@@ -504,7 +504,8 @@ async function fetchIndexConstituents(env){
     await env.STOCKSENSE_KV.put('indexConst',JSON.stringify({ts:Date.now(),indices:merged}));
     console.log('indexConst refreshed:',okCount,'/',IDX_LIST.length,'indices');
   }
-  return okCount;
+  if(diag.length)console.warn('indexConst diag:',diag.join(' | '));
+  return {okCount,diag};
 }
 
 // ── EOD portfolio snapshot (added 2026-07-02) ────────────────────────────────
@@ -2039,10 +2040,14 @@ export default{
       return new Response(JSON.stringify({ok:true,history,fetchedAt:meta?.ts||null,source:meta?.source||'none'}),{headers:_MKTCORS});
     }
     if(url.pathname==='/indexconst'){
+      let diag=null;
+      if(url.searchParams.get('force')==='1'){
+        try{const res=await fetchIndexConstituents(env);diag=res.diag;}catch(e){diag=['fatal: '+e.message];}
+      }
       let data=null;try{const r=await env.STOCKSENSE_KV.get('indexConst');if(r)data=JSON.parse(r);}catch(e){}
       const staleMs=data?Date.now()-data.ts:Infinity;
-      if(staleMs>8*86400000){ ctx.waitUntil(fetchIndexConstituents(env).catch(e=>console.warn('indexConst lazy refresh failed:',e.message))); }
-      return new Response(JSON.stringify({ok:true,ts:data?.ts||null,indices:data?.indices||{}}),{headers:_MKTCORS});
+      if(!diag&&staleMs>8*86400000){ ctx.waitUntil(fetchIndexConstituents(env).catch(e=>console.warn('indexConst lazy refresh failed:',e.message))); }
+      return new Response(JSON.stringify({ok:true,ts:data?.ts||null,indices:data?.indices||{},diag}),{headers:_MKTCORS});
     }
     if(url.pathname==='/pfhistory'){
       let hist=[];try{const r=await env.STOCKSENSE_KV.get('pfHistory');if(r)hist=JSON.parse(r);}catch(e){}
