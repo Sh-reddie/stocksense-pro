@@ -2401,6 +2401,7 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="sc c3"><div class="sv">Nifty Midcap 50</div><div class="sn" id="bm-nsc-ret" style="font-size:22px">—</div><div class="sv">^NSMIDCP</div></div>
       <div class="sc"><div class="sv">Alpha (vs Nifty 50)</div><div class="sn" id="bm-alpha" style="font-size:22px">—</div><div class="sv">excess return</div></div>
     </div>
+    <div id="bm-horizons" style="margin-bottom:14px"></div>
     <div class="pn" style="margin-bottom:14px">
       <div class="pn-h">
         <div class="pn-t">Normalised Performance (Base 100)</div>
@@ -18032,6 +18033,107 @@ async function fetchIndexPrice(symbol) {
   return series.map(p => ({ t: p.t, v: p.c }));
 }
 
+// ═══ Portfolio TWR engine (2026-07-03) ══════════════════════════════════════
+// "My Portfolio" per-horizon returns are now TIME-WEIGHTED, reconstructed from
+// each holding's 1-year daily closes (fetched ONCE per session via our own
+// edge-cached /api/chart, batches of 6 — ~40 calls total, then every horizon
+// switch is instant math, zero refetch). TWR chains daily basket returns using
+// only stocks held on both days, so buying new stocks mid-window no longer
+// masquerades as performance.
+const _bmSeries = {};          // yfSym → [{d:'YYYY-MM-DD', c}]
+let _bmSeriesLoaded = false, _bmSeriesLoading = null;
+
+function _bmYfSym(h) {
+  return h.yfTicker || (typeof _symMapLookup==='function' && _symMapLookup(h.symbol)) ||
+    (h.exchange === 'BSE' ? h.symbol + '.BO' : h.symbol + '.NS');
+}
+async function _bmFetchOne(yfSym) {
+  if (_bmSeries[yfSym]) return;
+  const ck = 'ss_bmser_' + yfSym;
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(ck) || 'null');
+    if (cached?.s?.length && Date.now() - cached.ts < 4*3600000) { _bmSeries[yfSym] = cached.s; return; }
+  } catch(e) {}
+  const raw = await fetchYFSeries(yfSym, '1y', '1d').catch(() => null);
+  if (!raw?.length) return;
+  const ser = raw.map(x => ({ d: x.t.toISOString().slice(0,10), c: x.c })).filter(x => x.c > 0);
+  _bmSeries[yfSym] = ser;
+  try { sessionStorage.setItem(ck, JSON.stringify({ ts: Date.now(), s: ser })); } catch(e) {}
+}
+async function _bmLoadAllSeries(noteEl) {
+  if (_bmSeriesLoaded) return;
+  if (_bmSeriesLoading) return _bmSeriesLoading;
+  _bmSeriesLoading = (async () => {
+    const syms = [...new Set(D.holdings.map(_bmYfSym)), '^NSEI'];
+    for (let i = 0; i < syms.length; i += 6) {
+      if (noteEl) noteEl.textContent = `Building portfolio history… ${Math.min(i+6,syms.length)}/${syms.length} stocks`;
+      await Promise.allSettled(syms.slice(i, i+6).map(_bmFetchOne));
+      if (i + 6 < syms.length) await new Promise(r => setTimeout(r, 150));
+    }
+    _bmSeriesLoaded = true;
+  })();
+  return _bmSeriesLoading;
+}
+// Chained daily-return index (base 100) over the trading calendar of ^NSEI
+function _bmTWRSeries(periodDays) {
+  const nifty = _bmSeries['^NSEI'];
+  if (!nifty?.length) return null;
+  const cutoff = new Date(Date.now() - periodDays*864e5).toISOString().slice(0,10);
+  const days = nifty.map(x => x.d).filter(d => d >= cutoff);
+  if (days.length < 3) return null;
+  const maps = D.holdings.map(h => ({ h, m: new Map((_bmSeries[_bmYfSym(h)]||[]).map(x => [x.d, x.c])) }))
+    .filter(x => x.m.size > 0);
+  if (!maps.length || maps.length < D.holdings.length * 0.6) return null;   // need 60%+ coverage
+  let idx = 100;
+  const out = [{ d: days[0], v: 100 }];
+  for (let i = 1; i < days.length; i++) {
+    const d0 = days[i-1], d1 = days[i];
+    let v0 = 0, v1 = 0;
+    maps.forEach(({ h, m }) => {
+      if (h.buyDate && h.buyDate > d0) return;          // not yet held → exclude (no deposit distortion)
+      const c0 = m.get(d0), c1 = m.get(d1);
+      if (c0 > 0 && c1 > 0) { v0 += h.qty * c0; v1 += h.qty * c1; }
+    });
+    if (v0 > 0) idx *= v1 / v0;
+    out.push({ d: d1, v: +idx.toFixed(3) });
+  }
+  return out;
+}
+// Horizon strip: 1M/3M/6M/1Y portfolio TWR vs Nifty vs alpha, from cached series
+function _bmRenderHorizons() {
+  const el = document.getElementById('bm-horizons');
+  if (!el) return;
+  const nifty = _bmSeries['^NSEI'];
+  if (!nifty?.length) { el.innerHTML = ''; return; }
+  const idxRet = pd => {
+    const cutoff = new Date(Date.now() - pd*864e5).toISOString().slice(0,10);
+    const win = nifty.filter(x => x.d >= cutoff);
+    return win.length >= 2 ? (win[win.length-1].c - win[0].c)/win[0].c*100 : null;
+  };
+  const rows = [['1m','1M',30],['3m','3M',91],['6m','6M',182],['1y','1Y',365]].map(([key,lbl,pd]) => {
+    const twr = _bmTWRSeries(pd);
+    const port = twr ? twr[twr.length-1].v - 100 : null;
+    const n50 = idxRet(pd);
+    const alpha = (port != null && n50 != null) ? port - n50 : null;
+    return { key, lbl, port, n50, alpha };
+  });
+  const fmt = v => v == null ? '—' : `<span style="color:${v>=0?'var(--grn)':'var(--red)'};font-family:var(--mono);font-weight:700">${v>=0?'+':''}${v.toFixed(2)}%</span>`;
+  el.innerHTML = `<div class="pn"><div class="pn-b" style="padding:8px 14px;overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="color:var(--t4);font-size:10px;text-transform:uppercase;letter-spacing:.5px;text-align:left">
+        <th style="padding:4px 8px">Horizon</th><th style="padding:4px 8px">My Portfolio (TWR)</th><th style="padding:4px 8px">Nifty 50</th><th style="padding:4px 8px">Alpha</th><th></th></tr></thead>
+      <tbody>${rows.map(r => `<tr onclick="setBmPeriod('${r.key}')" style="cursor:pointer;border-top:1px solid var(--b1);${r.key===_bmPeriod?'background:rgba(79,142,247,.07)':''}">
+        <td style="padding:6px 8px;font-weight:${r.key===_bmPeriod?'800':'600'};color:${r.key===_bmPeriod?'var(--ac)':'var(--t2)'}">${r.lbl}${r.key===_bmPeriod?' ◂':''}</td>
+        <td style="padding:6px 8px">${fmt(r.port)}</td>
+        <td style="padding:6px 8px">${fmt(r.n50)}</td>
+        <td style="padding:6px 8px">${fmt(r.alpha)} ${r.alpha!=null?(r.alpha>=0?'💪':'⚠'):''}</td>
+        <td style="padding:6px 8px;font-size:10px;color:var(--t4)">${r.alpha!=null?(r.alpha>=0?'beating':'lagging'):''}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+    <div style="font-size:10px;color:var(--t4);margin-top:6px">Time-weighted: daily returns chained across your actual holdings (stocks only counted from their buy date) — adding money never inflates performance. Click a row to switch the chart.</div>
+  </div></div>`;
+}
+
 async function loadBenchmark() {
   const portEl = document.getElementById('bm-port-ret');
   const n50El  = document.getElementById('bm-n50-ret');
@@ -18052,16 +18154,25 @@ async function loadBenchmark() {
   const allTimeRet = invested > 0 ? (current-invested)/invested*100 : 0;
   const periodDays = {'1m':30,'3m':91,'6m':182,'1y':365}[_bmPeriod] || 182;
   const cutoffDate = new Date(Date.now()-periodDays*864e5).toISOString().slice(0,10);
+
+  // 1st choice: TIME-WEIGHTED return reconstructed from holdings' price history
+  // (works for every horizon immediately — no waiting for snapshots to accumulate)
+  try { await _bmLoadAllSeries(document.getElementById('bm-chart-note')); } catch(e) {}
+  const twrSeries = _bmTWRSeries(periodDays);
+  _bmRenderHorizons();
+
   const periodSnaps = (typeof tlLoadSnaps==='function' ? tlLoadSnaps() : []).filter(x=>x.date>=cutoffDate && x.current>0);
   let portRet, portSub;
-  // Require the oldest snapshot to cover at least 60% of the window for an honest period figure
   const coverage = periodSnaps.length>=2 ? (Date.now()-new Date(periodSnaps[0].date))/(periodDays*864e5) : 0;
-  if (coverage >= 0.6) {
+  if (twrSeries && twrSeries.length >= 3) {
+    portRet = twrSeries[twrSeries.length-1].v - 100;
+    portSub = `over ${_bmPeriod.toUpperCase()} · time-weighted`;
+  } else if (coverage >= 0.6) {
     portRet = (current - periodSnaps[0].current)/periodSnaps[0].current*100;
     portSub = `over ${_bmPeriod.toUpperCase()} · real snapshots`;
   } else {
     portRet = allTimeRet;
-    portSub = `all-time (cost basis) — ${periodSnaps.length<2?'no':'partial'} ${_bmPeriod.toUpperCase()} history yet`;
+    portSub = `all-time (cost basis) — history still building`;
   }
   const portSubEl = document.getElementById('bm-port-sub');
   if (portSubEl) portSubEl.textContent = portSub;
@@ -18105,7 +18216,7 @@ async function loadBenchmark() {
   }
 
   // Draw chart
-  drawBmChart(n50Data, nscData, portRet, n50Ret, nscRet);
+  drawBmChart(n50Data, nscData, portRet, n50Ret, nscRet, twrSeries);
 
   // Stock contribution table
   const contEl = document.getElementById('bm-contrib');
@@ -18124,15 +18235,18 @@ async function loadBenchmark() {
   } else if(contEl) contEl.innerHTML='<div style="color:var(--t4);font-size:12px;padding:20px">Add holdings to see contribution.</div>';
 }
 
-function drawBmChart(n50Data, nscData, portRet, n50Ret, nscRet) {
+function drawBmChart(n50Data, nscData, portRet, n50Ret, nscRet, twrSeries) {
   const canvas = document.getElementById('bm-chart');
   if(!canvas) return;
   if(_bmChart) { _bmChart.destroy(); _bmChart=null; }
 
-  // ── Use real portfolio snapshots when available (period-windowed) ─────
+  // ── Portfolio curve: TWR (reconstructed, full window) beats raw snapshots ──
   const _pDays = {'1m':30,'3m':91,'6m':182,'1y':365}[_bmPeriod] || 182;
   const _pCut = new Date(Date.now()-_pDays*864e5).toISOString().slice(0,10);
-  const snaps = (tlLoadSnaps ? tlLoadSnaps() : []).filter(x=>x.date>=_pCut && x.current>0);
+  const _useTwr = twrSeries && twrSeries.length >= 3;
+  const snaps = _useTwr
+    ? twrSeries.map(x => ({ date: x.d, current: x.v }))   // already base-100; snapBase=100 below keeps values as-is
+    : (tlLoadSnaps ? tlLoadSnaps() : []).filter(x=>x.date>=_pCut && x.current>0);
   const hasRealSnaps = snaps.length >= 3;
 
   let labels, datasets = [];
@@ -18175,7 +18289,7 @@ function drawBmChart(n50Data, nscData, portRet, n50Ret, nscRet) {
     });
 
     datasets.push({
-      label: 'My Portfolio (actual)',
+      label: _useTwr ? 'My Portfolio (TWR)' : 'My Portfolio (actual)',
       data: portSeries,
       borderColor: '#4f8ef7', backgroundColor: 'rgba(79,142,247,.12)',
       borderWidth: 2.5, pointRadius: 0, tension: 0.3, fill: true
