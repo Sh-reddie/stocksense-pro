@@ -444,6 +444,40 @@ async function sendPriceQuery(env,chatId,token,sym){
   await tgSend(token,chatId,msg);
 }
 
+// ── Live NSE index constituents (added 2026-07-03) ──────────────────────────
+// Same cookie-handshake path as FII/DII (equity-stockIndices is on the normal
+// API tier, not the Akamai-hardened one). Refreshed weekly by cron + lazily
+// when stale; powers the site's Fund Overlap weighted/Active-Share metrics.
+const IDX_LIST=[
+  {key:'nifty50',    q:'NIFTY 50',          label:'Nifty 50'},
+  {key:'niftynext50',q:'NIFTY NEXT 50',     label:'Nifty Next 50'},
+  {key:'midcap150',  q:'NIFTY MIDCAP 150',  label:'Nifty Midcap 150'},
+  {key:'smallcap250',q:'NIFTY SMALLCAP 250',label:'Nifty Smallcap 250'},
+];
+async function fetchIndexConstituents(env){
+  const out={};let okCount=0;
+  for(const idx of IDX_LIST){
+    try{
+      const j=await nseApiFetch('/api/equity-stockIndices?index='+encodeURIComponent(idx.q),'/market-data/live-equity-market');
+      const rows=(j&&j.data||[]).filter(r=>r.symbol&&r.symbol!==idx.q&&!/^NIFTY/.test(r.symbol));
+      if(rows.length<10){console.warn('indexConst '+idx.key+': only '+rows.length+' rows, skipping');continue;}
+      // ffmc = free-float market cap → derive weights (NSE doesn't expose index weight directly here)
+      const totFfmc=rows.reduce((s,r)=>s+(+r.ffmc||0),0);
+      out[idx.key]={label:idx.label,asOf:new Date().toISOString().slice(0,10),
+        stocks:rows.map(r=>({sym:r.symbol,w:totFfmc>0?+((+r.ffmc||0)/totFfmc*100).toFixed(3):null})).sort((a,b)=>(b.w||0)-(a.w||0))};
+      okCount++;
+      await new Promise(r=>setTimeout(r,400));
+    }catch(e){console.warn('indexConst '+idx.key+' failed:',e.message);}
+  }
+  if(okCount){
+    let prev={};try{const r=await env.STOCKSENSE_KV.get('indexConst');if(r)prev=JSON.parse(r).indices||{};}catch(e){}
+    const merged={...prev,...out};   // keep last-known-good for any index that failed this run
+    await env.STOCKSENSE_KV.put('indexConst',JSON.stringify({ts:Date.now(),indices:merged}));
+    console.log('indexConst refreshed:',okCount,'/',IDX_LIST.length,'indices');
+  }
+  return okCount;
+}
+
 // ── EOD portfolio snapshot (added 2026-07-02) ────────────────────────────────
 // Runs on the 18:30 IST daily cron: computes invested + current value from the
 // portfolio + priceCache already in KV (zero extra API calls) and appends one
@@ -1975,6 +2009,12 @@ export default{
       if(staleMs>26*3600000){ ctx.waitUntil(fetchFiiDiiLive(env).catch(e=>console.warn('fiidii lazy refresh failed:',e.message))); }
       return new Response(JSON.stringify({ok:true,history,fetchedAt:meta?.ts||null,source:meta?.source||'none'}),{headers:_MKTCORS});
     }
+    if(url.pathname==='/indexconst'){
+      let data=null;try{const r=await env.STOCKSENSE_KV.get('indexConst');if(r)data=JSON.parse(r);}catch(e){}
+      const staleMs=data?Date.now()-data.ts:Infinity;
+      if(staleMs>8*86400000){ ctx.waitUntil(fetchIndexConstituents(env).catch(e=>console.warn('indexConst lazy refresh failed:',e.message))); }
+      return new Response(JSON.stringify({ok:true,ts:data?.ts||null,indices:data?.indices||{}}),{headers:_MKTCORS});
+    }
     if(url.pathname==='/pfhistory'){
       let hist=[];try{const r=await env.STOCKSENSE_KV.get('pfHistory');if(r)hist=JSON.parse(r);}catch(e){}
       return new Response(JSON.stringify({ok:true,history:hist}),{headers:_MKTCORS});
@@ -2017,6 +2057,8 @@ export default{
         // 18:30 IST — after NSE publishes EOD FII/DII + bulk/block deal reports (~5:30-6:30pm IST)
         await refreshMarketData(env);
         try{await snapshotPortfolio(env);}catch(e){console.warn('pf snapshot err:',e.message);}
+        // Weekly (Mondays): refresh index constituents for Fund Overlap
+        try{if(new Date().getUTCDay()===1)await fetchIndexConstituents(env);}catch(e){console.warn('indexConst err:',e.message);}
       }else if(event.cron==='*/20 2-16 * * *'){
         // Every 20 min, 7:30am-10:29pm IST, every day (news doesn't stop on weekends) —
         // keeps the KV "last known good" news cache fresh so a live page load that
