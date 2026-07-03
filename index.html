@@ -34379,7 +34379,8 @@ async function _renderFundOverlap() {
   // Build the fund universe: live indices (weighted) + custom + static MF lists
   const funds = [];
   if (_idxConst) Object.values(_idxConst).forEach(ix => {
-    funds.push({ name: ix.label, syms: ix.stocks.map(x=>x.sym), w: Object.fromEntries(ix.stocks.map(x=>[x.sym, x.w])), live: true, asOf: ix.asOf });
+    const hasW = ix.stocks.some(x => x.w != null);   // CSV fallback has no weights → no Active Share
+    funds.push({ name: ix.label, syms: ix.stocks.map(x=>x.sym), w: hasW ? Object.fromEntries(ix.stocks.map(x=>[x.sym, x.w||0])) : null, live: true, asOf: ix.asOf });
   });
   _foCustomFunds().forEach((f,i) => funds.push({ name: f.name, syms: f.syms, custom: true, ci: i, asOf: f.added }));
   Object.entries(_FUND_COMPOSITIONS).forEach(([name, syms]) => funds.push({ name, syms, static: true }));

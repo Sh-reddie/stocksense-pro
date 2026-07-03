@@ -449,25 +449,54 @@ async function sendPriceQuery(env,chatId,token,sym){
 // API tier, not the Akamai-hardened one). Refreshed weekly by cron + lazily
 // when stale; powers the site's Fund Overlap weighted/Active-Share metrics.
 const IDX_LIST=[
-  {key:'nifty50',    q:'NIFTY 50',          label:'Nifty 50'},
-  {key:'niftynext50',q:'NIFTY NEXT 50',     label:'Nifty Next 50'},
-  {key:'midcap150',  q:'NIFTY MIDCAP 150',  label:'Nifty Midcap 150'},
-  {key:'smallcap250',q:'NIFTY SMALLCAP 250',label:'Nifty Smallcap 250'},
+  {key:'nifty50',    q:'NIFTY 50',          csv:'ind_nifty50list.csv',        label:'Nifty 50'},
+  {key:'niftynext50',q:'NIFTY NEXT 50',     csv:'ind_niftynext50list.csv',    label:'Nifty Next 50'},
+  {key:'midcap150',  q:'NIFTY MIDCAP 150',  csv:'ind_niftymidcap150list.csv', label:'Nifty Midcap 150'},
+  {key:'smallcap250',q:'NIFTY SMALLCAP 250',csv:'ind_niftysmallcap250list.csv',label:'Nifty Smallcap 250'},
 ];
+// Fallback: NSE archives static CSVs — file host, not the Akamai-gated API tier.
+// Columns: Company Name,Industry,Symbol,Series,ISIN Code. No weights, but the
+// constituent lists are official and always current.
+async function fetchIndexCsv(csvName){
+  const r=await fetch('https://nsearchives.nseindia.com/content/indices/'+csvName,{
+    headers:{'User-Agent':NSE_UA,'Accept':'text/csv,*/*'},signal:AbortSignal.timeout(9000)});
+  if(!r.ok)throw new Error('csv http '+r.status);
+  const text=await r.text();
+  if(text.trim()[0]==='<')throw new Error('csv returned html');
+  const lines=text.trim().split(/\r?\n/);
+  const hdr=lines[0].split(',').map(h=>h.trim().toLowerCase());
+  const iSym=hdr.findIndex(h=>h==='symbol');
+  if(iSym<0)throw new Error('no symbol column');
+  return lines.slice(1).map(l=>l.split(',')[iSym]).map(x=>(x||'').trim().toUpperCase()).filter(x=>x&&x.length>=2);
+}
 async function fetchIndexConstituents(env){
   const out={};let okCount=0;
   for(const idx of IDX_LIST){
+    let done=false;
+    // 1) live API — gives free-float weights when it works
     try{
       const j=await nseApiFetch('/api/equity-stockIndices?index='+encodeURIComponent(idx.q),'/market-data/live-equity-market');
       const rows=(j&&j.data||[]).filter(r=>r.symbol&&r.symbol!==idx.q&&!/^NIFTY/.test(r.symbol));
-      if(rows.length<10){console.warn('indexConst '+idx.key+': only '+rows.length+' rows, skipping');continue;}
-      // ffmc = free-float market cap → derive weights (NSE doesn't expose index weight directly here)
-      const totFfmc=rows.reduce((s,r)=>s+(+r.ffmc||0),0);
-      out[idx.key]={label:idx.label,asOf:new Date().toISOString().slice(0,10),
-        stocks:rows.map(r=>({sym:r.symbol,w:totFfmc>0?+((+r.ffmc||0)/totFfmc*100).toFixed(3):null})).sort((a,b)=>(b.w||0)-(a.w||0))};
-      okCount++;
-      await new Promise(r=>setTimeout(r,400));
-    }catch(e){console.warn('indexConst '+idx.key+' failed:',e.message);}
+      if(rows.length>=10){
+        const totFfmc=rows.reduce((s,r)=>s+(+r.ffmc||0),0);
+        out[idx.key]={label:idx.label,asOf:new Date().toISOString().slice(0,10),src:'api',
+          stocks:rows.map(r=>({sym:r.symbol,w:totFfmc>0?+((+r.ffmc||0)/totFfmc*100).toFixed(3):null})).sort((a,b)=>(b.w||0)-(a.w||0))};
+        okCount++;done=true;
+      }else{console.warn('indexConst '+idx.key+' api: only '+rows.length+' rows');}
+    }catch(e){console.warn('indexConst '+idx.key+' api failed:',e.message);}
+    // 2) archives CSV — constituents only (no weights), rock-solid availability
+    if(!done){
+      try{
+        const syms=await fetchIndexCsv(idx.csv);
+        if(syms.length>=10){
+          out[idx.key]={label:idx.label,asOf:new Date().toISOString().slice(0,10),src:'csv',
+            stocks:syms.map(sym=>({sym,w:null}))};
+          okCount++;done=true;
+          console.log('indexConst '+idx.key+': csv fallback, '+syms.length+' symbols');
+        }
+      }catch(e){console.warn('indexConst '+idx.key+' csv failed:',e.message);}
+    }
+    await new Promise(r=>setTimeout(r,400));
   }
   if(okCount){
     let prev={};try{const r=await env.STOCKSENSE_KV.get('indexConst');if(r)prev=JSON.parse(r).indices||{};}catch(e){}
