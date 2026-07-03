@@ -915,6 +915,10 @@ textarea.fi{resize:vertical;min-height:70px;}
   .dsh-metric{flex:1 1 100%;}
   #ds-insight-cards{grid-template-columns:1fr !important;}
 }
+@media(max-width:700px){
+  #hold-tbl-wrap{display:none!important}
+  #hold-cards{display:block!important}
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
@@ -1644,6 +1648,8 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="pss-item"><div class="pss-label">XIRR (p.a.)</div><div class="pss-val" id="pss-xirr" style="color:var(--cyn)">—</div></div>
       <div class="pss-item" style="text-align:right;flex:0 0 auto;padding-right:14px"><div class="pss-label">Last Refresh</div><div class="pss-val" id="pss-ref" style="font-size:11px;color:var(--t3)">—</div></div>
     </div>
+    <!-- What-changed digest (signal flips / SL breaches since yesterday) -->
+    <div id="h-digest"></div>
     <!-- Health chips (computed from live data — clickable filters) -->
     <div id="h-health-chips" style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"></div>
     <!-- View presets + Column Toggles -->
@@ -1658,6 +1664,7 @@ textarea.fi{resize:vertical;min-height:70px;}
       <button class="btn btn-g btn-xs col-tog" data-grp="risk" onclick="togCols('risk',this)">⚠ Risk</button>
       <button class="btn btn-g btn-xs col-tog" data-grp="extra" onclick="togCols('extra',this)">📝 Extra</button>
       <button id="density-btn" class="btn btn-g btn-xs" onclick="_toggleDensity()" title="Toggle row height" style="margin-left:8px;border-left:1px solid var(--b2);padding-left:10px">⇕ Comfortable</button>
+      <button id="grouplots-btn" class="btn btn-g btn-xs" onclick="_hToggleGroupLots()" title="Combine multiple buy lots of the same stock into one aggregated row (expand for per-lot P&L and tax)">⧉ Group Lots</button>
     </div>
     <div class="pn" style="overflow:visible">
       <div id="hold-tbl-wrap" style="overflow:auto;max-height:calc(100vh - 330px);min-height:300px;border-radius:11px">
@@ -1666,6 +1673,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <tbody id="holdTbody"><tr><td colspan="20" style="text-align:center;padding:40px;color:var(--t4)">No holdings.</td></tr></tbody>
       </table>
       </div>
+      <div id="hold-cards" style="display:none;padding:8px"></div>
     </div>
   </div>
 
@@ -6300,6 +6308,7 @@ function _prefsSave() {
       wlSort: document.getElementById('wl-sort')?.value || 'score',
       density: localStorage.getItem('ss_density') || 'compact',
       hPreset: window._hPreset || 'default',
+      hGroupLots: !!window._hGroupLots,
     };
     localStorage.setItem('ss_view_prefs', JSON.stringify(prefs));
     clearTimeout(_prefsTimer);
@@ -6321,6 +6330,11 @@ function _prefsApply(prefs) {
   setVal('h-filter-tag', prefs.hTag); setVal('h-filter-sig', prefs.hSig);
   setVal('wl-sort', prefs.wlSort);
   if (prefs.hPreset) window._hPreset = prefs.hPreset;
+  if (prefs.hGroupLots != null) {
+    window._hGroupLots = !!prefs.hGroupLots;
+    const gb = document.getElementById('grouplots-btn');
+    if (gb && window._hGroupLots) { gb.style.background = 'var(--ac)'; gb.style.color = '#fff'; }
+  }
 }
 async function _prefsRestore() {
   let prefs = null;
@@ -8232,6 +8246,7 @@ function renderHoldings() {
   updateHoldingsStrip();
   _hRenderPresets();
   _hRenderHealthChips();
+  _hRenderDigest();
   let rows=D.holdings.filter(h=>{
     if (window._hHealthFilter && !_hHealthMatch(h, window._hHealthFilter)) return false;
     if(fs && h.sector!==fs) return false;
@@ -8241,8 +8256,10 @@ function renderHoldings() {
     if(fq && !h.symbol.toLowerCase().includes(fq) && !(h.name||'').toLowerCase().includes(fq)) return false;
     return true;
   });
+  // ⧉ Group Lots — combine same-symbol rows into one weighted aggregate
+  if (window._hGroupLots) rows = _hGroupRows(rows);
   const tbody=document.getElementById('holdTbody');
-  if(!rows.length){tbody.innerHTML=`<tr><td colspan="${cols.length}" style="text-align:center;padding:40px;color:var(--t4)">No holdings match the filter.</td></tr>`;return;}
+  if(!rows.length){tbody.innerHTML=`<tr><td colspan="${cols.length}" style="text-align:center;padding:40px;color:var(--t4)">No holdings match the filter.</td></tr>`;const hc0=document.getElementById('hold-cards');if(hc0)hc0.innerHTML='';return;}
   const COLORS=['#4f8ef7','#22d3ee','#2dd36f','#fbbf24','#8b5cf6','#f97316','#ec4899','#38d9a9'];
   tbody.innerHTML=rows.map((h,i)=>{
     const ltp=h.ltp||h.avgPrice;
@@ -8255,7 +8272,7 @@ function renderHoldings() {
           const TAG_ICON={core:'🔵',satellite:'🟡',speculative:'🔴',dividend:'🟢'};
           const tagBadge=h.tag?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:4px;${TAG_STYLE[h.tag]||''}">${TAG_ICON[h.tag]||''} ${h.tag}</span>`:'';
           const chev = window._hExpanded?.has(h.id) ? '▾' : '▸';
-          return`<td style="cursor:pointer"><div style="display:flex;align-items:center;gap:4px"><span onclick="event.stopPropagation();_hToggleExpand(${h.id})" title="Expand inline detail" style="color:var(--t4);font-size:11px;width:14px;cursor:pointer;user-select:none">${chev}</span><div onclick="openDetail(${h.id})" style="min-width:0"><div class="sym">${h.symbol}${tagBadge}</div><div class="snm">${h.name}</div></div></div></td>`;
+          return`<td style="cursor:pointer"><div style="display:flex;align-items:center;gap:4px"><span onclick="event.stopPropagation();_hToggleExpand(${h.id})" title="Expand inline detail" style="color:var(--t4);font-size:11px;width:14px;cursor:pointer;user-select:none">${chev}</span><div onclick="openDetail(${h.id})" style="min-width:0"><div class="sym">${h.symbol}${tagBadge}${h._isGroup?`<span style="font-size:8.5px;font-weight:800;color:var(--ac2);border:1px solid var(--ac2);border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:1px">${h._lots.length} LOTS</span>`:''}</div><div class="snm">${h.name}</div></div></div></td>`;
         }
         case 'qty':return`<td class="mn">${h.qty}</td>`;
         case 'avg':return`<td class="mn">₹${f(h.avgPrice)}</td>`;
@@ -8443,6 +8460,102 @@ function renderHoldings() {
   }).join('');
   // Lazy-load sparklines for any expanded rows (own /api/chart proxy, edge-cached)
   if (window._hExpanded?.size) rows.filter(h=>window._hExpanded.has(h.id)).forEach(h=>_hLoadSpark(h));
+  _hRenderMobileCards(rows);
+}
+
+// ── Holdings additions round 2 (2026-07-02) ─────────────────────────────────
+// ⧉ Group Lots
+function _hToggleGroupLots() {
+  window._hGroupLots = !window._hGroupLots;
+  const b = document.getElementById('grouplots-btn');
+  if (b) { b.style.background = window._hGroupLots ? 'var(--ac)' : 'transparent'; b.style.color = window._hGroupLots ? '#fff' : 'var(--t3)'; }
+  renderHoldings();
+  _prefsSave();
+}
+function _hGroupRows(rows) {
+  const g = new Map();
+  rows.forEach(h => { const k = h.symbol; if (!g.has(k)) g.set(k, []); g.get(k).push(h); });
+  return [...g.values()].map(lots => {
+    if (lots.length === 1) return lots[0];
+    const qty = lots.reduce((s,l) => s + l.qty, 0);
+    const inv = lots.reduce((s,l) => s + l.qty * l.avgPrice, 0);
+    const first = lots.slice().sort((a,b) => new Date(a.buyDate) - new Date(b.buyDate))[0];
+    return { ...first, qty, avgPrice: +(inv/qty).toFixed(2), _lots: lots, _isGroup: true };
+  });
+}
+// Per-lot P&L + LTCG countdown (shown inside the expanded row)
+function _hLotsPanelHtml(h) {
+  const lots = h._lots || D.holdings.filter(x => x.symbol === h.symbol);
+  const ltp = h.ltp || h.avgPrice;
+  const rows = lots.slice().sort((a,b) => new Date(a.buyDate) - new Date(b.buyDate)).map(l => {
+    const days = hDays(l.buyDate) || 0;
+    const pl = (ltp - l.avgPrice) * l.qty;
+    const ltcgDays = 365 - days;
+    const tax = ltcgDays <= 0
+      ? '<span style="color:var(--grn);font-weight:700">LTCG ✓</span>'
+      : `<span style="color:${ltcgDays<=45?'var(--yel)':'var(--t4)'}">LTCG in ${ltcgDays}d</span>`;
+    return `<div style="display:flex;gap:10px;font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--b1)">
+      <span class="mn" style="width:88px">${l.qty} @ ₹${f(l.avgPrice)}</span>
+      <span style="color:var(--t4);width:76px">${l.buyDate||'—'}</span>
+      <span class="mn ${cls(pl)}" style="width:88px">${pl>=0?'+':''}₹${fI(Math.abs(pl))}</span>
+      <span style="width:56px" class="mn">${days}d</span>
+      <span>${tax}</span>
+    </div>`;
+  }).join('');
+  return `<div style="margin-top:10px"><div style="font-size:10px;font-weight:700;color:var(--t4);text-transform:uppercase;margin-bottom:4px">Lots &amp; Tax (${lots.length})</div>${rows}</div>`;
+}
+// Quick alert straight from the expanded row
+function _hQuickAlert(hid) {
+  const h = D.holdings.find(x => x.id == hid); if (!h) return;
+  const priceEl = document.getElementById('h-qa-price-' + hid);
+  const typeEl = document.getElementById('h-qa-type-' + hid);
+  const price = parseFloat(priceEl?.value);
+  if (!price || price <= 0) { toast('Enter a valid price', 'warn'); return; }
+  const type = typeEl?.value || 'below';
+  const alerts = loadAlerts();
+  alerts.push({ id: Date.now(), sym: h.symbol, type, price, label: (type==='above'?'Above ₹':'Below ₹')+price, src:'holdings', created: new Date().toISOString(), triggered: false });
+  saveAlerts(alerts);
+  toast(`🔔 Alert set: ${h.symbol} ${type==='above'?'≥':'≤'} ₹${price}`, 'ok');
+}
+// What-changed digest — signal flips (≤48h), SL breaches, top overnight mover
+function _hRenderDigest() {
+  const el = document.getElementById('h-digest'); if (!el) return;
+  const today = new Date().toISOString().slice(0,10);
+  if (localStorage.getItem('ss_digest_dismiss') === today) { el.innerHTML = ''; return; }
+  const items = [];
+  D.holdings.forEach(h => {
+    if (h.prevSignal && h.prevSignalAt && h.signal && h.prevSignal !== h.signal
+        && (Date.now() - new Date(h.prevSignalAt)) < 48*3600000) {
+      items.push(`🚦 <strong>${h.symbol}</strong> ${h.prevSignal} → <strong style="color:${/BUY/.test(h.signal)?'var(--grn)':/SELL|EXIT/.test(h.signal)?'var(--red)':'var(--yel)'}">${h.signal}</strong>`);
+    }
+  });
+  const breached = D.holdings.filter(h => h.stopLoss && (h.ltp||h.avgPrice) <= h.stopLoss);
+  if (breached.length) items.push(`🔻 <strong style="color:var(--red)">${breached.length} SL breach${breached.length>1?'es':''}</strong>: ${breached.slice(0,4).map(h=>h.symbol).join(', ')}${breached.length>4?'…':''}`);
+  const movers = D.holdings.filter(h => Math.abs(h.chgP||0) >= 4).sort((a,b)=>Math.abs(b.chgP)-Math.abs(a.chgP));
+  if (movers.length) items.push(`⚡ Big move: ${movers.slice(0,3).map(h=>`<strong>${h.symbol}</strong> <span class="${cls(h.chgP)}">${fP(h.chgP)}</span>`).join(' · ')}`);
+  if (!items.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:8px 14px;margin-bottom:10px;background:rgba(79,142,247,.06);border:1px solid rgba(79,142,247,.2);border-radius:10px;font-size:12px">
+    <span style="font-weight:800;color:var(--ac);font-size:11px">📣 SINCE YESTERDAY</span>
+    ${items.map(i=>`<span>${i}</span>`).join('')}
+    <span onclick="localStorage.setItem('ss_digest_dismiss','${today}');_hRenderDigest()" style="margin-left:auto;cursor:pointer;color:var(--t4);font-size:13px" title="Dismiss for today">✕</span>
+  </div>`;
+}
+// Compact card view for phones (<700px, CSS-switched)
+function _hRenderMobileCards(rows) {
+  const el = document.getElementById('hold-cards'); if (!el) return;
+  el.innerHTML = rows.map(h => {
+    const ltp = h.ltp || h.avgPrice, pl = (ltp - h.avgPrice) * h.qty, plp = (ltp - h.avgPrice) / h.avgPrice * 100;
+    return `<div onclick="openDetail(${h.id})" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 12px;border-bottom:1px solid var(--b1);cursor:pointer">
+      <div style="min-width:0">
+        <div class="sym">${h.symbol}${h._isGroup?` <span style="font-size:8px;color:var(--ac2)">×${h._lots.length}</span>`:''}</div>
+        <div style="font-size:10px;color:var(--t4)">${h.qty} @ ₹${f(h.avgPrice)}${h.signal?` · ${h.signal}`:''}</div>
+      </div>
+      <div style="text-align:right;white-space:nowrap">
+        <div class="mn" style="font-weight:700">₹${f(ltp)} <span class="${cls(h.chgP||0)}" style="font-size:10px">${fP(h.chgP||0)}</span></div>
+        <div class="mn ${cls(pl)}" style="font-size:11px">${pl>=0?'+':''}₹${fI(Math.abs(pl))} (${fP(plp)})</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ── Holdings redesign helpers (2026-07-02) ─────────────────────────────────
@@ -8483,6 +8596,10 @@ function _hHealthMatch(h, f) {
     case 'results':  return h.earningsTs && (h.earningsTs*1000 - Date.now())/864e5 >= -1 && (h.earningsTs*1000 - Date.now())/864e5 <= 7;
     case 'staleAI':  return !h.lastAnalysed || (Date.now() - new Date(h.lastAnalysed)) / 864e5 > 7;
     case 'noSL':     return !h.stopLoss;
+    case 'conc': {
+      const tot = D.holdings.reduce((s,x) => s + x.qty * (x.ltp || x.avgPrice), 0);
+      return tot > 0 && (h.qty * ltp) / tot > 0.25;
+    }
     default: return true;
   }
 }
@@ -8499,6 +8616,7 @@ function _hRenderHealthChips() {
     ['results', '📢 Results ≤7d',   'var(--yel)'],
     ['staleAI', '🕰 Stale AI >7d',  'var(--ac2)'],
     ['noSL',    '⚠ No Stop-Loss',  'var(--orn)'],
+    ['conc',    '⚖ Oversized >25%', 'var(--pink, #ec4899)'],
   ];
   const active = window._hHealthFilter;
   el.innerHTML = defs.map(([k, l, c]) => {
@@ -8559,6 +8677,12 @@ function _hExpandRowHtml(h, colspan) {
         <div style="font-size:10px;font-weight:700;color:var(--t4);text-transform:uppercase;margin:8px 0 4px">AI View</div>
         <div style="font-size:11.5px;color:var(--t2);line-height:1.5">${ai}</div>
         ${h.note ? `<div style="font-size:11px;color:var(--cyn);margin-top:6px">📋 ${String(h.note).slice(0,120)}</div>` : ''}
+        ${(() => { try { const ca = JSON.parse(localStorage.getItem('ss_corpact_v2')||'null')?.bySym?.[h.symbol];
+          if (!ca) return '';
+          const d = new Date(ca.nextEstExDate), days = Math.round((d - Date.now())/864e5);
+          if (days < 0 || days > 180) return '';
+          return `<div style="font-size:11px;color:var(--grn);margin-top:6px">🏦 Est. ex-div ~${d.toLocaleDateString('en-IN',{day:'numeric',month:'short'})} (in ${days}d) · ₹${f(ca.amount)}/sh ≈ ₹${fI(ca.amount*h.qty)}</div>`;
+        } catch(e) { return ''; } })()}
       </div>
       <div>
         <div style="font-size:10px;font-weight:700;color:var(--t4);text-transform:uppercase;margin-bottom:4px">Recent Orders</div>
@@ -8570,6 +8694,12 @@ function _hExpandRowHtml(h, colspan) {
           <button class="btn btn-yel btn-xs" onclick="openSellModal(${h.id})">Sell</button>
         </div>
         <div id="atr-result-${h.id}"></div>
+        <div style="display:flex;gap:6px;margin-top:10px;align-items:center">
+          <select class="fi" id="h-qa-type-${h.id}" style="width:auto;padding:3px 6px;font-size:10.5px"><option value="below">🔻 Below</option><option value="above">🔺 Above</option></select>
+          <input class="fi" id="h-qa-price-${h.id}" type="number" placeholder="₹ price" value="${h.stopLoss||''}" step="0.5" style="width:90px;padding:3px 6px;font-size:10.5px">
+          <button class="btn btn-g btn-xs" onclick="_hQuickAlert(${h.id})">🔔 Alert</button>
+        </div>
+        ${_hLotsPanelHtml(h)}
       </div>
     </div>
   </td></tr>`;
