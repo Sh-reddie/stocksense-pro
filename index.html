@@ -1752,7 +1752,12 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div class="sec" id="sec-attribution">
     <div class="sec-head">
       <div class="sec-title">📊 Performance Attribution</div>
-      <button class="btn btn-g" onclick="renderAttribution()">↻ Refresh</button>
+      <div style="display:flex;gap:10px;align-items:center">
+        <label style="display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--t3);cursor:pointer" title="Add booked profits/losses from Realised P&L to each stock's contribution — credits stocks you already exited well">
+          <input type="checkbox" id="attr-inc-real" onchange="renderAttribution()" style="accent-color:var(--ac)"> Include realised P&amp;L
+        </label>
+        <button class="btn btn-g" onclick="renderAttribution()">↻ Refresh</button>
+      </div>
     </div>
     <!-- Summary row -->
     <div class="sg sg-4 gap" style="margin-bottom:14px" id="attr-summary"></div>
@@ -1935,11 +1940,16 @@ textarea.fi{resize:vertical;min-height:70px;}
         <div><div style="font-size:10px;color:var(--t4);margin-bottom:3px">Avg Win</div><div style="font-weight:700;color:var(--grn);font-family:var(--mono)" id="rpl-avgwin">—</div></div>
         <div><div style="font-size:10px;color:var(--t4);margin-bottom:3px">Avg Loss</div><div style="font-weight:700;color:var(--red);font-family:var(--mono)" id="rpl-avgloss">—</div></div>
         <div><div style="font-size:10px;color:var(--t4);margin-bottom:3px">Win/Loss Ratio</div><div style="font-weight:700;font-family:var(--mono)" id="rpl-wlratio">—</div></div>
+        <div><div style="font-size:10px;color:var(--t4);margin-bottom:3px" title="Total ₹ won ÷ total ₹ lost. >1.5 is healthy; <1 means losses outweigh wins">Profit Factor</div><div style="font-weight:700;font-family:var(--mono)" id="rpl-pf">—</div></div>
         <div><div style="font-size:10px;color:var(--t4);margin-bottom:3px">Avg Hold — Winners</div><div style="font-weight:700;font-family:var(--mono)" id="rpl-holdw">—</div></div>
         <div><div style="font-size:10px;color:var(--t4);margin-bottom:3px">Avg Hold — Losers</div><div style="font-weight:700;font-family:var(--mono)" id="rpl-holdl">—</div></div>
         <div><div style="font-size:10px;color:var(--t4);margin-bottom:3px">Worst Trade</div><div style="font-weight:700;color:var(--red);font-family:var(--mono)" id="rpl-worst">—</div><div style="font-size:10px;color:var(--t4)" id="rpl-worstsym">—</div></div>
         <div style="grid-column:1/-1"><div style="font-size:10px;color:var(--t4);margin-bottom:6px">P&L by Sector</div><div id="rpl-sector-bars" style="display:flex;flex-direction:column;gap:4px"></div></div>
       </div>
+    </div>
+    <div class="pn" id="rpl-curve-pn" style="margin-bottom:14px;display:none">
+      <div class="pn-h"><div class="pn-t">📈 Cumulative Realised P&L</div><span style="font-size:10px;color:var(--t4)">by exit month</span></div>
+      <div class="pn-b"><div id="rpl-curve" style="position:relative;height:180px"></div></div>
     </div>
     <div class="pn"><div style="overflow-x:auto"><table class="tbl" style="min-width:900px"><thead><tr><th>Stock</th><th>Exch</th><th>Qty</th><th>Buy ₹</th><th>Sell ₹</th><th>Buy Date</th><th>Sell Date</th><th>Days</th><th>P&L</th><th>P&L%</th><th>Tax</th><th>✕</th></tr></thead><tbody id="rpl-tbody"><tr><td colspan="12" style="text-align:center;padding:40px;color:var(--t4)">No closed trades.</td></tr></tbody></table></div></div>
   </div>
@@ -2326,6 +2336,8 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="sc c3"><div class="sc-lbl">Total Return</div><div class="sc-val" id="tl-ret">—</div><div class="sc-sub" id="tl-ret-sub">Since first snapshot</div></div>
       <div class="sc c4"><div class="sc-lbl">Best Day</div><div class="sc-val up" id="tl-best">—</div><div class="sc-sub" id="tl-best-dt">—</div></div>
       <div class="sc c5"><div class="sc-lbl">Worst Day</div><div class="sc-val dn" id="tl-worst">—</div><div class="sc-sub" id="tl-worst-dt">—</div></div>
+      <div class="sc c2"><div class="sc-lbl">Max Drawdown</div><div class="sc-val dn" id="tl-mdd">—</div><div class="sc-sub" id="tl-mdd-dt">peak to trough</div></div>
+      <div class="sc c4"><div class="sc-lbl">From Peak Now</div><div class="sc-val" id="tl-cdd">—</div><div class="sc-sub" id="tl-cdd-dt">current drawdown</div></div>
     </div>
     <!-- Chart -->
     <div class="pn gap">
@@ -2384,7 +2396,7 @@ textarea.fi{resize:vertical;min-height:70px;}
       </div>
     </div>
     <div class="sg sg-4" style="margin-bottom:16px">
-      <div class="sc c1"><div class="sv">My Portfolio</div><div class="sn" id="bm-port-ret" style="font-size:22px">—</div><div class="sv">total return</div></div>
+      <div class="sc c1"><div class="sv">My Portfolio</div><div class="sn" id="bm-port-ret" style="font-size:22px">—</div><div class="sv" id="bm-port-sub">total return</div></div>
       <div class="sc c2"><div class="sv">Nifty 50</div><div class="sn" id="bm-n50-ret" style="font-size:22px">—</div><div class="sv">^NSEI</div></div>
       <div class="sc c3"><div class="sv">Nifty Midcap 50</div><div class="sn" id="bm-nsc-ret" style="font-size:22px">—</div><div class="sv">^NSMIDCP</div></div>
       <div class="sc"><div class="sv">Alpha (vs Nifty 50)</div><div class="sn" id="bm-alpha" style="font-size:22px">—</div><div class="sv">excess return</div></div>
@@ -2399,7 +2411,11 @@ textarea.fi{resize:vertical;min-height:70px;}
         </div>
       </div>
       <div class="pn-b">
-        <canvas id="bm-chart" height="220" style="width:100%"></canvas>
+        <!-- Fixed-height wrapper: Chart.js with maintainAspectRatio:false sizes the
+             canvas to its parent — an unbounded parent let it grow past the window. -->
+        <div style="position:relative;height:300px;max-height:42vh;width:100%">
+          <canvas id="bm-chart"></canvas>
+        </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
           <div id="bm-chart-note" style="font-size:10px;color:var(--t4)">Loading…</div>
           <button class="btn btn-g btn-xs" onclick="tlSnapshot();loadBenchmark();toast('Snapshot saved ✓','ok')" title="Save today's portfolio value for the actual performance curve">📸 Snapshot Today</button>
@@ -2729,7 +2745,9 @@ textarea.fi{resize:vertical;min-height:70px;}
           <option value="today">Today's P&L</option>
           <option value="total">Total P&L</option>
           <option value="cagr">CAGR %</option>
+          <option value="xirr">XIRR %</option>
         </select>
+        <label style="display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--t3);cursor:pointer"><input type="checkbox" id="hmap-group" onchange="renderPfHeatmap()" style="accent-color:var(--ac)"> By sector</label>
         <button class="btn btn-g btn-sm" onclick="renderPfHeatmap()">↻ Refresh</button>
       </div>
     </div>
@@ -10534,13 +10552,47 @@ function addTrade() {
   save('realised'); closeM('addtrade'); renderRealised(); renderSummary();
   toast(`${sym} trade logged — P&L ₹${fI(pl)}`);
 }
+// Cumulative realised P&L curve — monthly bars + running total line (SVG, no deps)
+function _renderRealisedCurve() {
+  const pn = document.getElementById('rpl-curve-pn'), el = document.getElementById('rpl-curve');
+  if (!pn || !el) return;
+  const withDates = (D.realised||[]).filter(r => r.sellDate);
+  if (withDates.length < 2) { pn.style.display = 'none'; return; }
+  pn.style.display = '';
+  const byMonth = {};
+  withDates.forEach(r => { const m = String(r.sellDate).slice(0,7); byMonth[m] = (byMonth[m]||0) + r.pl; });
+  const months = Object.keys(byMonth).sort();
+  let cum = 0;
+  const rows = months.map(m => { cum += byMonth[m]; return { m, pl: byMonth[m], cum }; });
+  const W = el.clientWidth || 700, H = 180, PAD = { t:10, r:10, b:24, l:64 };
+  const cw = W-PAD.l-PAD.r, ch = H-PAD.t-PAD.b;
+  const allVals = [...rows.map(r=>r.pl), ...rows.map(r=>r.cum), 0];
+  const minV = Math.min(...allVals), maxV = Math.max(...allVals), range = (maxV-minV)||1;
+  const bx = i => PAD.l + (i+0.15) * (cw/rows.length);
+  const bw = Math.max(3, cw/rows.length*0.7);
+  const py = v => PAD.t + ch - (v-minV)/range*ch;
+  const zeroY = py(0);
+  const bars = rows.map((r,i) => `<rect x="${bx(i).toFixed(1)}" y="${Math.min(py(r.pl),zeroY).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,Math.abs(py(r.pl)-zeroY)).toFixed(1)}" rx="2" fill="${r.pl>=0?'rgba(45,211,111,.55)':'rgba(240,82,82,.55)'}"><title>${r.m}: ${r.pl>=0?'+':''}₹${fI(Math.abs(r.pl))}</title></rect>`).join('');
+  const linePts = rows.map((r,i) => `${(bx(i)+bw/2).toFixed(1)},${py(r.cum).toFixed(1)}`).join('L');
+  const lastCum = rows[rows.length-1].cum;
+  const xLbls = rows.filter((_,i)=>i%Math.max(1,Math.floor(rows.length/8))===0).map(r=>`<text x="${(bx(rows.indexOf(r))+bw/2).toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="9" fill="var(--t4)">${r.m.slice(2).replace('-','/')}</text>`).join('');
+  el.innerHTML = `<svg width="100%" height="100%" viewBox="0 0 ${W} ${H}">
+    <line x1="${PAD.l}" y1="${zeroY.toFixed(1)}" x2="${PAD.l+cw}" y2="${zeroY.toFixed(1)}" stroke="var(--b2)" stroke-width="1"/>
+    ${bars}
+    <path d="M${linePts}" fill="none" stroke="${lastCum>=0?'#2dd36f':'#f05252'}" stroke-width="2" stroke-linejoin="round"/>
+    <text x="${PAD.l-8}" y="${py(lastCum)+4}" text-anchor="end" font-size="10" font-weight="700" fill="${lastCum>=0?'var(--grn)':'var(--red)'}">${lastCum>=0?'+':''}₹${fI(Math.abs(lastCum))}</text>
+    <text x="${PAD.l-8}" y="${zeroY+4}" text-anchor="end" font-size="9" fill="var(--t4)">0</text>
+  </svg>`;
+}
+
 function renderRealised() {
   const tbody=document.getElementById('rpl-tbody');
   if(!D.realised.length){tbody.innerHTML='<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--t4)">No closed trades.</td></tr>';return;}
   const _rlQ = (document.getElementById('rl-search')?.value || '').trim().toUpperCase();
   const _rlRows = _rlQ ? D.realised.filter(r => r.symbol.toUpperCase().includes(_rlQ) || (r.name||'').toUpperCase().includes(_rlQ)) : D.realised;
   if(!_rlRows.length){tbody.innerHTML=`<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--t4)">No trades match <strong>"${_rlQ}"</strong></td></tr>`;return;}
-  tbody.innerHTML=_rlRows.map(r=>`<tr><td><div class="sym">${r.symbol}</div></td><td style="font-size:10px;color:var(--t4)">${r.exchange||'NSE'}</td><td class="mn">${r.qty}</td><td class="mn">₹${f(r.buyPrice)}</td><td class="mn">₹${f(r.sellPrice)}</td><td style="font-size:11px">${r.buyDate||'—'}</td><td style="font-size:11px">${r.sellDate||'—'}</td><td class="mn">${r.holdDays||'—'}d</td><td class="mn ${cls(r.pl)}">${r.pl>=0?'+':''}₹${fI(Math.abs(r.pl))}</td><td class="mn ${cls(r.plPct)}">${fP(r.plPct)}</td><td><span class="tag ${r.taxType==='LTCG'?'t-ltcg':'t-stcg'}">${r.taxType}</span></td><td><button class="btn btn-red btn-xs" onclick="rmTrade(${r.id})">✕</button></td></tr>`).join('');
+  const _jnlIds = new Set(loadJournal().map(t=>String(t.id)));
+  tbody.innerHTML=_rlRows.map(r=>`<tr><td><div class="sym">${r.symbol}${_jnlIds.has('real-'+r.id)?' <span title="Journaled — see Trade Journal" style="font-size:10px;cursor:help">📒</span>':''}</div></td><td style="font-size:10px;color:var(--t4)">${r.exchange||'NSE'}</td><td class="mn">${r.qty}</td><td class="mn">₹${f(r.buyPrice)}</td><td class="mn">₹${f(r.sellPrice)}</td><td style="font-size:11px">${r.buyDate||'—'}</td><td style="font-size:11px">${r.sellDate||'—'}</td><td class="mn">${r.holdDays||'—'}d</td><td class="mn ${cls(r.pl)}">${r.pl>=0?'+':''}₹${fI(Math.abs(r.pl))}</td><td class="mn ${cls(r.plPct)}">${fP(r.plPct)}</td><td><span class="tag ${r.taxType==='LTCG'?'t-ltcg':'t-stcg'}">${r.taxType}</span></td><td><button class="btn btn-red btn-xs" onclick="rmTrade(${r.id})">✕</button></td></tr>`).join('');
   const totalPl = D.realised.reduce((s,r)=>s+r.pl,0);
   const winners = D.realised.filter(r=>r.pl>0);
   const losers  = D.realised.filter(r=>r.pl<=0);
@@ -10577,6 +10629,16 @@ function renderRealised() {
     const wlRatio = (avgWinPct != null && avgLossPct != null && avgLossPct !== 0)
       ? (Math.abs(avgWinPct)/Math.abs(avgLossPct)).toFixed(2) : '—';
     set('rpl-wlratio', typeof wlRatio==='string'&&wlRatio!=='—' ? wlRatio+'×' : wlRatio);
+    // Profit factor: gross ₹ won / gross ₹ lost
+    const _grossWin = winners.reduce((s,r)=>s+r.pl,0);
+    const _grossLoss = Math.abs(losers.reduce((s,r)=>s+r.pl,0));
+    const _pf = _grossLoss > 0 ? (_grossWin/_grossLoss) : (_grossWin>0 ? Infinity : null);
+    const _pfEl = document.getElementById('rpl-pf');
+    if (_pfEl) {
+      _pfEl.textContent = _pf==null ? '—' : _pf===Infinity ? '∞ (no losses)' : _pf.toFixed(2)+'×';
+      _pfEl.style.color = _pf==null ? '' : _pf>=1.5 ? 'var(--grn)' : _pf>=1 ? 'var(--yel)' : 'var(--red)';
+    }
+    _renderRealisedCurve();
     set('rpl-holdw', avgHoldW!=null ? avgHoldW+'d' : '—');
     set('rpl-holdl', avgHoldL!=null ? avgHoldL+'d' : '—');
     set('rpl-worst', worst.symbol!=='—'?fP(worst.plPct):'—');
@@ -14423,6 +14485,29 @@ function renderTimeline() {
   if (bestSnap)  { document.getElementById('tl-best').textContent='+'+bestChg.toFixed(2)+'%'; document.getElementById('tl-best-dt').textContent=bestSnap.date; }
   if (worstSnap) { document.getElementById('tl-worst').textContent=worstChg.toFixed(2)+'%'; document.getElementById('tl-worst-dt').textContent=worstSnap.date; }
 
+  // Drawdown: running peak → deepest trough, plus where we sit vs peak today
+  let peak = -Infinity, peakDate = null, mdd = 0, mddDate = null;
+  snaps.forEach(sn => {
+    if (sn.current > peak) { peak = sn.current; peakDate = sn.date; }
+    const dd = peak > 0 ? (sn.current - peak)/peak*100 : 0;
+    if (dd < mdd) { mdd = dd; mddDate = sn.date; }
+  });
+  const cdd = peak > 0 ? (last.current - peak)/peak*100 : 0;
+  const setT = (id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  setT('tl-mdd', mdd < 0 ? mdd.toFixed(2)+'%' : '0%');
+  setT('tl-mdd-dt', mddDate ? 'trough '+mddDate : 'peak to trough');
+  const cddEl = document.getElementById('tl-cdd');
+  if (cddEl) { cddEl.textContent = cdd < -0.01 ? cdd.toFixed(2)+'%' : 'At peak 🎉'; cddEl.className = 'sc-val ' + (cdd < -5 ? 'dn' : cdd < -0.01 ? '' : 'up'); }
+  setT('tl-cdd-dt', peakDate ? 'peak was '+peakDate : 'current drawdown');
+
+  // One-time D1 mirror of local snapshots (pre-Worker history survives device wipes)
+  try {
+    if (allSnaps.length && localStorage.getItem('ss_tl_mirrored') !== String(allSnaps.length)) {
+      localStorage.setItem('ss_tl_mirrored', String(allSnaps.length));
+      _snapPush('timeline', 'snaps', { snaps: allSnaps });
+    }
+  } catch(e) {}
+
   // SVG line chart
   if (svgEl && snaps.length > 1) {
     const W = svgEl.parentElement?.clientWidth || 700;
@@ -14430,7 +14515,8 @@ function renderTimeline() {
     const PAD = { t:10, r:10, b:30, l:70 };
     const cw = W - PAD.l - PAD.r;
     const ch = H - PAD.t - PAD.b;
-    const vals = snaps.map(s=>s.current);
+    const invPts = snaps.filter(s=>s.invested>0);
+    const vals = [...snaps.map(s=>s.current), ...invPts.map(s=>s.invested)];
     const minV = Math.min(...vals), maxV = Math.max(...vals);
     const range = maxV - minV || 1;
     const px = (i) => PAD.l + (i/(snaps.length-1)) * cw;
@@ -14469,6 +14555,10 @@ function renderTimeline() {
       ${yTicks.map(({y})=>`<line x1="${PAD.l}" y1="${y.toFixed(1)}" x2="${PAD.l+cw}" y2="${y.toFixed(1)}" stroke="var(--b1)" stroke-width="1"/>`).join('')}
       <!-- Fill area -->
       <path d="${fillPath}" fill="url(#${gradId})"/>
+      <!-- Invested (deposits) step-line — the gap between grey and coloured
+           lines is pure market growth, not fresh money -->
+      ${invPts.length>1 ? `<path d="M${snaps.map((s,i)=>s.invested>0?`${px(i).toFixed(1)},${py(s.invested).toFixed(1)}`:null).filter(Boolean).join('L')}" fill="none" stroke="var(--t4)" stroke-width="1.5" stroke-dasharray="4,4" opacity=".7"/>
+      <text x="${(PAD.l+8).toFixed(1)}" y="${(py(invPts[invPts.length-1].invested)-6).toFixed(1)}" font-size="9" fill="var(--t4)">invested</text>` : ''}
       <!-- Line -->
       <path d="${linePath}" fill="none" stroke="${lineColor}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
       <!-- Y labels -->
@@ -15830,6 +15920,10 @@ function renderPfHeatmap() {
     } else if (mode === 'total') {
       pct = h.avgPrice ? ((ltp-h.avgPrice)/h.avgPrice*100) : 0;
       label = (pct>=0?'+':'')+pct.toFixed(1)+'%';
+    } else if (mode === 'xirr') {
+      const xr = calcHoldingXIRR(h);
+      pct = xr !== null && isFinite(xr) ? xr*100 : 0;
+      label = xr !== null && isFinite(xr) ? (pct>=0?'+':'')+pct.toFixed(1)+'%' : '—';
     } else { // cagr
       const days = hDays(h.buyDate)||1;
       pct = days >= 30 ? (Math.pow(ltp/h.avgPrice, 365/days)-1)*100 : 0;
@@ -15845,16 +15939,34 @@ function renderPfHeatmap() {
     return { h, pct, weight, label, bg, txtCol, sz };
   }).sort((a,b) => b.weight - a.weight);
 
-  grid.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0">
-    ${cells.map(c => `
+  const tile = c => `
     <div onclick="openDetail(${c.h.id})" title="${c.h.name||c.h.symbol} · ${c.weight.toFixed(1)}% of portfolio"
       style="width:${c.sz}px;height:${c.sz}px;background:${c.bg};border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:opacity .15s;padding:6px;box-sizing:border-box;overflow:hidden"
       onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
       <div style="font-weight:800;font-size:${c.sz>100?14:11}px;color:${c.txtCol};text-align:center;line-height:1.2;word-break:break-all">${c.h.symbol}</div>
       <div style="font-size:${c.sz>100?13:10}px;font-weight:700;color:${c.txtCol};opacity:.95;margin-top:3px">${c.label}</div>
       ${c.sz>90?`<div style="font-size:9px;color:${c.txtCol};opacity:.7;margin-top:2px">${c.weight.toFixed(1)}%</div>`:''}
-    </div>`).join('')}
-  </div>`;
+    </div>`;
+
+  if (document.getElementById('hmap-group')?.checked) {
+    // Group tiles under sector headers — concentration jumps out immediately
+    const bySec = new Map();
+    cells.forEach(c => { const k = c.h.sector || 'Others'; if (!bySec.has(k)) bySec.set(k, []); bySec.get(k).push(c); });
+    const secs = [...bySec.entries()].map(([sec, arr]) => ({ sec, arr, w: arr.reduce((s,c)=>s+c.weight,0), pl: arr.reduce((s,c)=>s+c.pct*c.weight,0)/Math.max(arr.reduce((s,c)=>s+c.weight,0),0.01) }))
+      .sort((a,b) => b.w - a.w);
+    grid.innerHTML = secs.map(({sec, arr, w, pl}) => `
+      <div style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--t2)">${sec}</span>
+          <span style="font-size:10px;color:${w>40?'var(--red)':w>25?'var(--yel)':'var(--t4)'};font-weight:700">${w.toFixed(1)}% of portfolio${w>40?' ⚠ overweight':''}</span>
+          <span style="font-size:10px;color:${pl>=0?'var(--grn)':'var(--red)'};font-family:var(--mono)">${pl>=0?'+':''}${pl.toFixed(1)}% wtd</span>
+          <span style="flex:1;height:1px;background:var(--b1)"></span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${arr.map(tile).join('')}</div>
+      </div>`).join('');
+  } else {
+    grid.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0">${cells.map(tile).join('')}</div>`;
+  }
 }
 
 // Pre-process Zerodha tradebook: aggregate BUY trades by symbol → weighted avg
@@ -17928,10 +18040,31 @@ async function loadBenchmark() {
   if(!portEl) return;
   [portEl,n50El,nscEl,alphaEl].forEach(e=>{ if(e) e.textContent='Loading…'; e.style.color='var(--t3)'; });
 
-  // Portfolio return from holdings cost vs current
+  // ── True period return (fixed 2026-07-02) ──────────────────────────────
+  // Previously "My Portfolio" showed ALL-TIME cost-basis return while the
+  // index cards showed the SELECTED PERIOD's return — so Alpha compared
+  // apples to oranges. Now: with real EOD snapshots (browser + Worker
+  // pfHistory), compute the portfolio's return over the same window. Falls
+  // back to all-time cost basis (clearly labelled) until history exists.
+  try { await tlMergeWorkerHistory(); } catch(e) {}
   const invested = D.holdings.reduce((s,h)=>s+h.qty*(h.avgPrice||0),0);
   const current  = D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice||0),0);
-  const portRet  = invested > 0 ? (current-invested)/invested*100 : 0;
+  const allTimeRet = invested > 0 ? (current-invested)/invested*100 : 0;
+  const periodDays = {'1m':30,'3m':91,'6m':182,'1y':365}[_bmPeriod] || 182;
+  const cutoffDate = new Date(Date.now()-periodDays*864e5).toISOString().slice(0,10);
+  const periodSnaps = (typeof tlLoadSnaps==='function' ? tlLoadSnaps() : []).filter(x=>x.date>=cutoffDate && x.current>0);
+  let portRet, portSub;
+  // Require the oldest snapshot to cover at least 60% of the window for an honest period figure
+  const coverage = periodSnaps.length>=2 ? (Date.now()-new Date(periodSnaps[0].date))/(periodDays*864e5) : 0;
+  if (coverage >= 0.6) {
+    portRet = (current - periodSnaps[0].current)/periodSnaps[0].current*100;
+    portSub = `over ${_bmPeriod.toUpperCase()} · real snapshots`;
+  } else {
+    portRet = allTimeRet;
+    portSub = `all-time (cost basis) — ${periodSnaps.length<2?'no':'partial'} ${_bmPeriod.toUpperCase()} history yet`;
+  }
+  const portSubEl = document.getElementById('bm-port-sub');
+  if (portSubEl) portSubEl.textContent = portSub;
   portEl.textContent = (portRet>=0?'+':'')+portRet.toFixed(2)+'%';
   portEl.style.color = portRet>=0?'var(--grn)':'var(--red)';
 
@@ -17996,8 +18129,10 @@ function drawBmChart(n50Data, nscData, portRet, n50Ret, nscRet) {
   if(!canvas) return;
   if(_bmChart) { _bmChart.destroy(); _bmChart=null; }
 
-  // ── Use real portfolio snapshots when available ──────────────────────
-  const snaps = tlLoadSnaps ? tlLoadSnaps() : [];
+  // ── Use real portfolio snapshots when available (period-windowed) ─────
+  const _pDays = {'1m':30,'3m':91,'6m':182,'1y':365}[_bmPeriod] || 182;
+  const _pCut = new Date(Date.now()-_pDays*864e5).toISOString().slice(0,10);
+  const snaps = (tlLoadSnaps ? tlLoadSnaps() : []).filter(x=>x.date>=_pCut && x.current>0);
   const hasRealSnaps = snaps.length >= 3;
 
   let labels, datasets = [];
@@ -19460,15 +19595,23 @@ function renderAttribution() {
 
   const totalInv = D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0);
   const totalCv  = D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
-  const totalPL  = totalCv - totalInv;
-  const totalRet = totalInv > 0 ? totalPL/totalInv*100 : 0;
+  // Optional: fold in booked (realised) P&L so exited winners get credit
+  const incReal = !!document.getElementById('attr-inc-real')?.checked;
+  const realBySym = {};
+  let realExited = 0, realHeld = 0;
+  if (incReal) (D.realised||[]).forEach(r => {
+    realBySym[r.symbol] = (realBySym[r.symbol]||0) + r.pl;
+    if (D.holdings.some(h => h.symbol === r.symbol)) realHeld += r.pl; else realExited += r.pl;
+  });
+  const totalPL  = (totalCv - totalInv) + (incReal ? realHeld + realExited : 0);
+  const totalRet = totalInv > 0 ? (totalCv-totalInv)/totalInv*100 : 0;
 
   // Per-stock metrics
   const stocks = D.holdings.map(h => {
     const ltp = h.ltp || h.avgPrice;
     const inv = h.qty * h.avgPrice;
     const cv  = h.qty * ltp;
-    const pl  = cv - inv;
+    const pl  = (cv - inv) + (incReal ? (realBySym[h.symbol]||0) : 0);
     const ret = inv > 0 ? pl/inv*100 : 0;
     const contrib = totalPL !== 0 ? pl/totalPL*100 : 0; // % of total P&L
     const portWeight = totalCv > 0 ? cv/totalCv*100 : 0;
@@ -19483,7 +19626,7 @@ function renderAttribution() {
   // Summary cards
   const summEl = document.getElementById('attr-summary');
   if (summEl) summEl.innerHTML = `
-    <div class="sc c2"><div class="sc-lbl">Total P&L</div><div class="sc-val ${totalPL>=0?'up':'dn'}">${totalPL>=0?'+':''}₹${fI(Math.abs(totalPL))}</div><div class="sc-sub">${f(totalRet,1)}% overall</div></div>
+    <div class="sc c2"><div class="sc-lbl">Total P&L${incReal?' (incl. realised)':''}</div><div class="sc-val ${totalPL>=0?'up':'dn'}">${totalPL>=0?'+':''}₹${fI(Math.abs(totalPL))}</div><div class="sc-sub">${incReal?`₹${fI(realExited)} from exited stocks`:f(totalRet,1)+'% unrealised'}</div></div>
     <div class="sc c1"><div class="sc-lbl">Winners / Losers</div><div class="sc-val"><span style="color:var(--grn)">${winners.length}</span> / <span style="color:var(--red)">${losers.length}</span></div><div class="sc-sub">Win rate ${Math.round(winners.length/stocks.length*100)}%</div></div>
     <div class="sc c3"><div class="sc-lbl">Best Contributor</div><div class="sc-val up" style="font-size:14px">${biggestWin?biggestWin.h.symbol:'—'}</div><div class="sc-sub">${biggestWin?'+₹'+fI(biggestWin.pl)+' · +'+f(biggestWin.ret,1)+'%':'—'}</div></div>
     <div class="sc c5"><div class="sc-lbl">Biggest Drag</div><div class="sc-val dn" style="font-size:14px">${biggestLoss?biggestLoss.h.symbol:'—'}</div><div class="sc-sub">${biggestLoss?'₹'+fI(biggestLoss.pl)+' · '+f(biggestLoss.ret,1)+'%':'—'}</div></div>`;
