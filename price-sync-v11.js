@@ -444,6 +444,39 @@ async function sendPriceQuery(env,chatId,token,sym){
   await tgSend(token,chatId,msg);
 }
 
+// ── EOD portfolio snapshot (added 2026-07-02) ────────────────────────────────
+// Runs on the 18:30 IST daily cron: computes invested + current value from the
+// portfolio + priceCache already in KV (zero extra API calls) and appends one
+// row per day to KV `pfHistory` (deduped by date, capped at 750 days). Powers
+// the site's Value Timeline with REAL history instead of estimates.
+async function snapshotPortfolio(env){
+  let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}
+  let pf=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
+  const holdings=(pf&&pf.holdings)||[];
+  if(!holdings.length)return;
+  let invested=0,value=0,priced=0;
+  for(const h of holdings){
+    if(!h.symbol||!h.qty)continue;
+    invested+=h.qty*(h.avgPrice||0);
+    const c=prices[h.symbol+'|'+(h.exchange||'NSE')];
+    const ltp=(c&&c.ltp)||h.ltp||h.avgPrice||0;
+    if(c&&c.ltp)priced++;
+    value+=h.qty*ltp;
+  }
+  if(!(invested>0))return;
+  // Skip if <60% of holdings had a live price (half-empty snapshot is worse than none)
+  if(priced/holdings.length<0.6){console.warn('pf snapshot skipped: only',priced,'/',holdings.length,'priced');return;}
+  const date=new Date(Date.now()+5.5*3600000).toISOString().slice(0,10); // IST date
+  let hist=[];try{const raw=await env.STOCKSENSE_KV.get('pfHistory');if(raw)hist=JSON.parse(raw);}catch(e){}
+  const row={date,invested:Math.round(invested),value:Math.round(value),n:holdings.length};
+  const i=hist.findIndex(r=>r.date===date);
+  if(i>=0)hist[i]=row;else hist.push(row);
+  hist.sort((a,b)=>a.date<b.date?-1:1);
+  if(hist.length>750)hist=hist.slice(-750);
+  await env.STOCKSENSE_KV.put('pfHistory',JSON.stringify(hist));
+  console.log('pf snapshot:',date,'value',row.value,'(',priced,'/',holdings.length,'priced)');
+}
+
 async function sendPortfolioTop(env,chatId,token){
   let prices={};try{const raw=await env.STOCKSENSE_KV.get('priceCache');if(raw)prices=JSON.parse(raw).prices||{};}catch(e){}
   let pf=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
@@ -1942,6 +1975,10 @@ export default{
       if(staleMs>26*3600000){ ctx.waitUntil(fetchFiiDiiLive(env).catch(e=>console.warn('fiidii lazy refresh failed:',e.message))); }
       return new Response(JSON.stringify({ok:true,history,fetchedAt:meta?.ts||null,source:meta?.source||'none'}),{headers:_MKTCORS});
     }
+    if(url.pathname==='/pfhistory'){
+      let hist=[];try{const r=await env.STOCKSENSE_KV.get('pfHistory');if(r)hist=JSON.parse(r);}catch(e){}
+      return new Response(JSON.stringify({ok:true,history:hist}),{headers:_MKTCORS});
+    }
     if(url.pathname==='/fiidii-refresh'){
       try{const history=await fetchFiiDiiLive(env);return new Response(JSON.stringify({ok:true,history}),{headers:_MKTCORS});}
       catch(e){return new Response(JSON.stringify({ok:false,error:e.message}),{status:502,headers:_MKTCORS});}
@@ -1979,6 +2016,7 @@ export default{
       }else if(event.cron==='0 13 * * 1-5'){
         // 18:30 IST — after NSE publishes EOD FII/DII + bulk/block deal reports (~5:30-6:30pm IST)
         await refreshMarketData(env);
+        try{await snapshotPortfolio(env);}catch(e){console.warn('pf snapshot err:',e.message);}
       }else if(event.cron==='*/20 2-16 * * *'){
         // Every 20 min, 7:30am-10:29pm IST, every day (news doesn't stop on weekends) —
         // keeps the KV "last known good" news cache fresh so a live page load that

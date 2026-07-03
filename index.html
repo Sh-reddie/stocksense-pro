@@ -1644,8 +1644,13 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div class="pss-item"><div class="pss-label">XIRR (p.a.)</div><div class="pss-val" id="pss-xirr" style="color:var(--cyn)">—</div></div>
       <div class="pss-item" style="text-align:right;flex:0 0 auto;padding-right:14px"><div class="pss-label">Last Refresh</div><div class="pss-val" id="pss-ref" style="font-size:11px;color:var(--t3)">—</div></div>
     </div>
-    <!-- Column Toggles -->
-    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+    <!-- Health chips (computed from live data — clickable filters) -->
+    <div id="h-health-chips" style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"></div>
+    <!-- View presets + Column Toggles -->
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:11px;color:var(--t4);margin-right:2px">View:</span>
+      <span id="h-presets"></span>
+      <span style="width:1px;height:16px;background:var(--b2);margin:0 6px"></span>
       <span style="font-size:11px;color:var(--t4);margin-right:4px;align-self:center;">Columns:</span>
       <button class="btn btn-g btn-xs col-tog on" data-grp="basic" onclick="togCols('basic',this)">📊 Basic</button>
       <button class="btn btn-g btn-xs col-tog" data-grp="tech" onclick="togCols('tech',this)">📈 Technical</button>
@@ -3237,6 +3242,7 @@ textarea.fi{resize:vertical;min-height:70px;}
           <option value="sym-az">🔤 Symbol A → Z</option>
           <option value="open-first">🟢 Open Trades First</option>
         </select>
+        <button class="btn btn-g btn-sm" onclick="syncJournalFromRealised()" title="Create journal entries from your Realised P&L trades (duplicates skipped)">⟳ Sync from Realised</button>
         <button class="btn btn-p btn-sm" onclick="openJournalForm()">+ Log Trade</button>
         <button class="btn btn-g btn-sm" onclick="runJournalAI()">🤖 AI Attribution</button>
         <button class="btn btn-p btn-sm" onclick="findMyEdge()" title="AI analysis of patterns across all your winning vs losing trades">🔬 Find My Edge</button>
@@ -6279,6 +6285,53 @@ let slSelected = null; // currently selected stock from search
 let slFocusIdx = -1;
 let refreshTimer = null;
 let activeColGroups = new Set(['basic']);
+// ── View preferences — persist column groups / sorts / filters / density
+// locally AND to D1 (snapstore sec=prefs) so the table looks the same on
+// every device and after every reload.
+let _prefsTimer = null;
+function _prefsSave() {
+  try {
+    const prefs = {
+      colGroups: [...activeColGroups],
+      hSort: document.getElementById('h-sort')?.value || 'default',
+      hSector: document.getElementById('h-filter-sector')?.value || '',
+      hTag: document.getElementById('h-filter-tag')?.value || '',
+      hSig: document.getElementById('h-filter-sig')?.value || '',
+      wlSort: document.getElementById('wl-sort')?.value || 'score',
+      density: localStorage.getItem('ss_density') || 'compact',
+      hPreset: window._hPreset || 'default',
+    };
+    localStorage.setItem('ss_view_prefs', JSON.stringify(prefs));
+    clearTimeout(_prefsTimer);
+    _prefsTimer = setTimeout(() => _snapPush('prefs', 'view', { prefs }), 2000);
+  } catch(e) {}
+}
+function _prefsApply(prefs) {
+  if (!prefs) return;
+  if (Array.isArray(prefs.colGroups) && prefs.colGroups.length) {
+    activeColGroups = new Set(prefs.colGroups);
+    document.querySelectorAll('.col-tog').forEach(b => {
+      const on = activeColGroups.has(b.dataset.grp);
+      b.style.background = on ? 'var(--ac)' : 'transparent';
+      b.style.color = on ? '#fff' : 'var(--t3)';
+    });
+  }
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+  setVal('h-sort', prefs.hSort); setVal('h-filter-sector', prefs.hSector);
+  setVal('h-filter-tag', prefs.hTag); setVal('h-filter-sig', prefs.hSig);
+  setVal('wl-sort', prefs.wlSort);
+  if (prefs.hPreset) window._hPreset = prefs.hPreset;
+}
+async function _prefsRestore() {
+  let prefs = null;
+  try { prefs = JSON.parse(localStorage.getItem('ss_view_prefs') || 'null'); } catch(e) {}
+  if (!prefs) { const blob = await _snapPull('prefs', 'view'); prefs = blob?.prefs || null; if (prefs) localStorage.setItem('ss_view_prefs', JSON.stringify(prefs)); }
+  _prefsApply(prefs);
+  // Save on any future change of the tracked controls
+  ['h-sort','h-filter-sector','h-filter-tag','h-filter-sig','wl-sort'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', _prefsSave);
+  });
+}
 
 // ═══════════════════════════════════════════════════
 // NAVIGATION
@@ -6343,7 +6396,7 @@ function go(id) {
   if(id==='benchmark') loadBenchmark();
   if(id==='planner') { calcPositionSize(); calcSIP(); renderPsConc(); }
   if(id==='heatmap') buildHeatmap();
-  if(id==='sip') renderSipTracker();
+  if(id==='sip') { _sipSeedFromServer(); renderSipTracker(); }
   if(id==='sectormap') renderSectorMap();
   if(id==='rebalancer') renderRebalancer();
   if(id==='divcal') renderDivCalendar();
@@ -6367,7 +6420,7 @@ function go(id) {
   if(id==='attribution') renderAttribution();
   if(id==='screener') renderScreener();
   if(id==='market') { _loadKVPrices(); renderMarket(); _loadExtendedUniverse().then(()=>{ if(_extUniverseLoaded) renderMarket(); }); }
-  if(id==='journal') renderJournal();
+  if(id==='journal') { _journalSeedFromServer(); renderJournal(); }
   if(id==='macro') renderMacro();
   if(id==='daily-brief') renderDailyBrief();
   if(id==='fair-value') renderFairValueEngine();
@@ -6385,7 +6438,7 @@ function go(id) {
   if(id==='earnings-preview') renderEarningsPreview();
   if(id==='dividend-opt') renderDividendOpt();
   if(id==='goal-planner') renderGoalPlanner();
-  if(id==='timeline') renderTimeline();
+  if(id==='timeline') { renderTimeline(); tlMergeWorkerHistory(); }
   if(id==='52week') render52Week();
   if(id==='custom-alerts') renderCustomAlerts();
   if(id==='fii-dii') renderFiiDii();
@@ -8122,6 +8175,7 @@ function togCols(grp, btn) {
   if(activeColGroups.has(grp)){activeColGroups.delete(grp);btn.style.background='transparent';btn.style.color='var(--t3)';}
   else{activeColGroups.add(grp);btn.style.background='var(--ac)';btn.style.color='#fff';}
   renderHoldings();
+  _prefsSave();
 }
 function renderHoldHeaders() {
   const cols=[];
@@ -8176,7 +8230,10 @@ function renderHoldings() {
   const se=document.getElementById('h-filter-sector');
   if(se&&se.children.length<=1){secs.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;se.appendChild(o);});}
   updateHoldingsStrip();
+  _hRenderPresets();
+  _hRenderHealthChips();
   let rows=D.holdings.filter(h=>{
+    if (window._hHealthFilter && !_hHealthMatch(h, window._hHealthFilter)) return false;
     if(fs && h.sector!==fs) return false;
     if(fsig && h.signal!==fsig) return false;
     if(ftag==='untagged' && h.tag) return false;
@@ -8197,7 +8254,8 @@ function renderHoldings() {
           const TAG_STYLE={core:'color:var(--ac);background:rgba(79,142,247,.12)',satellite:'color:var(--yel);background:rgba(251,191,36,.12)',speculative:'color:var(--red);background:rgba(240,82,82,.12)',dividend:'color:var(--grn);background:rgba(45,211,111,.12)'};
           const TAG_ICON={core:'🔵',satellite:'🟡',speculative:'🔴',dividend:'🟢'};
           const tagBadge=h.tag?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:4px;${TAG_STYLE[h.tag]||''}">${TAG_ICON[h.tag]||''} ${h.tag}</span>`:'';
-          return`<td onclick="openDetail(${h.id})" style="cursor:pointer"><div class="sym">${h.symbol}${tagBadge}</div><div class="snm">${h.name}</div></td>`;
+          const chev = window._hExpanded?.has(h.id) ? '▾' : '▸';
+          return`<td style="cursor:pointer"><div style="display:flex;align-items:center;gap:4px"><span onclick="event.stopPropagation();_hToggleExpand(${h.id})" title="Expand inline detail" style="color:var(--t4);font-size:11px;width:14px;cursor:pointer;user-select:none">${chev}</span><div onclick="openDetail(${h.id})" style="min-width:0"><div class="sym">${h.symbol}${tagBadge}</div><div class="snm">${h.name}</div></div></div></td>`;
         }
         case 'qty':return`<td class="mn">${h.qty}</td>`;
         case 'avg':return`<td class="mn">₹${f(h.avgPrice)}</td>`;
@@ -8380,8 +8438,167 @@ function renderHoldings() {
       }
     }
     const _plClass = pl > 0 ? 'row-profit' : pl < 0 ? 'row-loss' : '';
-    return`<tr data-hid="${h.id}" class="${_plClass}${h.slBreach?' sl-breached':''}">${cols.map(c=>cell(c.k)).join('')}</tr>`;
+    const mainRow = `<tr data-hid="${h.id}" class="${_plClass}${h.slBreach?' sl-breached':''}">${cols.map(c=>cell(c.k)).join('')}</tr>`;
+    return mainRow + (window._hExpanded?.has(h.id) ? _hExpandRowHtml(h, cols.length) : '');
   }).join('');
+  // Lazy-load sparklines for any expanded rows (own /api/chart proxy, edge-cached)
+  if (window._hExpanded?.size) rows.filter(h=>window._hExpanded.has(h.id)).forEach(h=>_hLoadSpark(h));
+}
+
+// ── Holdings redesign helpers (2026-07-02) ─────────────────────────────────
+// View presets — one click sets sort + visible columns (persisted via prefs)
+const H_PRESETS = {
+  default: { l:'📋 Default', sort:'default', cols:['basic'] },
+  risk:    { l:'🛡 Risk',    sort:'days-asc', cols:['basic','risk'] },
+  movers:  { l:'🔥 Movers',  sort:'chg-desc', cols:['basic','tech'] },
+  funda:   { l:'🏢 Funda',   sort:'fscore-desc', cols:['basic','fund'] },
+  ai:      { l:'🤖 AI',      sort:'signal', cols:['basic','extra'] },
+};
+function _hSetPreset(key) {
+  const p = H_PRESETS[key]; if (!p) return;
+  window._hPreset = key;
+  const sortEl = document.getElementById('h-sort'); if (sortEl) sortEl.value = p.sort;
+  activeColGroups = new Set(p.cols);
+  document.querySelectorAll('.col-tog').forEach(b => {
+    const on = activeColGroups.has(b.dataset.grp);
+    b.style.background = on ? 'var(--ac)' : 'transparent';
+    b.style.color = on ? '#fff' : 'var(--t3)';
+  });
+  renderHoldings();
+  _prefsSave();
+}
+function _hRenderPresets() {
+  const el = document.getElementById('h-presets'); if (!el) return;
+  const cur = window._hPreset || 'default';
+  el.innerHTML = Object.entries(H_PRESETS).map(([k,p]) =>
+    `<button class="btn ${k===cur?'btn-p':'btn-g'} btn-xs" style="border-radius:20px;margin-right:4px" onclick="_hSetPreset('${k}')">${p.l}</button>`).join('');
+}
+
+// Health chips — live counts, click to filter the table
+function _hHealthMatch(h, f) {
+  const ltp = h.ltp || h.avgPrice;
+  switch(f) {
+    case 'nearSL':   return h.stopLoss && ltp > 0 && (ltp <= h.stopLoss || (ltp - h.stopLoss) / ltp * 100 <= 3);
+    case 'nearT1':   return h.target1 && ltp > 0 && ltp < h.target1 && (h.target1 - ltp) / ltp * 100 <= 3;
+    case 'results':  return h.earningsTs && (h.earningsTs*1000 - Date.now())/864e5 >= -1 && (h.earningsTs*1000 - Date.now())/864e5 <= 7;
+    case 'staleAI':  return !h.lastAnalysed || (Date.now() - new Date(h.lastAnalysed)) / 864e5 > 7;
+    case 'noSL':     return !h.stopLoss;
+    default: return true;
+  }
+}
+function _hSetHealthFilter(f) {
+  window._hHealthFilter = (window._hHealthFilter === f) ? null : f;
+  renderHoldings();
+}
+function _hRenderHealthChips() {
+  const el = document.getElementById('h-health-chips'); if (!el) return;
+  if (!D.holdings.length) { el.innerHTML = ''; return; }
+  const defs = [
+    ['nearSL',  '🔻 Near/Below SL', 'var(--red)'],
+    ['nearT1',  '🎯 Near Target',   'var(--grn)'],
+    ['results', '📢 Results ≤7d',   'var(--yel)'],
+    ['staleAI', '🕰 Stale AI >7d',  'var(--ac2)'],
+    ['noSL',    '⚠ No Stop-Loss',  'var(--orn)'],
+  ];
+  const active = window._hHealthFilter;
+  el.innerHTML = defs.map(([k, l, c]) => {
+    const n = D.holdings.filter(h => _hHealthMatch(h, k)).length;
+    if (!n) return '';
+    const on = active === k;
+    return `<button onclick="_hSetHealthFilter('${k}')" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:14px;cursor:pointer;border:1px solid ${c}44;background:${on ? c : c+'14'};color:${on ? '#fff' : c}">${l} · ${n}</button>`;
+  }).join('') + (active ? `<button onclick="_hSetHealthFilter(null)" style="font-size:11px;padding:4px 10px;border-radius:14px;cursor:pointer;border:1px solid var(--b2);background:transparent;color:var(--t3)">✕ Clear filter</button>` : '');
+}
+
+// Inline expandable row — everything from EXISTING caches (AI cache, note,
+// orders, quote fields); the only fetch is the sparkline via our own
+// edge-cached /api/chart, loaded lazily per expand.
+window._hExpanded = window._hExpanded || new Set();
+function _hToggleExpand(hid) {
+  if (window._hExpanded.has(hid)) window._hExpanded.delete(hid); else window._hExpanded.add(hid);
+  renderHoldings();
+}
+function _hExpandRowHtml(h, colspan) {
+  const ltp = h.ltp || h.avgPrice;
+  const inv = h.qty * h.avgPrice, cv = h.qty * ltp, pl = cv - inv;
+  // SL → LTP → T1 → T2 meter
+  let meter = '<span style="color:var(--t4);font-size:11px">Set a stop-loss & targets to see the range meter</span>';
+  if (h.stopLoss && h.target1) {
+    const lo = Math.min(h.stopLoss, ltp) * 0.98, hi = Math.max(h.target2 || h.target1, ltp) * 1.02;
+    const pos = v => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100));
+    meter = `<div style="position:relative;height:26px;margin:4px 0">
+      <div style="position:absolute;top:11px;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--red),var(--yel),var(--grn));border-radius:2px;opacity:.5"></div>
+      ${[[h.stopLoss,'SL','var(--red)'],[h.target1,'T1','var(--grn)'],[h.target2,'T2','var(--grn)']].filter(x=>x[0]).map(([v,l,c])=>
+        `<div style="position:absolute;left:${pos(v)}%;top:0;transform:translateX(-50%);text-align:center"><div style="font-size:8px;color:${c};font-weight:700">${l}</div><div style="width:1.5px;height:10px;background:${c};margin:0 auto"></div><div style="font-size:8px;color:var(--t4)">₹${f(v)}</div></div>`).join('')}
+      <div style="position:absolute;left:${pos(ltp)}%;top:6px;transform:translateX(-50%)"><div style="width:10px;height:10px;border-radius:50%;background:var(--ac);border:2px solid var(--s1)" title="LTP ₹${f(ltp)}"></div></div>
+    </div>`;
+  }
+  // AI summary from cache (no fetch)
+  let ai = '<span style="color:var(--t4)">No AI analysis yet</span>';
+  try {
+    const cached = typeof _aiCacheGet === 'function' ? _aiCacheGet(h.symbol) : null;
+    const sum = cached?.summary || cached?.thesis || h.aiSummary || null;
+    if (sum) ai = String(sum).slice(0, 220);
+    else if (h.signal) ai = `Signal: ${h.signal}${h.lastAnalysed ? ' · analysed ' + Math.floor((Date.now()-new Date(h.lastAnalysed))/864e5) + 'd ago' : ''}`;
+  } catch(e) {}
+  // Recent orders for this symbol (from imported order history)
+  const orders = (D.orders||[]).filter(o => ((o.sym||o.symbol||'')+'').toUpperCase() === h.symbol).slice(-5).reverse();
+  const ordHtml = orders.length
+    ? orders.map(o => { const t=(o.type||o.typ||'').toUpperCase(); const pr=o.price ?? o.pricePerShare ?? 0; const dt=(o.date||o.rawDate||'').slice(0,10);
+        return `<div style="display:flex;gap:8px;font-size:10.5px;padding:2px 0"><span style="color:${/BUY/.test(t)?'var(--grn)':'var(--red)'};font-weight:700;width:32px">${t.slice(0,4)}</span><span style="width:56px" class="mn">${o.qty||''}</span><span class="mn" style="width:76px">₹${f(pr)}</span><span style="color:var(--t4)">${dt}</span></div>`; }).join('')
+    : '<span style="color:var(--t4);font-size:11px">No imported orders for this symbol</span>';
+  return `<tr class="h-expand" data-hexp="${h.id}"><td colspan="${colspan}" style="background:var(--s2);border-bottom:2px solid var(--b2);padding:12px 16px">
+    <div style="display:grid;grid-template-columns:220px 1fr 1fr;gap:18px;align-items:start">
+      <div>
+        <div style="font-size:10px;font-weight:700;color:var(--t4);text-transform:uppercase;margin-bottom:4px">3-Month Trend</div>
+        <canvas id="h-spark-${h.id}" width="220" height="56" style="width:220px;height:56px"></canvas>
+        <div style="font-size:10px;color:var(--t4);margin-top:4px">Held ${hDays(h.buyDate)||0}d · ${h.sector||''}</div>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;color:var(--t4);text-transform:uppercase;margin-bottom:4px">Risk Range</div>
+        ${meter}
+        <div style="font-size:10px;font-weight:700;color:var(--t4);text-transform:uppercase;margin:8px 0 4px">AI View</div>
+        <div style="font-size:11.5px;color:var(--t2);line-height:1.5">${ai}</div>
+        ${h.note ? `<div style="font-size:11px;color:var(--cyn);margin-top:6px">📋 ${String(h.note).slice(0,120)}</div>` : ''}
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;color:var(--t4);text-transform:uppercase;margin-bottom:4px">Recent Orders</div>
+        ${ordHtml}
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn btn-g btn-xs" onclick="openDetail(${h.id})">🔬 Full Detail</button>
+          <button class="btn btn-g btn-xs" onclick="go('news');setTimeout(()=>{NW.filter.all.grp='ALL';_nwSetFilter('all','sym','${h.symbol}')},300)">📰 News</button>
+          <button class="btn btn-g btn-xs" onclick="showAtrStop(${h.id})" title="ATR stop suggestion">⚡ ATR Stop</button>
+          <button class="btn btn-yel btn-xs" onclick="openSellModal(${h.id})">Sell</button>
+        </div>
+        <div id="atr-result-${h.id}"></div>
+      </div>
+    </div>
+  </td></tr>`;
+}
+async function _hLoadSpark(h) {
+  const cv = document.getElementById('h-spark-' + h.id);
+  if (!cv || cv.dataset.done) return;
+  cv.dataset.done = '1';
+  try {
+    const yfSym = h.yfTicker || (h.exchange === 'BSE' ? h.symbol + '.BO' : h.symbol + '.NS');
+    const r = await fetch(`/api/chart?sym=${encodeURIComponent(yfSym)}&range=3mo&interval=1d`, { signal: AbortSignal.timeout(9000) });
+    const d = await r.json();
+    const res = d?.chart?.result?.[0];
+    const closes = (res?.indicators?.quote?.[0]?.close || []).filter(v => v != null);
+    if (closes.length < 5) return;
+    const ctx = cv.getContext('2d');
+    const w = cv.width, hh = cv.height, min = Math.min(...closes), max = Math.max(...closes);
+    const x = i => i / (closes.length - 1) * (w - 4) + 2;
+    const y = v => hh - 4 - (v - min) / (max - min || 1) * (hh - 8);
+    const up = closes[closes.length-1] >= closes[0];
+    ctx.strokeStyle = up ? '#2dd36f' : '#f05252'; ctx.lineWidth = 1.6; ctx.beginPath();
+    closes.forEach((v, i) => i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)));
+    ctx.stroke();
+    // avg-price reference line
+    if (h.avgPrice >= min && h.avgPrice <= max) {
+      ctx.strokeStyle = 'rgba(128,128,160,.5)'; ctx.setLineDash([3,3]); ctx.beginPath();
+      ctx.moveTo(2, y(h.avgPrice)); ctx.lineTo(w-2, y(h.avgPrice)); ctx.stroke(); ctx.setLineDash([]);
+    }
+  } catch(e) {}
 }
 
 // ═══════════════════════════════════════════════════
@@ -9867,10 +10084,21 @@ function renderWatchlist() {
     return sb - sa;
   });
 
+  // ── Redesign 2026-07-02: decision/sector filters + pagination ──
+  // 110 cards rendered at once made this section crawl; now capped with Show More.
+  const WF = window._wlFilter = window._wlFilter || { dec:'ALL', sector:'' };
+  if (window._wlShowMax == null) window._wlShowMax = 30;
+  let pool = sorted;
+  if (WF.dec !== 'ALL') pool = pool.filter(w => (w.wlDecision || 'PENDING') === WF.dec);
+  if (WF.sector) pool = pool.filter(w => (w.sector || '—') === WF.sector);
+  const totalMatched = pool.length;
+  const capped = pool.slice(0, window._wlShowMax);
+  const heldSet = new Set(D.holdings.map(h => h.symbol));
+
   // Split into sections
-  const enterNow = sorted.filter(w => w.wlDecision === 'ENTER NOW');
-  const wait     = sorted.filter(w => w.wlDecision === 'WAIT' || !w.wlDecision);
-  const avoid    = sorted.filter(w => w.wlDecision === 'AVOID');
+  const enterNow = capped.filter(w => w.wlDecision === 'ENTER NOW');
+  const wait     = capped.filter(w => w.wlDecision === 'WAIT' || !w.wlDecision);
+  const avoid    = capped.filter(w => w.wlDecision === 'AVOID');
 
   // Check for alerts
   const alerts = [];
@@ -9945,6 +10173,8 @@ function renderWatchlist() {
         <div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <span class="sym" style="cursor:pointer;text-decoration:underline;text-decoration-color:var(--b2)" onclick="openWlDetail(${w.id})" title="View ${w.symbol} detail">${w.symbol}</span>
+            ${heldSet.has(w.symbol) ? `<span title="Also in your holdings" style="font-size:9px;font-weight:800;color:var(--ac);border:1px solid rgba(79,142,247,.35);border-radius:4px;padding:1px 5px">HELD</span>` : ''}
+            <span onclick="go('news');setTimeout(()=>{NW.filter.all.grp='ALL';_nwSetFilter('all','sym','${w.symbol}')},300)" title="Stored news for ${w.symbol}" style="cursor:pointer;font-size:11px">📰</span>
             ${hasAI ? `<span style="font-size:12px;font-weight:700;color:${ds.color}">${ds.icon} ${ds.label}</span>` : `<span style="font-size:10px;color:var(--t4)">⏳ Run AI Analyze</span>`}
             ${w.wlConviction ? `<span style="font-size:9px;background:var(--s4);border:1px solid var(--b2);border-radius:3px;padding:1px 6px;color:var(--t3)">${w.wlConviction}</span>` : ''}
             ${inRange ? `<span style="font-size:9px;background:rgba(45,211,111,.15);border:1px solid rgba(45,211,111,.3);border-radius:3px;padding:1px 6px;color:var(--grn);font-weight:700">📍 IN RANGE</span>` : ''}
@@ -10121,10 +10351,28 @@ function renderWatchlist() {
     </div>
     <div style="display:flex;flex-direction:column;gap:8px">${stocks.map(makeCard).join('')}</div>` : '';
 
-  grid.innerHTML = alertBar +
+  // Filter bar (counts from the full list, not the capped page)
+  const decCount = d => _wlBase.filter(w => d==='ALL' ? true : (w.wlDecision || 'PENDING') === d).length;
+  const wlChip = (d, lbl) => `<button class="btn ${WF.dec===d?'btn-p':'btn-g'} btn-xs" style="border-radius:20px" onclick="window._wlFilter.dec='${d}';window._wlShowMax=30;renderWatchlist()">${lbl} (${decCount(d)})</button>`;
+  const sectors = [...new Set(D.watchlist.map(w => w.sector || '—'))].sort();
+  const filterBar = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:2px 0 10px">
+    ${wlChip('ALL','All')}${wlChip('ENTER NOW','🟢 Enter')}${wlChip('WAIT','🟡 Wait')}${wlChip('AVOID','🔴 Avoid')}${wlChip('PENDING','⏳ Pending AI')}
+    <select class="fi" style="width:auto;min-width:130px;padding:4px 8px;font-size:11px" onchange="window._wlFilter.sector=this.value;window._wlShowMax=30;renderWatchlist()">
+      <option value="">All sectors</option>
+      ${sectors.map(x=>`<option value="${x}" ${WF.sector===x?'selected':''}>${x}</option>`).join('')}
+    </select>
+    <span style="font-size:11px;color:var(--t4);margin-left:auto">${Math.min(window._wlShowMax,totalMatched)} of ${totalMatched} shown</span>
+  </div>`;
+  const moreBar = totalMatched > window._wlShowMax
+    ? `<div style="text-align:center;padding:14px"><button class="btn btn-g" onclick="window._wlShowMax+=30;renderWatchlist()">↓ Show 30 more (${totalMatched - window._wlShowMax} left)</button></div>`
+    : '';
+
+  grid.innerHTML = filterBar + alertBar +
     sectionHtml('🟢 Enter Now', 'var(--grn)', enterNow) +
     sectionHtml('🟡 Wait for Better Entry', 'var(--yel)', wait) +
-    sectionHtml('🔴 Avoid', 'var(--red)', avoid);
+    sectionHtml('🔴 Avoid', 'var(--red)', avoid) +
+    (capped.length ? '' : '<div style="padding:30px;text-align:center;color:var(--t4);font-size:12px">Nothing matches this filter.</div>') +
+    moreBar;
 }
 
 // Backward compat
@@ -13841,6 +14089,33 @@ Max 110 words total. Be the analyst who gives you the edge, not the one who stat
 // ── PORTFOLIO TIMELINE ──────────────────────────────────────
 const TL_KEY = 'ss_snapshots';
 function tlLoadSnaps() { try { return JSON.parse(localStorage.getItem(_pfKey(TL_KEY))||'[]'); } catch(e) { return []; } }
+// ── Real EOD history from the price-sync Worker (added 2026-07-02) ──────────
+// The Worker snapshots invested/value to KV `pfHistory` every trading day at
+// 18:30 IST — even when this site isn't open. Merge those rows into the local
+// snapshots (worker rows only fill dates the browser didn't capture itself).
+let _tlWorkerMerged = false;
+async function tlMergeWorkerHistory() {
+  if (_tlWorkerMerged) return; _tlWorkerMerged = true;
+  try {
+    const r = await fetch('https://stocksense-price-sync.sharathreddy-y001.workers.dev/pfhistory', { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.history?.length) return;
+    const snaps = tlLoadSnaps();
+    const have = new Set(snaps.map(x => x.date));
+    let added = 0;
+    d.history.forEach(row => {
+      if (have.has(row.date) || !row.value) return;
+      snaps.push({ date: row.date, current: row.value, invested: row.invested || 0, _src: 'worker' });
+      added++;
+    });
+    if (added) {
+      snaps.sort((a,b) => a.date < b.date ? -1 : 1);
+      tlSaveSnaps(snaps);
+      renderTimeline();
+    }
+  } catch(e) {}
+}
 function tlSaveSnaps(snaps) { localStorage.setItem(_pfKey(TL_KEY), JSON.stringify(snaps)); }
 
 function tlSnapshot() {
@@ -14583,6 +14858,7 @@ function init(){
   setTimeout(() => {
     if (D.holdings.length || D.watchlist.length) refreshAll();
     renderNews();
+    _prefsRestore();
   }, 300);
   setTimeout(() => fetchIndices(), 1800);
   setTimeout(() => fetchMarketBreadth(), 3000); // fetch breadth after indices
@@ -18275,7 +18551,7 @@ function checkStopLosses() {
 function getSips() {
   try { return JSON.parse(localStorage.getItem('ss_sip') || '[]'); } catch(e) { return []; }
 }
-function saveSips(arr) { localStorage.setItem('ss_sip', JSON.stringify(arr)); }
+function saveSips(arr) { localStorage.setItem('ss_sip', JSON.stringify(arr)); _snapPush('sip', 'sips', { sips: arr }); }
 
 function openSipModal() {
   document.getElementById('sip-m-sym').value = '';
@@ -21083,11 +21359,40 @@ Be the analyst who gives you trade setups, not just opinions.`;
 // 📒 TRADE JOURNAL
 // ═══════════════════════════════════════════════════
 
+// ── Generic D1 mirror helpers (via /api/snapstore) — used by journal, SIP,
+// view-prefs. Fire-and-forget writes; explicit seed pulls on section open.
+function _snapPush(sec, id, payload) {
+  try { fetch('/api/snapstore', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ sec, items:[{ id, ...payload }] }) }).catch(()=>{}); } catch(e) {}
+}
+async function _snapPull(sec, id) {
+  try {
+    const r = await fetch(`/api/snapstore?sec=${sec}`, { signal: AbortSignal.timeout(8000) });
+    if (r.ok) { const d = await r.json(); return (d.items||[]).find(it => it.id === id) || null; }
+  } catch(e) {}
+  return null;
+}
+let _jnlSeeded = false;
+async function _journalSeedFromServer() {
+  if (_jnlSeeded) return; _jnlSeeded = true;
+  if (loadJournal().length) return;
+  const blob = await _snapPull('journal', 'trades');
+  if (blob?.trades?.length) { localStorage.setItem('tradeJournal', JSON.stringify(blob.trades)); renderJournal(); }
+}
+let _sipSeeded = false;
+async function _sipSeedFromServer() {
+  if (_sipSeeded) return; _sipSeeded = true;
+  if (loadSips().length) return;
+  const blob = await _snapPull('sip', 'sips');
+  if (blob?.sips?.length) { localStorage.setItem('ss_sip', JSON.stringify(blob.sips)); renderSipTracker(); }
+}
+
 function loadJournal() {
   try { return JSON.parse(localStorage.getItem('tradeJournal')||'[]'); } catch(e) { return []; }
 }
 function saveJournal(trades) {
   localStorage.setItem('tradeJournal', JSON.stringify(trades));
+  _snapPush('journal', 'trades', { trades });   // D1 mirror — journal survives device wipes now
 }
 
 function renderJournal() {
@@ -21217,6 +21522,34 @@ function saveJournalTrade() {
   closeJournalForm();
   renderJournal();
   toast('✅ Trade logged: ' + sym);
+}
+
+// ⟳ Sync from Realised P&L — auto-drafts journal entries from every realised
+// exit that isn't journaled yet. Stable ids ('real-'+realised.id) + a
+// symbol|dates|qty key make re-running always a no-op for existing entries.
+function syncJournalFromRealised() {
+  const trades = loadJournal();
+  const haveIds = new Set(trades.map(t => String(t.id)));
+  const haveKeys = new Set(trades.map(t => `${t.symbol}|${t.entryDate}|${t.exitDate}|${t.qty}`));
+  let added = 0;
+  (D.realised || []).forEach(r => {
+    const id = 'real-' + r.id;
+    const key = `${r.symbol}|${r.buyDate}|${r.sellDate}|${r.qty}`;
+    if (haveIds.has(id) || haveKeys.has(key)) return;
+    const h = D.holdings.find(x => x.symbol === r.symbol);
+    const dbe = (typeof STOCKS_DB !== 'undefined' ? STOCKS_DB : []).find(x => x.sym === r.symbol);
+    trades.push({
+      id, symbol: r.symbol, sector: h?.sector || dbe?.sector || '',
+      entryDate: r.buyDate || null, entryPrice: r.buyPrice || null, qty: r.qty || null,
+      exitDate: r.sellDate || null, exitPrice: r.sellPrice || null,
+      reason: 'Realised P&L import', notes: `Auto-drafted from realised trades (${r.taxType||''}) — edit to add your reasoning`,
+      holdDays: r.holdDays || null, plAbs: r.pl ?? null, plPct: r.plPct ?? null,
+      _draft: true,
+    });
+    added++;
+  });
+  if (added) { saveJournal(trades); renderJournal(); }
+  toast(added ? `📒 ${added} trade${added!==1?'s':''} drafted from Realised P&L — add your exit reasoning` : 'Journal already up to date with Realised P&L', added ? 'ok' : 'info');
 }
 
 function deleteJournalTrade(index) {
@@ -33633,6 +33966,7 @@ function _toggleDensity() {
   if (!tbl) return;
   const isComf = tbl.classList.toggle('density-comfortable');
   localStorage.setItem('ss_density', isComf ? 'comfortable' : 'compact');
+  _prefsSave();
   const btn = document.getElementById('density-btn');
   if (btn) btn.textContent = isComf ? '⇕ Compact' : '⇕ Comfortable';
 }
