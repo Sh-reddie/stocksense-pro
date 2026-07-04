@@ -10787,11 +10787,18 @@ function _divEnrich(){
 // Forward 12-month projected income from current holdings (known calendar first, then yield).
 function _forward12mIncome(){
   let tot=0;
+  // NOTE: KNOWN_DIVYIELDS / DIV_CALENDAR_DB are lexical consts declared later in the file.
+  // renderDividends() runs once during init BEFORE those declarations execute, so a bare
+  // reference (even via typeof) would throw a TDZ ReferenceError and halt init. try/catch
+  // swallows that single init-time hit; at normal runtime the consts are initialized.
+  let _dcdb=null, _kdy=null;
+  try{ _dcdb=DIV_CALENDAR_DB; }catch(e){}
+  try{ _kdy=KNOWN_DIVYIELDS; }catch(e){}
   (D.holdings||[]).forEach(h=>{
     const sym=(h.symbol||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-    const db=typeof DIV_CALENDAR_DB!=='undefined'?DIV_CALENDAR_DB[sym]:null;
+    const db=_dcdb?_dcdb[sym]:null;
     if(db){ tot += (db.perShare||0)*(db.months?db.months.length:1)*(h.qty||0); return; }
-    const y=(typeof KNOWN_DIVYIELDS!=='undefined'?KNOWN_DIVYIELDS[sym]:0)||h.dividendYield||h.dy||0;
+    const y=(_kdy?_kdy[sym]:0)||h.dividendYield||h.dy||0;
     if(y){ tot += (h.ltp||h.avgPrice||0)*(h.qty||0)*y/100; }
   });
   return tot;
