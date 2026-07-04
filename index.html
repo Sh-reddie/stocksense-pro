@@ -22685,10 +22685,18 @@ function computeFairValue(a, pe, eps, bvps, sector) {
     pe  = _n(a._pe ?? a.pe); eps = _n(a._eps ?? a.eps); bvps = _n(a._bvps ?? a.bvps);
     sec = a.sector || 'default'; roe = _p(a._roe ?? a.roe);
     eg  = _p(a._eg ?? a.eg ?? a.earningsGrowth); fpe = _n(a._fpe ?? a.fpe); de = _n(a._de ?? a.de);
+    // Derive book value per share from P/B when BVPS isn't provided directly (Yahoo gives P/B, not BVPS).
+    const pb = _n(a._pb ?? a.pb);
+    if ((bvps==null || bvps<=0) && pb>0 && ltp>0) bvps = ltp / pb;
   } else {
     ltp = _n(a) || 0; pe = _n(pe); eps = _n(eps); bvps = _n(bvps); sec = sector || 'default';
     roe = eg = fpe = de = null;
   }
+  // Many NSE mid/small-caps expose PE + P/B but not EPS. Derive EPS from PE so the Graham lens
+  // (which needs earnings AND book value) can still fire. Flag it so we don't double-count the
+  // PE-band method, which becomes identical to Relative-PE when EPS is just price÷PE.
+  let epsDerived = false;
+  if ((eps==null || eps<=0) && pe>0 && ltp>0) { eps = ltp/pe; epsDerived = true; }
   const avgPE = SECTOR_PE[sec] || SECTOR_PE.default;
   const S = (sec||'').toLowerCase();
   const isFin    = /bank|financ|nbfc|insur|finance/.test(S);
@@ -22697,7 +22705,7 @@ function computeFairValue(a, pe, eps, bvps, sector) {
 
   const M = {};
   if (eps>0 && bvps>0) M.graham = {name:'Graham',       val:Math.sqrt(22.5*eps*bvps), why:'√(22.5·EPS·BVPS) — mature value'};
-  if (eps>0)           M.peBand = {name:'PE-band',       val:avgPE*eps,                why:`sector PE ${avgPE}× EPS`};
+  if (eps>0 && !epsDerived) M.peBand = {name:'PE-band',  val:avgPE*eps,                why:`sector PE ${avgPE}× EPS`};
   if (pe>0)            M.relPE  = {name:'Rel-PE',        val:ltp*avgPE/pe,             why:`re-rate to sector PE ${avgPE}`};
   if (fpe>0)           M.fwdPE  = {name:'Fwd-PE',        val:avgPE*(ltp/fpe),          why:`sector PE × forward EPS`};
   if (eps>0 && eg>0)   M.peg    = {name:'PEG',           val:Math.min(Math.max(eg,8),40)*eps, why:`growth-justified PE (~${Math.round(Math.min(Math.max(eg,8),40))})× EPS`};
@@ -22724,11 +22732,16 @@ function computeFairValue(a, pe, eps, bvps, sector) {
   if (applicable.length>=3 && eps>0 && disp!=null && disp<0.45) confidence='high';
   else if (applicable.length>=2 && (eps>0||isFin)) confidence='med';
   else confidence='low';
+  // A directional verdict needs at least one "anchored" method (tied to earnings/book value),
+  // not only the two sector-PE rebasing lenses (Rel-PE / Fwd-PE) which merely assume the stock
+  // should revert to its sector-average multiple — too weak to call a premium name "overvalued".
+  const anchored = applicable.some(m => ['Graham','PE-band','PEG','Justified-PB'].includes(m.name));
   let verdict;
-  if (applicable.length<2) verdict='Inconclusive';
+  if (applicable.length<2 || !anchored) verdict='Inconclusive';
   else if (mos>15) verdict='Undervalued';
   else if (mos<-15) verdict='Overvalued';
   else verdict='Fair';
+  if (!anchored && confidence!=='none') confidence='low';
   return {fair:base, base, low, high, mos,
           method:applicable.map(m=>m.name).join(' · '),
           methods:applicable.map(m=>({name:m.name, val:Math.round(m.val), why:m.why})),
@@ -22908,8 +22921,9 @@ async function renderFairValueEngine() {
     tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--t4)">No holdings to value</td></tr>';
     return;
   }
-  // Show loading state for holdings missing fundamentals
-  const missing = D.holdings.filter(h => !h._pe && !h._eps);
+  // Show loading state for holdings missing fundamentals (need EPS + P/B for the richer methods,
+  // not just PE — otherwise only the two PE-rebasing models fire and everything looks "overvalued").
+  const missing = D.holdings.filter(h => !h._eps || (!h._bvps && !h._pb));
   if (missing.length) {
     tbody.innerHTML = `<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--t4)">⏳ Fetching fundamentals for ${missing.length} stocks…</td></tr>`;
     await Promise.all(missing.map(async h => {
