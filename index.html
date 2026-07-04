@@ -6436,7 +6436,7 @@ function go(id) {
   if(id==='exit-planner') renderExitPlanner();
   if(id==='ai-rebalancer') renderAIRebalancer();
   if(id==='earnings-preview') renderEarningsPreview();
-  if(id==='dividends'){ renderDividends(); _maybeAutoDetectDividends(); }
+  if(id==='dividends'){ renderDividends(); }   // render stored data only — fetching is manual (🔄 Auto-Detect button)
   if(id==='dividend-opt') renderDividendOpt();
   if(id==='goal-planner') renderGoalPlanner();
   if(id==='timeline') { renderTimeline(); tlMergeWorkerHistory(); }
@@ -10854,12 +10854,9 @@ async function autoDetectDividends(){
   if(added) addNotif('info',`💰 Auto-detected ${added} dividend payment(s) worth ₹${fI(credited)} across your holdings`,'');
 }
 
-// Throttled background auto-detect when the Income Hub is opened (once/day).
-function _maybeAutoDetectDividends(){
-  if(!(D.holdings||[]).length && !(D.orders||[]).length) return;
-  let last=0; try{ last=+localStorage.getItem('ss_div_autodetect_ts')||0; }catch(e){}
-  if(Date.now()-last > 20*3600*1000) { setTimeout(()=>autoDetectDividends(), 800); }
-}
+// (Auto-fetch on tab-open was removed — fetching is manual only, via the 🔄 Auto-Detect
+// button. Detected dividends are stored in D.dividends and simply re-displayed on tab
+// switch / page reload without re-fetching. The button re-scans and merges, deduped.)
 
 function confirmDiv(id){
   const d=(D.dividends||[]).find(x=>String(x.id)===String(id)); if(!d)return;
