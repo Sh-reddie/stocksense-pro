@@ -1956,19 +1956,32 @@ textarea.fi{resize:vertical;min-height:70px;}
 
   <!-- ═══ DIVIDENDS ═══════════════════════════════════════ -->
   <div class="sec" id="sec-dividends">
-    <div class="sec-head"><div class="sec-title">Dividend Tracker</div><div style="display:flex;gap:8px;align-items:center"><div class="srch-wrap" style="margin-bottom:0"><span class="srch-ico">🔍</span><input type="text" class="srch-inp" id="div-search" placeholder="Search symbol…" oninput="renderDividends()" style="width:140px"></div><button class="btn btn-red btn-sm" onclick="clearSection('dividends')">🗑 Clear</button><button class="btn btn-p" onclick="openM('adddiv')">+ Log Dividend</button></div></div>
-    <div class="sg sg-4 gap">
-      <div class="sc c3"><div class="sc-lbl">Total Received</div><div class="sc-val up" id="div-tot">₹0</div><div class="sc-sub" id="div-ct">0 payments</div></div>
-      <div class="sc c1"><div class="sc-lbl">FY 2025-26</div><div class="sc-val" id="div-fy">₹0</div><div class="sc-sub">Apr 25 – Mar 26</div></div>
-      <div class="sc c4"><div class="sc-lbl">Yield on Cost</div><div class="sc-val" id="div-yld">0.00%</div><div class="sc-sub">vs invested</div></div>
-      <div class="sc c2"><div class="sc-lbl">Next Ex-Date</div><div class="sc-val" id="div-next">—</div><div class="sc-sub" id="div-nextl">—</div></div>
+    <div class="sec-head"><div class="sec-title">💰 Income Hub</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><div class="srch-wrap" style="margin-bottom:0"><span class="srch-ico">🔍</span><input type="text" class="srch-inp" id="div-search" placeholder="Search symbol…" oninput="renderDividends()" style="width:130px"></div><button class="btn btn-p btn-sm" id="div-auto-btn" onclick="autoDetectDividends()" title="Scans your order history + Yahoo dividend feed and auto-credits every dividend you were entitled to (based on shares held on each ex-date)">🔄 Auto-Detect</button><button class="btn btn-g btn-sm" onclick="openM('adddiv')">＋ Log</button><button class="btn btn-red btn-sm" onclick="clearSection('dividends')" title="Clear all dividend records">🗑</button></div></div>
+    <div class="sg sg-5 gap">
+      <div class="sc c3"><div class="sc-lbl">Received</div><div class="sc-val up" id="div-recv">₹0</div><div class="sc-sub" id="div-recv-ct">paid out</div></div>
+      <div class="sc c2"><div class="sc-lbl">Pending</div><div class="sc-val" id="div-pend" style="color:var(--yel)">₹0</div><div class="sc-sub" id="div-pend-ct">declared, awaiting</div></div>
+      <div class="sc c1"><div class="sc-lbl">FY 2025-26</div><div class="sc-val" id="div-fy">₹0</div><div class="sc-sub">net · Apr–Mar</div></div>
+      <div class="sc c4"><div class="sc-lbl">Yield on Cost</div><div class="sc-val" id="div-yld">0.00%</div><div class="sc-sub">received vs invested</div></div>
+      <div class="sc c5"><div class="sc-lbl">Fwd 12M (est.)</div><div class="sc-val" id="div-fwd">₹0</div><div class="sc-sub">projected income</div></div>
     </div>
-    <div class="pn"><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Stock</th><th>₹/Share</th><th>Qty</th><th>Total</th><th>Ex-Date</th><th>Pay Date</th><th>Type</th><th>✕</th></tr></thead><tbody id="div-tbody"><tr><td colspan="8" style="text-align:center;padding:40px;color:var(--t4)">No dividends logged.</td></tr></tbody></table></div></div>
-    <!-- Upcoming dividend calendar auto-populated from holdings -->
-    <div class="pn" style="margin-top:12px">
-      <div class="pn-h"><div class="pn-t">📅 Upcoming Dividends (from your holdings)</div><button class="btn btn-g btn-sm" onclick="renderDividendCalendar()">↻ Refresh</button></div>
-      <div class="pn-b" id="div-calendar"><div style="color:var(--t4);font-size:12px">Refresh to see upcoming dividends from your holdings.</div></div>
+    <div class="tabs">
+      <div class="tab on" onclick="stab('inc','inc-received');renderIncomeTab('received')">📥 Received</div>
+      <div class="tab" onclick="stab('inc','inc-pending');renderIncomeTab('pending')">⏳ Pending &amp; Upcoming</div>
+      <div class="tab" onclick="stab('inc','inc-proj');renderIncomeTab('projection')">📈 12M Projection</div>
+      <div class="tab" onclick="stab('inc','inc-analytics');renderIncomeTab('analytics')">📊 Analytics</div>
+      <div class="tab" onclick="go('dividend-opt')">💸 Optimizer ↗</div>
     </div>
+    <div id="inc-received" class="tp on">
+      <div class="pn"><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Stock</th><th>₹/Sh</th><th>Qty</th><th>Gross</th><th>TDS</th><th>Net</th><th>Ex-Date</th><th>Pay Date</th><th>Type</th><th>Status</th><th>✕</th></tr></thead><tbody id="div-tbody"><tr><td colspan="11" style="text-align:center;padding:40px;color:var(--t4)">No dividends yet — hit <strong>🔄 Auto-Detect</strong> to credit everything you were entitled to.</td></tr></tbody></table></div></div>
+    </div>
+    <div id="inc-pending" class="tp"><div id="inc-pending-body"><div style="color:var(--t4);font-size:12px;padding:16px">Loading…</div></div></div>
+    <div id="inc-proj" class="tp">
+      <div class="pn">
+        <div class="pn-h"><div class="pn-t">📅 Upcoming Dividends (from your holdings)</div><button class="btn btn-g btn-sm" onclick="renderDividendCalendar()">↻ Refresh</button></div>
+        <div class="pn-b" id="div-calendar"><div style="color:var(--t4);font-size:12px">Refresh to see upcoming dividends from your holdings.</div></div>
+      </div>
+    </div>
+    <div id="inc-analytics" class="tp"><div id="inc-analytics-body"><div style="color:var(--t4);font-size:12px;padding:16px">Open this tab to see income analytics.</div></div></div>
   </div>
 
   <!-- ═══ TAX ═══════════════════════════════════════ -->
@@ -6423,6 +6436,7 @@ function go(id) {
   if(id==='exit-planner') renderExitPlanner();
   if(id==='ai-rebalancer') renderAIRebalancer();
   if(id==='earnings-preview') renderEarningsPreview();
+  if(id==='dividends'){ renderDividends(); _maybeAutoDetectDividends(); }
   if(id==='dividend-opt') renderDividendOpt();
   if(id==='goal-planner') renderGoalPlanner();
   if(id==='timeline') { renderTimeline(); tlMergeWorkerHistory(); }
@@ -10717,22 +10731,238 @@ function addDividend() {
   save('dividends'); closeM('adddiv'); renderDividends();
   toast(`Dividend logged: ₹${f(total||amt)} for ${sym}`);
 }
-function renderDividends() {
-  const tbody=document.getElementById('div-tbody');
-  if(!D.dividends.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--t4)">No dividends.</td></tr>';return;}
-  const _divQ=(document.getElementById('div-search')?.value||'').trim().toUpperCase();
-  const _divRows=_divQ?D.dividends.filter(d=>d.symbol.toUpperCase().includes(_divQ)):D.dividends;
-  if(!_divRows.length){tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--t4)">No dividends match <strong>"${_divQ}"</strong></td></tr>`;return;}
-  tbody.innerHTML=_divRows.map(d=>`<tr><td class="sym">${d.symbol}</td><td class="mn">₹${f(d.amtPerShare,2)}</td><td class="mn">${d.qty||'—'}</td><td class="mn up">${d.total?'₹'+f(d.total,2):'—'}</td><td style="font-size:11px">${d.exDate}</td><td style="font-size:11px">${d.payDate||'—'}</td><td><span class="tag t-sbuy">${d.type}</span></td><td><button class="btn btn-red btn-xs" onclick="rmDiv(${d.id})">✕</button></td></tr>`).join('');
-  const total=D.dividends.reduce((s,d)=>s+(d.total||0),0);
-  const fy=D.dividends.filter(d=>d.exDate>='2025-04-01'&&d.exDate<='2026-03-31').reduce((s,d)=>s+(d.total||0),0);
-  const inv=D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0);
-  document.getElementById('div-tot').textContent='₹'+f(total,2);
-  document.getElementById('div-ct').textContent=D.dividends.length+' payments';
-  document.getElementById('div-fy').textContent='₹'+f(fy,2);
-  document.getElementById('div-yld').textContent=inv>0?f(total/inv*100,2)+'%':'0.00%';
+// ═══════════════════════════════════════════════════
+// INCOME HUB — entitlement engine + auto-detect + status model
+// ═══════════════════════════════════════════════════
+function _todayStr(){ return new Date().toISOString().slice(0,10); }
+function _addDaysStr(s,n){ if(!s)return ''; const d=new Date(s); if(isNaN(d))return ''; d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+// Indian FY label from a date, e.g. 2025-07-01 -> "2025-26"
+function _fyOf(dateStr){ if(!dateStr)return ''; const d=new Date(dateStr); if(isNaN(d))return ''; const y=d.getFullYear(),m=d.getMonth()+1; const s=m>=4?y:y-1; return s+'-'+String((s+1)%100).padStart(2,'0'); }
+
+// Shares held at CLOSE the day before an ex-date = holder of record (entitled).
+// Prefer the order ledger (BUY/SELL with dates); fall back to holding.buyDate, then realised window.
+function qtyHeldOn(symbol, exDate){
+  const sym=(symbol||'').toUpperCase(); const cut=(exDate||'').slice(0,10); if(!cut)return {qty:0,src:'none'};
+  const so=(D.orders||[]).filter(o=>((o.sym||o.symbol||'')+'').toUpperCase()===sym && (o.date||o.rawDate));
+  if(so.length){
+    let q=0;
+    for(const o of so){
+      const od=((o.date||o.rawDate)+'').slice(0,10);
+      if(od && od<cut){ const t=((o.type||o.typ||'')+'').toUpperCase(); if(t.includes('BUY'))q+=(+o.qty||0); else if(t.includes('SELL'))q-=(+o.qty||0); }
+    }
+    return {qty:Math.max(0,Math.round(q)), src:'orders'};
+  }
+  const h=(D.holdings||[]).find(x=>((x.symbol||'')+'').toUpperCase()===sym);
+  if(h && h.buyDate && (h.buyDate+'').slice(0,10)<cut) return {qty:h.qty||0, src:'buyDate'};
+  let rq=0;
+  (D.realised||[]).forEach(r=>{ if(((r.symbol||'')+'').toUpperCase()!==sym)return; const bd=(r.buyDate||'').slice(0,10),sd=(r.sellDate||'').slice(0,10); if(bd&&bd<cut&&(!sd||sd>=cut))rq+=r.qty||0; });
+  if(rq>0) return {qty:rq, src:'realised'};
+  if(h && !h.buyDate) return {qty:h.qty||0, src:'current'};
+  return {qty:0, src:'none'};
 }
-function rmDiv(id){D.dividends=D.dividends.filter(d=>d.id!==id);save('dividends');renderDividends();}
+
+// Status: upcoming (ex in future) → pending (ex passed, cash not yet in) → received. Manual confirm forces received.
+function _divStatus(d){
+  const today=_todayStr(); const ex=(d.exDate||'').slice(0,10); const pay=(d.payDate||'').slice(0,10);
+  if(d.confirmed) return 'received';
+  if(ex && ex>today) return 'upcoming';
+  const payRef = pay || _addDaysStr(ex,30);      // dividends typically credit ~30d after ex-date
+  if(payRef && payRef>today) return 'pending';
+  return 'received';
+}
+
+// One enrichment pass: gross, TDS (10% once a company's FY payout crosses ₹5,000), net, status, FY.
+function _divEnrich(){
+  const recs=(D.dividends||[]).map(d=>{
+    const qty=d.qty||0;
+    const gross=+(((d.total!=null&&d.total!=='')? +d.total : (d.amtPerShare||0)*qty)||0).toFixed(2);
+    return Object.assign({}, d, {_qty:qty,_gross:gross,_fy:_fyOf(d.exDate),_status:_divStatus(d)});
+  });
+  const grp={};
+  recs.forEach(r=>{ const k=(r.symbol||'')+'|'+r._fy; grp[k]=(grp[k]||0)+r._gross; });
+  recs.forEach(r=>{ const k=(r.symbol||'')+'|'+r._fy; const over=grp[k]>5000; r._tds=over?+(r._gross*0.10).toFixed(2):0; r._net=+(r._gross-r._tds).toFixed(2); });
+  return recs;
+}
+
+// Forward 12-month projected income from current holdings (known calendar first, then yield).
+function _forward12mIncome(){
+  let tot=0;
+  (D.holdings||[]).forEach(h=>{
+    const sym=(h.symbol||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+    const db=typeof DIV_CALENDAR_DB!=='undefined'?DIV_CALENDAR_DB[sym]:null;
+    if(db){ tot += (db.perShare||0)*(db.months?db.months.length:1)*(h.qty||0); return; }
+    const y=(typeof KNOWN_DIVYIELDS!=='undefined'?KNOWN_DIVYIELDS[sym]:0)||h.dividendYield||h.dy||0;
+    if(y){ tot += (h.ltp||h.avgPrice||0)*(h.qty||0)*y/100; }
+  });
+  return tot;
+}
+
+function _allOwnedSymbols(){
+  const map={};
+  const add=(sym,exch,name)=>{ const s=(sym||'').toUpperCase().trim(); if(!s)return; if(!map[s])map[s]={symbol:s,exchange:(exch||'NSE').includes('BSE')?'BSE':'NSE',name:name||s}; };
+  (D.holdings||[]).forEach(h=>add(h.symbol,h.exchange,h.name));
+  (D.realised||[]).forEach(r=>add(r.symbol,r.exchange,r.name));
+  (D.orders||[]).forEach(o=>add(o.sym||o.symbol,o.exchange,o.name));
+  return Object.values(map);
+}
+
+async function _fetchDivEventsFor(symbol,exchange){
+  const yf = exchange==='BSE'? symbol+'.BO' : symbol+'.NS';
+  const url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(yf)+'?events=dividends&range=5y&interval=1mo';
+  const raw=await _proxyFetch(url,12000);
+  return raw?.chart?.result?.[0]?.events?.dividends || null;
+}
+
+// THE feature: scan trade history + Yahoo, auto-credit every dividend you were entitled to.
+async function autoDetectDividends(){
+  const btn=document.getElementById('div-auto-btn');
+  const syms=_allOwnedSymbols();
+  if(!syms.length){ toast('No holdings or orders to scan','warn'); return; }
+  if(btn){ btn.disabled=true; btn.dataset.orig=btn.textContent; btn.textContent='⏳ Scanning…'; }
+  let added=0, credited=0, scanned=0;
+  for(const s of syms){
+    scanned++;
+    if(btn) btn.textContent=`⏳ ${scanned}/${syms.length}`;
+    try{
+      const events=await _fetchDivEventsFor(s.symbol,s.exchange);
+      if(events){
+        for(const [ts,div] of Object.entries(events)){
+          const exDate=new Date(parseInt(ts)*1000).toISOString().slice(0,10);
+          const amt=+(div.amount||0); if(!amt)continue;
+          const held=qtyHeldOn(s.symbol,exDate);
+          if(held.qty<=0) continue;                                   // not a holder of record → skip
+          if((D.dividends||[]).some(d=>d.symbol===s.symbol&&d.exDate===exDate&&Math.abs((d.amtPerShare||0)-amt)<0.001)) continue;
+          D.dividends.push({ id:Date.now()+Math.random(), symbol:s.symbol, name:s.name, amtPerShare:amt, qty:held.qty,
+            total:+(amt*held.qty).toFixed(2), exDate, payDate:'', type:'Auto', source:'auto', qtySource:held.src, addedAt:new Date().toISOString() });
+          added++; credited+=amt*held.qty;
+        }
+      }
+    }catch(e){}
+    await new Promise(r=>setTimeout(r,350));
+  }
+  try{ localStorage.setItem('ss_div_autodetect_ts', Date.now()); }catch(e){}
+  save('dividends'); renderDividends();
+  if(btn){ btn.disabled=false; btn.textContent=btn.dataset.orig||'🔄 Auto-Detect'; }
+  toast(added? `✓ ${added} dividend${added===1?'':'s'} auto-credited · ₹${fI(credited)}` : 'No new dividends found — you\'re up to date','ok');
+  if(added) addNotif('info',`💰 Auto-detected ${added} dividend payment(s) worth ₹${fI(credited)} across your holdings`,'');
+}
+
+// Throttled background auto-detect when the Income Hub is opened (once/day).
+function _maybeAutoDetectDividends(){
+  if(!(D.holdings||[]).length && !(D.orders||[]).length) return;
+  let last=0; try{ last=+localStorage.getItem('ss_div_autodetect_ts')||0; }catch(e){}
+  if(Date.now()-last > 20*3600*1000) { setTimeout(()=>autoDetectDividends(), 800); }
+}
+
+function confirmDiv(id){
+  const d=(D.dividends||[]).find(x=>String(x.id)===String(id)); if(!d)return;
+  d.confirmed=true; if(!d.payDate) d.payDate=_todayStr();
+  save('dividends'); renderDividends(); toast('Marked received: '+d.symbol,'ok');
+}
+function rmDiv(id){ D.dividends=D.dividends.filter(d=>String(d.id)!==String(id)); save('dividends'); renderDividends(); }
+
+// Orchestrator: refresh cards + the active tab.
+function renderDividends(){
+  const recs=_divEnrich();
+  const received=recs.filter(r=>r._status==='received');
+  const pending=recs.filter(r=>r._status==='pending');
+  const recvNet=received.reduce((s,r)=>s+r._net,0);
+  const pendGross=pending.reduce((s,r)=>s+r._gross,0);
+  const curFY=_fyOf(_todayStr());
+  const fyNet=recs.filter(r=>r._fy===curFY&&r._status==='received').reduce((s,r)=>s+r._net,0);
+  const inv=(D.holdings||[]).reduce((s,h)=>s+(h.qty||0)*(h.avgPrice||0),0);
+  const set=(id,v)=>{const e=document.getElementById(id); if(e)e.textContent=v;};
+  set('div-recv','₹'+f(recvNet,0)); set('div-recv-ct',received.length+' payment'+(received.length===1?'':'s'));
+  set('div-pend','₹'+f(pendGross,0)); set('div-pend-ct',pending.length+' declared');
+  set('div-fy','₹'+f(fyNet,0));
+  set('div-yld', inv>0? f(recvNet/inv*100,2)+'%' : '0.00%');
+  set('div-fwd','₹'+f(_forward12mIncome(),0));
+  const active=document.querySelector('#sec-dividends .tp.on')?.id||'inc-received';
+  if(active==='inc-received') renderIncomeTab('received');
+  else if(active==='inc-pending') renderIncomeTab('pending');
+  else if(active==='inc-analytics') renderIncomeTab('analytics');
+}
+
+function _divRow(d){
+  const stTag={received:'<span class="tag t-buy" style="font-size:9px">✓ Received</span>',pending:'<span class="tag t-hold" style="font-size:9px">⏳ Pending</span>',upcoming:'<span class="tag t-neu" style="font-size:9px">🗓 Upcoming</span>'}[d._status]||'';
+  const auto=(d.source==='auto'||d.type==='Auto'||d.type==='Auto-fetched')?' <span title="Auto-detected from your trade history + Yahoo" style="font-size:9px">🤖</span>':'';
+  return `<tr><td class="sym">${d.symbol}${auto}</td><td class="mn">₹${f(d.amtPerShare,2)}</td><td class="mn">${d._qty||'—'}</td><td class="mn">${d._gross?'₹'+f(d._gross,0):'—'}</td><td class="mn ${d._tds?'dn':''}" style="font-size:11px">${d._tds?'−₹'+f(d._tds,0):'—'}</td><td class="mn up">${d._net?'₹'+f(d._net,0):'—'}</td><td style="font-size:11px">${d.exDate||'—'}</td><td style="font-size:11px">${d.payDate||'—'}</td><td><span class="tag t-sbuy" style="font-size:9px">${d.type||'—'}</span></td><td>${stTag}</td><td><button class="btn btn-red btn-xs" onclick="rmDiv('${d.id}')">✕</button></td></tr>`;
+}
+
+function renderIncomeTab(tab){
+  const recs=_divEnrich();
+  const q=(document.getElementById('div-search')?.value||'').trim().toUpperCase();
+  const filt=r=> !q || (r.symbol||'').toUpperCase().includes(q);
+  if(tab==='received'){
+    const tbody=document.getElementById('div-tbody'); if(!tbody)return;
+    const rows=recs.filter(r=>r._status==='received').filter(filt).sort((a,b)=>(b.exDate||'').localeCompare(a.exDate||''));
+    if(!rows.length){ tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:40px;color:var(--t4)">${q?'No received dividends match <strong>"'+q+'"</strong>':'No received dividends yet — hit <strong>🔄 Auto-Detect</strong>.'}</td></tr>`; return; }
+    tbody.innerHTML=rows.map(_divRow).join('');
+  } else if(tab==='pending'){ _renderPendingTab(recs.filter(filt)); }
+  else if(tab==='projection'){ renderDividendCalendar(); }
+  else if(tab==='analytics'){ _renderIncomeAnalytics(recs); }
+}
+
+function _renderPendingTab(recs){
+  const el=document.getElementById('inc-pending-body'); if(!el)return;
+  const pend=recs.filter(r=>r._status==='pending').sort((a,b)=>((a.payDate||a.exDate||'')).localeCompare(b.payDate||b.exDate||''));
+  const up=recs.filter(r=>r._status==='upcoming').sort((a,b)=>(a.exDate||'').localeCompare(b.exDate||''));
+  let html='';
+  html+=`<div class="pn"><div class="pn-h"><div class="pn-t">⏳ Declared — awaiting credit</div><span style="font-size:10px;color:var(--t4)">Ex-date passed, cash not in yet. Confirm once it hits your bank.</span></div><div class="pn-b" style="overflow-x:auto">`;
+  if(!pend.length) html+='<div style="color:var(--t4);font-size:12px">Nothing awaiting credit right now.</div>';
+  else html+=`<table class="tbl"><thead><tr><th>Stock</th><th>₹/Sh</th><th>Qty</th><th>Gross</th><th>Ex-Date</th><th>Est. Pay</th><th></th></tr></thead><tbody>${pend.map(d=>`<tr><td class="sym">${d.symbol}</td><td class="mn">₹${f(d.amtPerShare,2)}</td><td class="mn">${d._qty}</td><td class="mn up">₹${f(d._gross,0)}</td><td style="font-size:11px">${d.exDate}</td><td style="font-size:11px">${d.payDate||_addDaysStr(d.exDate,30)+' <span style="color:var(--t4)">(est.)</span>'}</td><td><button class="btn btn-g btn-xs" onclick="confirmDiv('${d.id}')" title="Mark as received in your bank">✓ Received</button></td></tr>`).join('')}</tbody></table>`;
+  html+='</div></div>';
+  html+=`<div class="pn" style="margin-top:12px"><div class="pn-h"><div class="pn-t">🗓 Upcoming ex-dates — you'll be entitled</div></div><div class="pn-b" style="overflow-x:auto">`;
+  if(!up.length) html+='<div style="color:var(--t4);font-size:12px">No dated upcoming dividends. See <strong>12M Projection</strong> for estimates from your holdings.</div>';
+  else html+=`<table class="tbl"><thead><tr><th>Stock</th><th>₹/Sh</th><th>Qty</th><th>Est. Gross</th><th>Ex-Date</th></tr></thead><tbody>${up.map(d=>`<tr><td class="sym">${d.symbol}</td><td class="mn">₹${f(d.amtPerShare,2)}</td><td class="mn">${d._qty}</td><td class="mn up">₹${f(d._gross,0)}</td><td style="font-size:11px">${d.exDate}</td></tr>`).join('')}</tbody></table>`;
+  html+='</div></div>';
+  el.innerHTML=html;
+}
+
+function _renderIncomeAnalytics(recs){
+  const el=document.getElementById('inc-analytics-body'); if(!el)return;
+  const received=recs.filter(r=>r._status==='received');
+  if(!received.length){ el.innerHTML='<div class="pn"><div class="pn-b"><div style="color:var(--t4);font-size:12px">No received dividends yet. Run 🔄 Auto-Detect to populate analytics.</div></div></div>'; return; }
+  // 1) Per-stock yield on cost
+  const bySym={};
+  received.forEach(r=>{ const s=r.symbol; if(!bySym[s])bySym[s]={net:0,gross:0,n:0}; bySym[s].net+=r._net; bySym[s].gross+=r._gross; bySym[s].n++; });
+  const invOf=sym=>{ const h=(D.holdings||[]).find(x=>(x.symbol||'').toUpperCase()===sym.toUpperCase()); return h?(h.qty||0)*(h.avgPrice||0):0; };
+  const symRows=Object.entries(bySym).map(([s,v])=>({s,...v,inv:invOf(s)})).sort((a,b)=>b.net-a.net);
+  // 2) Monthly heatmap (last 12 months, by pay/ex month)
+  const monthNet={}; received.forEach(r=>{ const key=(r.payDate||r.exDate||'').slice(0,7); if(key)monthNet[key]=(monthNet[key]||0)+r._net; });
+  const months=[]; const now=new Date();
+  for(let i=11;i>=0;i--){ const d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push(d.toISOString().slice(0,7)); }
+  const maxM=Math.max(1,...months.map(m=>monthNet[m]||0));
+  // 3) Cumulative by FY
+  const fyNet={}; received.forEach(r=>{ fyNet[r._fy]=(fyNet[r._fy]||0)+r._net; });
+  const fys=Object.keys(fyNet).sort();
+  const maxFY=Math.max(1,...fys.map(y=>fyNet[y]));
+  // 4) TDS this FY
+  const curFY=_fyOf(_todayStr());
+  const tdsFY=recs.filter(r=>r._fy===curFY).reduce((s,r)=>s+r._tds,0);
+  const grossFY=recs.filter(r=>r._fy===curFY).reduce((s,r)=>s+r._gross,0);
+
+  el.innerHTML=`
+    <div class="sg sg-3 gap" style="margin-bottom:14px">
+      <div class="sc c3"><div class="sc-lbl">Lifetime Received (net)</div><div class="sc-val up">₹${fI(received.reduce((s,r)=>s+r._net,0))}</div><div class="sc-sub">${received.length} payments · ${Object.keys(bySym).length} stocks</div></div>
+      <div class="sc c1"><div class="sc-lbl">Gross ${curFY}</div><div class="sc-val">₹${fI(grossFY)}</div><div class="sc-sub">before tax</div></div>
+      <div class="sc c4"><div class="sc-lbl">Est. TDS ${curFY}</div><div class="sc-val dn">₹${fI(tdsFY)}</div><div class="sc-sub">10% >₹5k/company</div></div>
+    </div>
+    <div class="pn"><div class="pn-h"><div class="pn-t">📊 Yield on Cost — by stock</div><span style="font-size:10px;color:var(--t4)">Dividends received ÷ your invested amount</span></div><div class="pn-b" style="overflow-x:auto">
+      <table class="tbl"><thead><tr><th>Stock</th><th>Payments</th><th>Gross</th><th>Net</th><th>Invested</th><th>Yield on Cost</th></tr></thead><tbody>
+      ${symRows.map(r=>`<tr><td class="sym">${r.s}</td><td class="mn">${r.n}</td><td class="mn">₹${fI(r.gross)}</td><td class="mn up">₹${fI(r.net)}</td><td class="mn">${r.inv?'₹'+fI(r.inv):'—'}</td><td class="mn ${r.inv&&(r.net/r.inv*100)>=3?'up':''}">${r.inv?f(r.net/r.inv*100,2)+'%':'—'}</td></tr>`).join('')}
+      </tbody></table>
+    </div></div>
+    <div class="pn" style="margin-top:12px"><div class="pn-h"><div class="pn-t">🗓 Monthly income — last 12 months (net)</div></div><div class="pn-b">
+      <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;text-align:center">
+        ${months.map(m=>{ const v=monthNet[m]||0; const op=v>0?(0.15+0.85*v/maxM).toFixed(2):0; return `<div title="${m}: ₹${fI(v)}"><div style="height:46px;border-radius:4px;background:rgba(52,199,89,${op});border:1px solid var(--b2);display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px"><span style="font-size:8px;color:var(--t2)">${v>0?fI(v):''}</span></div><div style="font-size:8px;color:var(--t4);margin-top:2px">${m.slice(5)}/${m.slice(2,4)}</div></div>`; }).join('')}
+      </div>
+    </div></div>
+    <div class="pn" style="margin-top:12px"><div class="pn-h"><div class="pn-t">📈 Dividend growth — by financial year (net)</div></div><div class="pn-b">
+      ${fys.length? fys.map(y=>`<div style="display:flex;align-items:center;gap:10px;margin:6px 0"><div style="width:70px;font-size:11px;color:var(--t3)">FY ${y}</div><div style="flex:1;background:var(--s2);border-radius:4px;overflow:hidden"><div style="width:${Math.max(4,fyNet[y]/maxFY*100)}%;background:var(--grn);height:20px;border-radius:4px"></div></div><div style="width:90px;text-align:right;font-size:12px" class="mn up">₹${fI(fyNet[y])}</div></div>`).join('') : '<div style="color:var(--t4);font-size:12px">Not enough history yet.</div>'}
+    </div></div>
+    <div style="font-size:10px;color:var(--t4);margin-top:10px">⚠ TDS and yield figures are estimates (Section 194 · 10% above ₹5,000/company/FY). Verify against your Form 26AS / broker statement before filing.</div>`;
+}
 
 // ═══════════════════════════════════════════════════
 // DIVIDEND INCOME CALENDAR (auto-populate from holdings)

@@ -1999,6 +1999,80 @@ async function sendModel(env,chatId,token,arg){
   await tgSend(token,chatId,'✅ AI model set to <code>'+arg+'</code>\nAll chat, /ask, /analyze &amp; /recommend will use this exact model now (it falls back only if the model is down, and tells you when it does).');
 }
 
+// ── Dividend sweep (daily) ────────────────────────────────────────────────────
+// Auto-tracks dividends server-side even when the web app is closed. Reads the
+// user's portfolio (holdings + orders + realised + existing dividends) from KV,
+// fetches each ever-owned symbol's dividend events from Yahoo, and credits every
+// dividend the user was a HOLDER OF RECORD for — shares held at close the day
+// before the ex-date, reconstructed from the order ledger (with buyDate/realised
+// fallbacks). Dedups, writes back to KV, and Telegram-notifies new credits.
+function _qtyHeldOnW(sym, exDate, pf){
+  sym=(sym||'').toUpperCase(); const cut=(exDate||'').slice(0,10); if(!cut)return 0;
+  const so=(pf.orders||[]).filter(o=>((o.sym||o.symbol||'')+'').toUpperCase()===sym && (o.date||o.rawDate));
+  if(so.length){ let q=0; for(const o of so){ const od=((o.date||o.rawDate)+'').slice(0,10); if(od&&od<cut){ const t=((o.type||o.typ||'')+'').toUpperCase(); if(t.includes('BUY'))q+=(+o.qty||0); else if(t.includes('SELL'))q-=(+o.qty||0); } } return Math.max(0,Math.round(q)); }
+  const h=(pf.holdings||[]).find(x=>((x.symbol||'')+'').toUpperCase()===sym);
+  if(h&&h.buyDate&&(h.buyDate+'').slice(0,10)<cut)return h.qty||0;
+  let rq=0; (pf.realised||[]).forEach(r=>{ if(((r.symbol||'')+'').toUpperCase()!==sym)return; const bd=(r.buyDate||'').slice(0,10),sd=(r.sellDate||'').slice(0,10); if(bd&&bd<cut&&(!sd||sd>=cut))rq+=r.qty||0; });
+  if(rq>0)return rq;
+  if(h&&!h.buyDate)return h.qty||0;
+  return 0;
+}
+
+async function sweepDividends(env){
+  let pf=null;try{const raw=await env.STOCKSENSE_KV.get('portfolio');if(raw)pf=JSON.parse(raw);}catch(e){}
+  if(!pf)return{added:0};
+  if(!Array.isArray(pf.dividends))pf.dividends=[];
+  const map={};
+  const add=(sym,exch,name)=>{const s=(sym||'').toUpperCase().trim();if(!s)return;if(!map[s])map[s]={symbol:s,exchange:((exch||'NSE')+'').includes('BSE')?'BSE':'NSE',name:name||s};};
+  (pf.holdings||[]).forEach(h=>add(h.symbol,h.exchange,h.name));
+  (pf.realised||[]).forEach(r=>add(r.symbol,r.exchange,r.name));
+  (pf.orders||[]).forEach(o=>add(o.sym||o.symbol,o.exchange,o.name));
+  const syms=Object.values(map);
+  if(!syms.length)return{added:0};
+  let sess=null;try{sess=await getYFSession();}catch(e){console.warn('div sweep: no YF sess',e.message);}
+  const hh={'User-Agent':UA,'Referer':'https://finance.yahoo.com/'};
+  if(sess&&sess.cookies)hh['Cookie']=sess.cookies;
+  const cq=sess?('&crumb='+encodeURIComponent(sess.crumb)):'';
+  const newly=[];
+  for(const s of syms){
+    const yf=s.exchange==='BSE'?s.symbol+'.BO':s.symbol+'.NS';
+    let events=null;
+    for(const host of['query1','query2']){
+      try{
+        const res=await fetch('https://'+host+'.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(yf)+'?events=dividends&range=1y&interval=1mo'+cq,{headers:hh});
+        const d=await res.json();
+        events=d&&d.chart&&d.chart.result&&d.chart.result[0]&&d.chart.result[0].events&&d.chart.result[0].events.dividends||null;
+        if(events)break;
+      }catch(e){}
+    }
+    if(events){
+      for(const ts in events){
+        const div=events[ts];
+        const exDate=new Date(parseInt(ts)*1000).toISOString().slice(0,10);
+        const amt=+((div&&div.amount)||0);if(!amt)continue;
+        const qty=_qtyHeldOnW(s.symbol,exDate,pf);
+        if(qty<=0)continue;
+        if(pf.dividends.some(x=>x.symbol===s.symbol&&x.exDate===exDate&&Math.abs((x.amtPerShare||0)-amt)<0.001))continue;
+        const rec={id:Date.now()+Math.random(),symbol:s.symbol,name:s.name,amtPerShare:amt,qty,total:+(amt*qty).toFixed(2),exDate,payDate:'',type:'Auto',source:'auto-worker',addedAt:new Date().toISOString()};
+        pf.dividends.push(rec);newly.push(rec);
+      }
+    }
+    await new Promise(r=>setTimeout(r,250));
+  }
+  if(newly.length){
+    await env.STOCKSENSE_KV.put('portfolio',JSON.stringify(pf));
+    const token=pf.cfg&&pf.cfg.tgToken,chatId=pf.cfg&&pf.cfg.tgChatId;
+    if(token&&chatId){
+      const tot=newly.reduce((s,r)=>s+r.total,0);
+      const lines=newly.slice(0,12).map(r=>'• <b>'+r.symbol+'</b> ₹'+r.amtPerShare+'/sh × '+r.qty+' = ₹'+r.total.toFixed(0)+' <i>(ex '+r.exDate+')</i>').join('\n');
+      const more=newly.length>12?('\n…and '+(newly.length-12)+' more'):'';
+      try{await tgSend(token,chatId,'💰 <b>Dividend update</b>\n'+newly.length+' new payment(s) auto-credited · total ₹'+tot.toFixed(0)+'\n\n'+lines+more);}catch(e){}
+    }
+  }
+  console.log('dividend sweep: added',newly.length,'across',syms.length,'symbols');
+  return{added:newly.length};
+}
+
 // ── Worker entry point ────────────────────────────────────────────────────────
 
 export default{
@@ -2091,6 +2165,7 @@ export default{
         // 18:30 IST — after NSE publishes EOD FII/DII + bulk/block deal reports (~5:30-6:30pm IST)
         await refreshMarketData(env);
         try{await snapshotPortfolio(env);}catch(e){console.warn('pf snapshot err:',e.message);}
+        try{await sweepDividends(env);}catch(e){console.warn('div sweep err:',e.message);}
         // Weekly (Mondays): refresh index constituents for Fund Overlap
         try{if(new Date().getUTCDay()===1)await fetchIndexConstituents(env);}catch(e){console.warn('indexConst err:',e.message);}
       }else if(event.cron==='*/20 2-16 * * *'){
