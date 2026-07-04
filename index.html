@@ -1722,9 +1722,10 @@ textarea.fi{resize:vertical;min-height:70px;}
           <option value="plp-asc">💹 Total Return (Worst)</option>
           <option value="sym-az">🔤 Symbol A → Z</option>
         </select>
-        <button class="btn btn-g" onclick="calcMomentum()">↻ Recalculate</button>
+        <button class="btn btn-g" id="mom-recalc-btn" onclick="refreshMomentum()">↻ Recalculate</button>
       </div>
     </div>
+    <div style="font-size:11px;color:var(--t3);margin-bottom:8px">Real price momentum: <b>Chg%</b> over the selected window, <b>vs NIFTY</b> = relative strength, <b>RSI(14)</b>, and a blended score from 3M/6M returns + 12-1 momentum + 50/200-DMA trend. Your manual conviction is <i>not</i> mixed in.</div>
     <div class="pn gap">
       <div style="overflow-x:auto">
         <table class="tbl" style="min-width:700px">
@@ -2563,10 +2564,11 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="sec-head">
       <div class="sec-title">🔥 Correlation Heatmap</div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-g" onclick="buildHeatmap()">↻ Sector Model</button>
-        <button class="btn btn-p" onclick="buildLiveCorrelation()" id="hm-live-btn">📡 Live 90D</button>
+        <button class="btn btn-p" onclick="buildLiveCorrelation()" id="hm-live-btn">📡 Recompute (Live 90D)</button>
+        <button class="btn btn-g" onclick="buildHeatmap()" title="Rough estimate from sector labels — used only as a fallback when price history can't be fetched">↻ Sector estimate</button>
       </div>
     </div>
+    <div style="font-size:11px;color:var(--t3);margin-bottom:8px">Real correlation of <b>daily price returns</b> over ~90 days. Loads automatically; sector-label estimate is a fallback only.</div>
     <!-- Live correlation status -->
     <div id="hm-live-status" style="display:none;font-size:11px;color:var(--t4);margin-bottom:8px;padding:8px 12px;background:var(--s2);border-radius:8px;border:1px solid var(--b2)"></div>
     <div class="g21" style="margin-bottom:16px">
@@ -6390,7 +6392,7 @@ function go(id) {
   if(id==='plan') renderExitTable();
   if(id==='tax') renderTax();
   if(id==='analysis') populateAiSel();
-  if(id==='momentum') calcMomentum();
+  if(id==='momentum'){ if(!D._momLoaded) refreshMomentum(); else calcMomentumV4(); }
   if(id==='risk') calcRisk();
   if(id==='action') renderActionCards();
   if(id==='holdings') renderHoldHeaders();
@@ -6401,7 +6403,7 @@ function go(id) {
   if(id==='calendar') { _calSeedFromServer(); renderCalendar(); renderFoExpiry(); }
   if(id==='benchmark') loadBenchmark();
   if(id==='planner') { calcPositionSize(); calcSIP(); renderPsConc(); }
-  if(id==='heatmap') buildHeatmap();
+  if(id==='heatmap'){ if(!D._corrLoaded){ buildHeatmap(); buildLiveCorrelation(); } }  // sector model instantly, then real price correlation (cached)
   if(id==='sip') { _sipSeedFromServer(); renderSipTracker(); }
   if(id==='sectormap') renderSectorMap();
   if(id==='rebalancer') renderRebalancer();
@@ -7584,6 +7586,34 @@ async function fetchYFSeries(sym, range='6mo', interval='1d') {
   }
   return null;
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// SHARED PRICE-HISTORY CACHE + TECHNICAL MATH  (Correlation Heatmap · Momentum)
+// One cache reused by both tabs so we fetch each stock's daily series only once
+// per ~12h instead of per-tab. Series come through the edge-cached /api/chart proxy.
+// ══════════════════════════════════════════════════════════════════════════
+const _HIST_TTL = 12*3600*1000;
+async function _getHistYF(yfSym, range='1y'){
+  const key='ss_hist_'+yfSym.toUpperCase();
+  try{ const c=JSON.parse(localStorage.getItem(key)||'null'); if(c && Date.now()-c.ts<_HIST_TTL && c.range===range && c.closes?.length>20) return c; }catch(e){}
+  const s = await fetchYFSeries(yfSym, range, '1d');
+  if(!s || s.length<20) return null;
+  const toISO = t => (t instanceof Date ? t : new Date(t)).toISOString().slice(0,10);
+  const rec={ ts:Date.now(), range, yfSym, closes:s.map(p=>p.c), dates:s.map(p=>toISO(p.t)) };
+  try{ localStorage.setItem(key, JSON.stringify(rec)); }catch(e){}
+  return rec;
+}
+// Resolve a holding to its Yahoo ticker, then fetch cached history.
+async function _getHistory(h, range='1y'){
+  const yfSym = h.yfTicker || (typeof _symMapLookup==='function' && _symMapLookup(h.symbol)) || (h.exchange==='BSE' ? h.symbol+'.BO' : h.symbol+'.NS');
+  return _getHistYF(yfSym, range);
+}
+// Trading-day windows (approx.)
+const _TD = {'1W':5,'1M':21,'3M':63,'6M':126,'12M':252};
+function _periodReturn(closes,n){ if(!closes||closes.length<n+1)return null; const a=closes[closes.length-1-n],b=closes[closes.length-1]; return a>0?(b/a-1)*100:null; }
+function _rsi14(closes,period=14){ if(!closes||closes.length<period+1)return null; let g=0,l=0; for(let i=closes.length-period;i<closes.length;i++){const d=closes[i]-closes[i-1]; if(d>=0)g+=d; else l-=d;} const al=l/period; if(al===0)return 100; const rs=(g/period)/al; return Math.round(100-100/(1+rs)); }
+function _pctVsDMA(closes,n){ if(!closes||closes.length<n)return null; const sma=closes.slice(-n).reduce((s,x)=>s+x,0)/n; const last=closes[closes.length-1]; return sma>0?(last/sma-1)*100:null; }
+function _dailyRets(closes){ const r=[]; for(let i=1;i<closes.length;i++){ if(closes[i-1]>0) r.push(closes[i]/closes[i-1]-1); } return r; }
 
 // ── Index price cache (persists last-known prices across sessions) ────────────
 // Update both primary (ixN) and duplicate (ixNd) ticker elements
@@ -10126,34 +10156,92 @@ function renderDashActionsV4() {
   ].join('') || '<div style="color:var(--t4);font-size:12px">—</div>';
 }
 
+// ── Momentum math (from a daily close series) ──────────────────────────────
+function _histCacheRead(yfSym){ try{ return JSON.parse(localStorage.getItem('ss_hist_'+yfSym.toUpperCase())||'null'); }catch(e){ return null; } }
+function _histFor(h){ const yf=h.yfTicker||(typeof _symMapLookup==='function'&&_symMapLookup(h.symbol))||(h.exchange==='BSE'?h.symbol+'.BO':h.symbol+'.NS'); return _histCacheRead(yf); }
+const _MOM_TF_DAYS={'1d':1,'1w':5,'1m':21,'3m':63};
+function _sub(x,lo,hi){ if(x==null||isNaN(x))return null; return Math.max(0,Math.min(100,(x-lo)/(hi-lo)*100)); }
+// Blended 0-100 objective momentum score: 3M/6M returns, 12-1 momentum, DMA trend, RSI band, rel-strength.
+function _momentumScore(closes, rs){
+  const r1m=_periodReturn(closes,21), r3m=_periodReturn(closes,63), r6m=_periodReturn(closes,126), r12m=_periodReturn(closes,252);
+  const mom=(r12m!=null&&r1m!=null)?r12m-r1m:r3m;
+  const rsi=_rsi14(closes), d50=_pctVsDMA(closes,50), d200=_pctVsDMA(closes,200);
+  const parts=[]; const add=(v,w)=>{ if(v!=null)parts.push([v,w]); };
+  add(_sub(r3m,-20,40),0.25); add(_sub(r6m,-30,60),0.20); add(_sub(mom,-20,50),0.20);
+  if(d50!=null||d200!=null){ const nz=(d50!=null?1:0)+(d200!=null?1:0); const tr=(((d50>0)?1:0)+((d200>0)?1:0))/(nz||1)*100; add(tr,0.15); }
+  if(rsi!=null){ add(rsi>=70?85:rsi>=55?75:rsi>=45?55:rsi>=30?35:20, 0.10); }
+  add(_sub(rs,-15,25),0.10);
+  if(!parts.length)return null;
+  const w=parts.reduce((s,p)=>s+p[1],0);
+  return Math.round(parts.reduce((s,p)=>s+p[0]*p[1],0)/w);
+}
+// Renders from the SHARED history cache only (no network) — fast enough for renderAll.
+// Use refreshMomentum() to warm the cache first.
 function calcMomentumV4() {
   const tbody=document.getElementById('mom-tbody');if(!tbody)return;
   if(!D.holdings.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--t4)">Add holdings.</td></tr>';return;}
-  const ctx=D._marketCtx;
+  const tf=(typeof momTf!=='undefined'?momTf:'1d'), tfDays=_MOM_TF_DAYS[tf]||1;
+  const nifty=_histCacheRead('^NSEI'); const nc=nifty?.closes;
+  const niftyTF = nc? _periodReturn(nc,tfDays) : null;
   const COLORS=['#4f8ef7','#22d3ee','#2dd36f','#fbbf24','#8b5cf6','#f97316','#ec4899'];
-  const ranked=[...D.holdings].map(h=>{
-    const ltp=h.ltp||h.avgPrice,chgP=h.chgP||0,plp=((ltp-h.avgPrice)/h.avgPrice*100),conf=h.confidence||5;
-    const isHot=ctx?.hotSectors?.includes(h.sector);
-    const score=Math.min(100,Math.max(0,(chgP*6)+(plp*0.5)+(conf*4)+(isHot?15:0)+50));
-    return{...h,ltp,chgP,plp,score:Math.round(score)};
-  }).sort((a,b)=>b.score-a.score);
-  tbody.innerHTML=ranked.map((h,i)=>{
-    const barC=h.score>70?'var(--grn)':h.score>40?'var(--yel)':'var(--red)';
-    const emoji=h.score>80?'🔥':h.score>60?'📈':h.score>40?'➡':'📉';
+  const rows=D.holdings.map(h=>{
+    const rec=_histFor(h); const c=rec?.closes;
+    let chgTF=null, rs=null, rsi=null, score=null, hasHist=!!(c&&c.length>tfDays);
+    if(hasHist){
+      chgTF=(tf==='1d')?(h.chgP??_periodReturn(c,1)):_periodReturn(c,tfDays);
+      rsi=_rsi14(c);
+      if(niftyTF!=null&&chgTF!=null) rs=chgTF-niftyTF;
+      score=_momentumScore(c,rs);
+    } else { chgTF=(tf==='1d')?(h.chgP??null):null; }
+    return {h,ltp:h.ltp||h.avgPrice,chgTF,rs,rsi,score,hasHist};
+  }).sort((a,b)=>(b.score??-1)-(a.score??-1));
+  tbody.innerHTML=rows.map((r,i)=>{
+    const h=r.h, sc=r.score;
+    const barC=sc==null?'var(--t4)':sc>70?'var(--grn)':sc>45?'var(--yel)':'var(--red)';
+    const emoji=sc==null?'·':sc>75?'🔥':sc>60?'📈':sc>45?'➡':'📉';
+    const strength=sc==null?'—':sc>75?'Strong':sc>60?'Positive':sc>45?'Neutral':'Weak';
     return `<tr style="border-left:2px solid ${COLORS[i%COLORS.length]}">
       <td class="mn" style="color:var(--t4)">${i+1}</td>
-      <td onclick="openDetail(${h.id})" style="cursor:pointer"><div class="sym">${h.symbol}</div><div class="snm">${h.sector}</div></td>
-      <td class="mn">₹${f(h.ltp)}</td><td class="mn ${cls(h.chgP)}">${fP(h.chgP)}</td><td class="mn ${cls(h.plp)}">${fP(h.plp)}</td>
-      <td class="mn ${(h.confidence||0)>=7?'up':(h.confidence||0)<=3?'dn':''}">${h.confidence?h.confidence+'/10':'—'}</td>
-      <td><span style="margin-right:4px">${emoji}</span><span class="mn" style="color:${barC}">${h.score}</span></td>
-      <td><div class="mom-bar"><div class="mom-fill" style="width:${h.score}%;background:${barC}"></div></div><div style="font-size:9px;margin-top:2px">${h.signal||'—'}</div></td>
+      <td onclick="openDetail(${h.id})" style="cursor:pointer"><div class="sym">${h.symbol}${r.hasHist?'':' <span title="No price history cached — click Recalculate" style="font-size:9px;color:var(--t4)">·</span>'}</div><div class="snm">${h.sector||''}</div></td>
+      <td class="mn">₹${f(r.ltp)}</td>
+      <td class="mn ${r.chgTF!=null?cls(r.chgTF):''}">${r.chgTF!=null?fP(r.chgTF):'—'}</td>
+      <td class="mn ${r.rs!=null?cls(r.rs):''}">${r.rs!=null?(r.rs>=0?'+':'')+f(r.rs,1)+'%':'—'}</td>
+      <td class="mn ${r.rsi!=null?(r.rsi>=70?'dn':r.rsi<=30?'up':''):''}">${r.rsi!=null?r.rsi:'—'}</td>
+      <td><span style="margin-right:4px">${emoji}</span><span class="mn" style="color:${barC}">${sc!=null?sc:'—'}</span></td>
+      <td><div class="mom-bar"><div class="mom-fill" style="width:${sc||0}%;background:${barC}"></div></div><div style="font-size:9px;margin-top:2px">${strength}</div></td>
     </tr>`;
   }).join('');
+  // Opportunity cost vs REAL Nifty (since first buy from Nifty history, else Nifty 1Y) — no more hardcoded 12.5%.
   const inv=D.holdings.reduce((s,h)=>s+h.qty*h.avgPrice,0),cv=D.holdings.reduce((s,h)=>s+h.qty*(h.ltp||h.avgPrice),0);
-  const portR=inv>0?(cv-inv)/inv*100:0,niftyR=12.5,alpha=portR-niftyR;
+  const portR=inv>0?(cv-inv)/inv*100:0;
+  let niftyR=null, niftyLbl='Nifty 50';
+  if(nc&&nifty.dates){
+    const buyDates=D.holdings.map(h=>h.buyDate).filter(Boolean).sort();
+    const fb=buyDates[0];
+    if(fb){ const idx=nifty.dates.findIndex(d=>d>=fb); if(idx>=0&&idx<nc.length-1&&nc[idx]>0){ niftyR=(nc[nc.length-1]/nc[idx]-1)*100; niftyLbl='Nifty since '+fb; } }
+    if(niftyR==null){ const y=_periodReturn(nc,252); if(y!=null){ niftyR=y; niftyLbl='Nifty 1Y'; } }
+  }
   const op=document.getElementById('oc-port'),on=document.getElementById('oc-nifty'),oa=document.getElementById('oc-alpha'),os=document.getElementById('oc-sub');
-  if(op)op.innerHTML=`<span class="${cls(portR)}">${fP(portR)}</span>`;if(on)on.innerHTML=`<span class="${cls(niftyR)}">${fP(niftyR)}</span>`;
-  if(oa)oa.innerHTML=`<span class="${cls(alpha)}">${fP(alpha)}</span>`;if(os)os.textContent=alpha>=0?'Beating Nifty 💪':'Lagging Nifty ⚠';
+  if(op)op.innerHTML=`<span class="${cls(portR)}">${fP(portR)}</span>`;
+  if(on)on.innerHTML=niftyR!=null?`<span class="${cls(niftyR)}">${fP(niftyR)}</span>`:'<span style="color:var(--t4)">—</span>';
+  if(oa)oa.innerHTML=niftyR!=null?`<span class="${cls(portR-niftyR)}">${fP(portR-niftyR)}</span>`:'<span style="color:var(--t4)">—</span>';
+  if(os)os.textContent=niftyR!=null?(portR>=niftyR?'Beating '+niftyLbl+' 💪':'Lagging '+niftyLbl+' ⚠'):'Click Recalculate to load Nifty';
+}
+// Warm the shared history cache (holdings + Nifty), re-rendering as it goes.
+async function refreshMomentum(){
+  const btn=document.getElementById('mom-recalc-btn');
+  if(btn){ btn.disabled=true; btn.dataset.o=btn.textContent; btn.textContent='⏳ Loading…'; }
+  try{ await _getHistYF('^NSEI','1y'); }catch(e){}
+  const hs=D.holdings.slice();
+  for(let i=0;i<hs.length;i+=4){
+    await Promise.all(hs.slice(i,i+4).map(h=>_getHistory(h,'1y').catch(()=>null)));
+    if(btn)btn.textContent='⏳ '+Math.min(i+4,hs.length)+'/'+hs.length;
+    calcMomentumV4();
+    if(i+4<hs.length)await new Promise(r=>setTimeout(r,200));
+  }
+  D._momLoaded=true;
+  if(btn){ btn.disabled=false; btn.textContent=btn.dataset.o||'↻ Recalculate'; }
+  calcMomentumV4();
 }
 
 function calcRiskV4() {
@@ -14291,6 +14379,14 @@ async function loadStockAnalysis() {
   const days = hDays(h.buyDate) || 0;
   const pos52 = (h.h52&&h.l52&&ltp) ? Math.round((ltp-h.l52)/(h.h52-h.l52)*100) : null;
   const ltcgDaysLeft = days < 365 ? 365 - days : 0;
+  // Ground the note in the app's OWN computed engines so the AI can't invent a contradictory
+  // fair value or price target. Valuation ← the multi-method engine; technicals ← real price history.
+  const _fv = (typeof computeFairValue==='function') ? computeFairValue(h) : null;
+  const _hist = (typeof _histFor==='function') ? _histFor(h) : null;
+  const _c = _hist?.closes;
+  const _r3=_c?_periodReturn(_c,63):null, _r6=_c?_periodReturn(_c,126):null, _rsi=_c?_rsi14(_c):null, _d50=_c?_pctVsDMA(_c,50):null, _d200=_c?_pctVsDMA(_c,200):null;
+  const _fvLine = _fv&&_fv.applicableCount ? `Fair value ₹${_fv.low}–₹${_fv.high} (base ₹${_fv.base}) · MoS ${_fv.mos}% · confidence ${_fv.confidence} · verdict ${_fv.verdict} · methods: ${_fv.method}` : 'insufficient data for a model valuation (treat valuation as unknown)';
+  const _techLine = _c ? `RSI(14) ${_rsi??'N/A'} · vs 50DMA ${_d50!=null?_d50.toFixed(1)+'%':'N/A'} · vs 200DMA ${_d200!=null?_d200.toFixed(1)+'%':'N/A'} · 3M return ${_r3!=null?_r3.toFixed(1)+'%':'N/A'} · 6M return ${_r6!=null?_r6.toFixed(1)+'%':'N/A'}` : 'price history not loaded (open Momentum/Correlation to cache it)';
   const prompt = `You are a senior equity research analyst covering Indian markets (NSE/BSE). Write a comprehensive investment research note on ${h.symbol} (${h.name||h.symbol}). This is decision-support research — not SEBI-registered personal advice.
 
 PORTFOLIO POSITION:
@@ -14299,6 +14395,12 @@ PORTFOLIO POSITION:
 - 52W position: ${pos52!==null?pos52+'% of range (Low ₹'+f(h.l52)+' → High ₹'+f(h.h52)+')':'Range N/A'}
 - Fundamentals: PE ${h.pe||'N/A'} | PB ${h.pb||'N/A'} | ROE ${h.roe?(h.roe*100).toFixed(1)+'%':'N/A'} | D/E ${h.de||'N/A'} | Beta ${h.beta||'N/A'}
 - Sector: ${h.sector||'N/A'} | Market regime: ${ctx.sentimentLabel||'Neutral'} | Hot sectors: ${ctx.hotSectors?.join(',')||'N/A'} | Top risks: ${ctx.topRisks?.join('; ')||'N/A'}
+
+COMPUTED SIGNALS (from StockSense's own engines — USE THESE, do not re-derive or contradict them):
+- Model valuation: ${_fvLine}
+- Technicals: ${_techLine}
+
+GROUNDING RULES: Anchor your valuation view to the model fair-value range and verdict above — do not assert a different intrinsic value. If confidence is low or "Inconclusive", explicitly say valuation is uncertain rather than inventing a precise target. For Price Levels, anchor Stop Loss to 52-week support and Targets to the model fair-value range (not round numbers). Do NOT fabricate facts you don't have (promoter pledging, specific guidance, index-inclusion) — if unknown, say "verify before acting".
 
 Write a structured report with EXACTLY these 8 sections (use **bold headers**):
 
@@ -18886,19 +18988,20 @@ async function buildLiveCorrelation() {
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Fetching…'; }
   if (statusEl) { statusEl.style.display = ''; statusEl.textContent = `Fetching 90-day price series for ${stocks.length} holdings…`; }
 
-  // Fetch 3-month daily close in batches of 4 (avoids hammering the proxy)
+  // Pull ~90 trading days of daily closes from the SHARED history cache (fetched once per ~12h,
+  // reused by the Momentum board). Batches of 4 to avoid hammering the proxy on a cold cache.
   const seriesMap = {};
   for (let i = 0; i < stocks.length; i += 4) {
     const batch = stocks.slice(i, i + 4);
     await Promise.all(batch.map(async h => {
-      const yfSym = h.yfTicker || _symMapLookup(h.symbol) || (h.exchange==='BSE' ? h.symbol+'.BO' : h.symbol+'.NS');
       try {
-        const s = await fetchYFSeries(yfSym, '3mo', '1d');
-        if (s && s.length >= 20) seriesMap[h.symbol] = s.map(p => p.c);
+        const rec = await _getHistory(h, '1y');
+        if (rec && rec.closes.length >= 20) seriesMap[h.symbol] = rec.closes.slice(-64); // ~90 calendar days
       } catch(e) {}
     }));
-    if (i + 4 < stocks.length) await new Promise(r => setTimeout(r, 300));
+    if (i + 4 < stocks.length) await new Promise(r => setTimeout(r, 200));
   }
+  D._corrLoaded = true;
 
   const fetched = stocks.filter(h => seriesMap[h.symbol]);
   if (fetched.length < 2) {
