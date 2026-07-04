@@ -3476,15 +3476,20 @@ textarea.fi{resize:vertical;min-height:70px;}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
         <div>
           <div style="font-size:17px;font-weight:700;color:var(--t1)">💎 Fair Value Engine</div>
-          <div style="font-size:11px;color:var(--t4);margin-top:2px">Graham Number + PE-Band valuation for all holdings</div>
+          <div style="font-size:11px;color:var(--t4);margin-top:2px">Multi-method valuation · method picked by sector · range + confidence, not a single number. Click a row for the breakdown.</div>
         </div>
         <button class="btn btn-p" onclick="renderFairValueEngine()">🔄 Recalculate</button>
       </div>
+      <!-- Honest-use note -->
+      <div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.2);border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:11px;color:var(--t3)">
+        ⚠ A screening triage tool, not a price target. Fair value is a <b>range</b> from several models; the verdict needs corroboration and a confidence rating. Low confidence = thin/negative earnings or wide model disagreement — treat as “unknown,” not a signal.
+      </div>
       <!-- Legend -->
       <div style="display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3)"><span style="width:10px;height:10px;border-radius:50%;background:var(--grn);display:inline-block"></span>Undervalued (MoS &gt; 10%)</div>
-        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3)"><span style="width:10px;height:10px;border-radius:50%;background:var(--yel);display:inline-block"></span>Fair Value (±10%)</div>
-        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3)"><span style="width:10px;height:10px;border-radius:50%;background:var(--red);display:inline-block"></span>Overvalued (&gt;10% premium)</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3)"><span style="width:10px;height:10px;border-radius:50%;background:var(--grn);display:inline-block"></span>Undervalued (MoS &gt; 15%)</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3)"><span style="width:10px;height:10px;border-radius:50%;background:var(--yel);display:inline-block"></span>Fair (within ±15%)</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3)"><span style="width:10px;height:10px;border-radius:50%;background:var(--red);display:inline-block"></span>Overvalued (&gt;15% premium)</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3)"><span style="width:10px;height:10px;border-radius:50%;background:var(--t4);display:inline-block"></span>Inconclusive (insufficient / conflicting data)</div>
       </div>
       <div class="pn" style="padding:0">
         <table style="width:100%;border-collapse:collapse">
@@ -3492,13 +3497,14 @@ textarea.fi{resize:vertical;min-height:70px;}
             <tr style="border-bottom:2px solid var(--b1)">
               <th style="text-align:left;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">Stock</th>
               <th style="text-align:right;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">CMP</th>
-              <th style="text-align:right;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">Fair Value</th>
-              <th style="text-align:right;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">Method</th>
-              <th style="text-align:right;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">MoS / Premium</th>
+              <th style="text-align:right;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">Fair Value (range)</th>
+              <th style="text-align:left;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">Methods</th>
+              <th style="text-align:right;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">MoS / Prem</th>
+              <th style="text-align:center;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">Conf.</th>
               <th style="text-align:center;padding:10px 12px;font-size:11px;color:var(--t4);font-weight:600">Verdict</th>
             </tr>
           </thead>
-          <tbody id="fv-tbody"><tr><td colspan="6" style="padding:20px;text-align:center;color:var(--t4);font-size:12px">Click Recalculate to compute valuations</td></tr></tbody>
+          <tbody id="fv-tbody"><tr><td colspan="7" style="padding:20px;text-align:center;color:var(--t4);font-size:12px">Click Recalculate to compute valuations</td></tr></tbody>
         </table>
       </div>
       <!-- AI Valuation Commentary -->
@@ -22661,21 +22667,94 @@ function computeStockScores(data) {
           pos52:Math.round(pos52),pe,roe,beta,ret};
 }
 
-// ── FAIR VALUE ENGINE ──────────────────────────────────────────────────
-function computeFairValue(ltp, pe, eps, bvps, sector) {
-  const avgPE = SECTOR_PE[sector||'default'] || SECTOR_PE.default;
-  let graham = null, peBand = null;
-  if (eps && eps>0 && bvps && bvps>0)
-    graham = Math.round(Math.sqrt(22.5 * eps * bvps));
-  if (eps && eps>0)
-    peBand = Math.round(avgPE * eps);
-  // Relative PE fallback: rebase current price to sector avg PE
-  const relPE = pe && pe>0 ? Math.round(ltp * avgPE / pe) : null;
-  const fair   = graham || peBand || relPE || ltp;
-  const method = graham?'Graham Number':peBand?'PE-Band':relPE?'Relative PE':'Fetching…';
-  const mos    = fair && fair!==ltp ? Math.round((fair - ltp) / fair * 100) : null;
-  return {fair, method, mos, cheap: mos!=null&&mos>10, expensive: mos!=null&&mos<-10,
-          graham, peBand, avgPE, eps, bvps};
+// ── FAIR VALUE ENGINE (multi-method · range · confidence · corroborated verdict) ──
+// Triangulates several textbook valuations, SELECTS the ones appropriate to the
+// business type (Graham suits mature value, not growth or banks), and returns a
+// low/base/high RANGE plus a data-confidence flag — so it stops implying false
+// precision. Verdict comes from the MEDIAN margin-of-safety (robust to any single
+// outlier method). Accepts either the legacy positional signature
+// computeFairValue(ltp,pe,eps,bvps,sector) OR a holding-like object (which also
+// fixes older call-sites that passed a whole holding).
+function computeFairValue(a, pe, eps, bvps, sector) {
+  const _n = x => (x==null||x===''||isNaN(x)) ? null : +x;
+  const _p = x => { x=_n(x); return x==null?null:(Math.abs(x)<=1.5? x*100 : x); }; // fraction→%
+  const _med = arr => { if(!arr.length)return null; const s=[...arr].sort((x,y)=>x-y),m=s.length>>1; return s.length%2? s[m] : (s[m-1]+s[m])/2; };
+  let ltp, roe, eg, fpe, de, sec;
+  if (a && typeof a === 'object') {
+    ltp = _n(a._ltp ?? a.ltp ?? a.avgPrice) || 0;
+    pe  = _n(a._pe ?? a.pe); eps = _n(a._eps ?? a.eps); bvps = _n(a._bvps ?? a.bvps);
+    sec = a.sector || 'default'; roe = _p(a._roe ?? a.roe);
+    eg  = _p(a._eg ?? a.eg ?? a.earningsGrowth); fpe = _n(a._fpe ?? a.fpe); de = _n(a._de ?? a.de);
+  } else {
+    ltp = _n(a) || 0; pe = _n(pe); eps = _n(eps); bvps = _n(bvps); sec = sector || 'default';
+    roe = eg = fpe = de = null;
+  }
+  const avgPE = SECTOR_PE[sec] || SECTOR_PE.default;
+  const S = (sec||'').toLowerCase();
+  const isFin    = /bank|financ|nbfc|insur|finance/.test(S);
+  const isGrowth = /it|tech|pharma|health|fmcg|consum|defence|defense|chemical|telecom/.test(S);
+  const isCyc    = /metal|energy|oil|auto|infra|real|cement|power|steel/.test(S);
+
+  const M = {};
+  if (eps>0 && bvps>0) M.graham = {name:'Graham',       val:Math.sqrt(22.5*eps*bvps), why:'√(22.5·EPS·BVPS) — mature value'};
+  if (eps>0)           M.peBand = {name:'PE-band',       val:avgPE*eps,                why:`sector PE ${avgPE}× EPS`};
+  if (pe>0)            M.relPE  = {name:'Rel-PE',        val:ltp*avgPE/pe,             why:`re-rate to sector PE ${avgPE}`};
+  if (fpe>0)           M.fwdPE  = {name:'Fwd-PE',        val:avgPE*(ltp/fpe),          why:`sector PE × forward EPS`};
+  if (eps>0 && eg>0)   M.peg    = {name:'PEG',           val:Math.min(Math.max(eg,8),40)*eps, why:`growth-justified PE (~${Math.round(Math.min(Math.max(eg,8),40))})× EPS`};
+  if (bvps>0 && roe>0) M.jpb    = {name:'Justified-PB',  val:bvps*(roe/12),            why:`BVPS × (ROE ${Math.round(roe)}% / 12% CoE)`};
+
+  let keys;
+  if (isFin)         keys=['jpb','relPE','peBand'];
+  else if (isGrowth) keys=['peg','peBand','fwdPE','relPE'];
+  else if (isCyc)    keys=['peBand','relPE','fwdPE','graham'];
+  else               keys=['graham','peBand','relPE'];
+  let applicable = keys.map(k=>M[k]).filter(Boolean);
+  if (!applicable.length) applicable = Object.values(M);
+
+  if (!applicable.length) {
+    return {fair:ltp, base:ltp, low:ltp, high:ltp, mos:null, method:'no data', methods:[],
+            applicableCount:0, confidence:'none', verdict:'Inconclusive', cheap:false, expensive:false,
+            avgPE, eps, bvps, pe, roe, eg};
+  }
+  const vals = applicable.map(m=>m.val);
+  const base = Math.round(_med(vals)), low = Math.round(Math.min(...vals)), high = Math.round(Math.max(...vals));
+  const mos  = base ? Math.round((base-ltp)/base*100) : null;
+  const disp = (base>0 && applicable.length>1) ? (high-low)/base : null;
+  let confidence;
+  if (applicable.length>=3 && eps>0 && disp!=null && disp<0.45) confidence='high';
+  else if (applicable.length>=2 && (eps>0||isFin)) confidence='med';
+  else confidence='low';
+  let verdict;
+  if (applicable.length<2) verdict='Inconclusive';
+  else if (mos>15) verdict='Undervalued';
+  else if (mos<-15) verdict='Overvalued';
+  else verdict='Fair';
+  return {fair:base, base, low, high, mos,
+          method:applicable.map(m=>m.name).join(' · '),
+          methods:applicable.map(m=>({name:m.name, val:Math.round(m.val), why:m.why})),
+          applicableCount:applicable.length, confidence, verdict,
+          cheap:verdict==='Undervalued', expensive:verdict==='Overvalued',
+          avgPE, eps, bvps, pe, roe, eg};
+}
+// Verdict → display chip
+function _fvVerdictChip(v){
+  return v==='Undervalued'?'🟢 Undervalued':v==='Overvalued'?'🔴 Overvalued':v==='Fair'?'🟡 Fair':'⚪ Inconclusive';
+}
+function _fvConfChip(c){
+  const m={high:['High','var(--grn)'],med:['Medium','var(--yel)'],low:['Low','var(--orn)'],none:['No data','var(--t4)']}[c]||['—','var(--t4)'];
+  return `<span style="font-size:10px;font-weight:600;color:${m[1]}">${m[0]}</span>`;
+}
+// Sector-median PE/PB from the user's own holdings — for relative/peer valuation.
+function _sectorMedians(){
+  const by={};
+  (D.holdings||[]).forEach(h=>{
+    const s=h.sector||'default'; if(!by[s])by[s]={pe:[],pb:[]};
+    const pe=h._pe??h.pe, pb=h._pb??h.pb;
+    if(pe>0&&pe<200)by[s].pe.push(+pe); if(pb>0&&pb<50)by[s].pb.push(+pb);
+  });
+  const med=arr=>{ if(!arr.length)return null; const a=[...arr].sort((x,y)=>x-y),m=a.length>>1; return a.length%2?a[m]:(a[m-1]+a[m])/2; };
+  const out={}; Object.entries(by).forEach(([s,v])=>out[s]={pe:med(v.pe),pb:med(v.pb),n:v.pe.length});
+  return out;
 }
 
 // ── SCORE BAR HTML helper ──────────────────────────────────────────────
@@ -22734,11 +22813,11 @@ function renderScoreTab() {
         </div>
       </div>
       <div style="text-align:right">
-        <div style="font-size:10px;color:var(--t4);margin-bottom:3px">Fair Value</div>
-        <div style="font-size:15px;font-weight:700;color:${fv.cheap?'var(--grn)':fv.expensive?'var(--red)':'var(--yel)'}">₹${f(fv.fair)}</div>
-        <div style="font-size:11px;color:var(--t4)">${fv.method}</div>
+        <div style="font-size:10px;color:var(--t4);margin-bottom:3px">Fair Value ${typeof _fvConfChip==='function'?'· '+_fvConfChip(fv.confidence):''}</div>
+        <div style="font-size:15px;font-weight:700;color:${fv.cheap?'var(--grn)':fv.expensive?'var(--red)':'var(--yel)'}">₹${f(fv.base!=null?fv.base:fv.fair)}</div>
+        <div style="font-size:10px;color:var(--t4)">${fv.low!=null&&fv.low!==fv.high?'range ₹'+f(fv.low)+'–₹'+f(fv.high):(fv.method||'')}</div>
         <div style="font-size:12px;font-weight:600;color:${fv.cheap?'var(--grn)':fv.expensive?'var(--red)':'var(--t3)'}">
-          ${fv.mos==null?'—':fv.mos>0?'MoS '+fv.mos+'%':'Premium '+Math.abs(fv.mos)+'%'}
+          ${fv.mos==null?'—':fv.mos>0?'MoS '+fv.mos+'%':'Premium '+Math.abs(fv.mos)+'%'} ${typeof _fvVerdictChip==='function'?'· '+_fvVerdictChip(fv.verdict):''}
         </div>
       </div>
     </div>
@@ -22830,40 +22909,63 @@ async function renderFairValueEngine() {
     return;
   }
   // Show loading state for holdings missing fundamentals
-  const missing = D.holdings.filter(h => !h._pe);
+  const missing = D.holdings.filter(h => !h._pe && !h._eps);
   if (missing.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--t4)">⏳ Fetching fundamentals for ${missing.length} stocks…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--t4)">⏳ Fetching fundamentals for ${missing.length} stocks…</td></tr>`;
     await Promise.all(missing.map(async h => {
       try {
         const fund = await fetchFund(h.symbol, 'NSE').catch(()=>null);
         if (fund) {
           if (fund.pe)   h._pe   = fund.pe;
+          if (fund.fpe)  h._fpe  = fund.fpe;
           if (fund.eps)  h._eps  = fund.eps;
           if (fund.bvps) h._bvps = fund.bvps;
+          if (fund.pb)   h._pb   = fund.pb;
           if (fund.roe)  h._roe  = fund.roe;
+          if (fund.eg!=null) h._eg = fund.eg;
+          if (fund.de!=null) h._de = fund.de;
           if (fund.beta) h._beta = fund.beta;
         }
       } catch(e) {}
     }));
   }
+  const meds = _sectorMedians();
   tbody.innerHTML = D.holdings.map(h => {
     const ltp  = h._ltp || h.ltp || h.avgPrice || 0;
-    const pe   = h._pe  || null;
-    const roe  = h._roe || null;
-    const eps  = h._eps || null;
-    const bvps = h._bvps|| null;
-    const fv   = computeFairValue(ltp, pe, eps, bvps, h.sector);
-    const mosCol = fv.cheap?'var(--grn)':fv.expensive?'var(--red)':fv.mos==null?'var(--t4)':'var(--yel)';
-    const verdict = fv.cheap?'🟢 Undervalued':fv.expensive?'🔴 Overvalued':fv.mos==null?'⏳ Loading':'🟡 Fair';
+    const fv   = computeFairValue(h);   // object signature — pulls _pe/_eps/_bvps/_roe/_eg/_fpe/sector
+    const mosCol = fv.verdict==='Undervalued'?'var(--grn)':fv.verdict==='Overvalued'?'var(--red)':fv.verdict==='Fair'?'var(--yel)':'var(--t4)';
     const mosTxt  = fv.mos==null?'—':fv.mos>0?'MoS '+fv.mos+'%':'Prem '+Math.abs(fv.mos)+'%';
-    return `<tr style="border-bottom:1px solid var(--b2)">
-      <td style="padding:10px 12px"><div style="font-weight:600;font-size:13px">${h.symbol}</div><div style="font-size:10px;color:var(--t4)">${h.sector||'—'}</div></td>
+    const rangeTxt = (fv.applicableCount>=1 && fv.low!==fv.high) ? `<div style="font-size:10px;color:var(--t4)">₹${f(fv.low)}–₹${f(fv.high)}</div>` : '';
+    const fairTxt  = fv.applicableCount? `₹${f(fv.base)}` : '—';
+    const methodChips = fv.methods.length ? fv.methods.map(m=>`<span title="${m.why}" style="display:inline-block;background:var(--s2);border:1px solid var(--b2);border-radius:4px;font-size:9px;padding:1px 5px;margin:1px;color:var(--t3)">${m.name} ₹${f(m.val)}</span>`).join('') : '<span style="font-size:10px;color:var(--t4)">insufficient data</span>';
+    const sec = h.sector||'default'; const sm = meds[sec];
+    const pe = h._pe??h.pe;
+    const vsSector = (sm&&sm.pe&&pe>0) ? `<div style="font-size:10px;color:${pe<sm.pe?'var(--grn)':'var(--red)'};margin-top:4px">PE ${(+pe).toFixed(1)} vs sector-median ${sm.pe.toFixed(1)} (${pe<sm.pe?'cheaper':'pricier'})</div>` : '';
+    const detailId = 'fvd-'+h.symbol.replace(/[^A-Za-z0-9]/g,'');
+    return `<tr style="border-bottom:1px solid var(--b2);cursor:pointer" onclick="var e=document.getElementById('${detailId}');if(e)e.style.display=e.style.display==='none'?'table-row':'none'">
+      <td style="padding:10px 12px"><div style="font-weight:600;font-size:13px">${h.symbol} <span style="font-size:9px;color:var(--t4)">▾</span></div><div style="font-size:10px;color:var(--t4)">${sec}</div></td>
       <td style="text-align:right;padding:10px 12px;font-weight:600;font-family:var(--mono)">₹${f(ltp)}</td>
-      <td style="text-align:right;padding:10px 12px;font-weight:700;font-family:var(--mono);color:${mosCol}">₹${fv.mos==null?'—':f(fv.fair)}</td>
-      <td style="text-align:right;padding:10px 12px;font-size:11px;color:var(--t4)">${fv.method}</td>
+      <td style="text-align:right;padding:10px 12px;font-weight:700;font-family:var(--mono);color:${mosCol}">${fairTxt}${rangeTxt}</td>
+      <td style="text-align:left;padding:10px 12px;max-width:230px;line-height:1.6">${methodChips}</td>
       <td style="text-align:right;padding:10px 12px;font-weight:600;color:${mosCol}">${mosTxt}</td>
-      <td style="text-align:center;padding:10px 12px;font-size:12px">${verdict}</td>
-    </tr>`;
+      <td style="text-align:center;padding:10px 12px">${_fvConfChip(fv.confidence)}</td>
+      <td style="text-align:center;padding:10px 12px;font-size:12px;white-space:nowrap">${_fvVerdictChip(fv.verdict)}</td>
+    </tr>
+    <tr id="${detailId}" style="display:none;background:var(--s1)"><td colspan="7" style="padding:12px 16px">
+      <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:11px;color:var(--t3)">
+        <div><div style="color:var(--t4);text-transform:uppercase;font-size:9px;letter-spacing:.5px;margin-bottom:4px">Method breakdown</div>${fv.methods.length?fv.methods.map(m=>`<div>${m.name}: <b style="color:var(--t2)">₹${f(m.val)}</b> <span style="color:var(--t4)">— ${m.why}</span></div>`).join(''):'<div style="color:var(--t4)">No applicable methods (missing or negative earnings / book value).</div>'}</div>
+        <div><div style="color:var(--t4);text-transform:uppercase;font-size:9px;letter-spacing:.5px;margin-bottom:4px">Inputs</div>
+          <div>PE: <b style="color:var(--t2)">${pe>0?(+pe).toFixed(1):'—'}</b> · Fwd PE: <b style="color:var(--t2)">${h._fpe>0?(+h._fpe).toFixed(1):'—'}</b></div>
+          <div>EPS: <b style="color:var(--t2)">${h._eps!=null?f(h._eps):'—'}</b> · BVPS: <b style="color:var(--t2)">${h._bvps!=null?f(h._bvps):'—'}</b></div>
+          <div>ROE: <b style="color:var(--t2)">${fv.roe!=null?fv.roe.toFixed(0)+'%':'—'}</b> · Growth: <b style="color:var(--t2)">${fv.eg!=null?fv.eg.toFixed(0)+'%':'—'}</b></div>
+          ${vsSector}
+        </div>
+        <div style="max-width:260px"><div style="color:var(--t4);text-transform:uppercase;font-size:9px;letter-spacing:.5px;margin-bottom:4px">Read</div>
+          <div>Fair range <b style="color:var(--t2)">₹${f(fv.low)}–₹${f(fv.high)}</b>, base ₹${f(fv.base)}. Confidence <b>${fv.confidence}</b>${fv.confidence==='low'||fv.confidence==='none'?' — treat verdict as unknown.':'.'}</div>
+          <div style="color:var(--t4);margin-top:4px">Source: Yahoo fundamentals · sector PE ${fv.avgPE}. Estimates, not advice.</div>
+        </div>
+      </div>
+    </td></tr>`;
   }).join('');
 }
 
@@ -22871,16 +22973,18 @@ async function runFairValueAI() {
   const el = document.getElementById('fv-ai-txt');
   if (!el || !D.holdings.length) return;
   el.innerHTML = '<div style="color:var(--t4);font-size:12px">⏳ Valuation Agent analysing…</div>';
-  const vals = D.holdings.slice(0,10).map(h => {
+  const vals = D.holdings.slice(0,12).map(h => {
     const ltp = h._ltp||h.avgPrice||0;
-    const fv  = computeFairValue(ltp, h._pe, h._eps, h._bvps, h.sector);
-    return `${h.symbol}(CMP:${Math.round(ltp)},FV:${fv.fair},${fv.mos>0?'MoS'+fv.mos+'%':'Prem'+Math.abs(fv.mos)+'%'})`;
+    const fv  = computeFairValue(h);
+    return `${h.symbol}(CMP:${Math.round(ltp)},FVrange:${fv.low}-${fv.high},base:${fv.base},${fv.mos>0?'MoS'+fv.mos+'%':'Prem'+Math.abs(fv.mos)+'%'},conf:${fv.confidence},verdict:${fv.verdict})`;
   }).join(', ');
   const ctx = D._marketCtx||{sentimentLabel:'Neutral'};
   const prompt = `You are a Chartered Financial Analyst (CFA) specialising in Indian equity valuation. Review this portfolio's valuation scorecard.
 
-VALUATION MATRIX (CMP vs Model Fair Value, Margin of Safety):
+VALUATION MATRIX — each stock: CMP, model Fair-Value RANGE (low-high), base (median of applicable methods), Margin-of-Safety vs base, data CONFIDENCE (high/med/low), and range-based VERDICT:
 ${vals}
+
+IMPORTANT: These are triangulated model estimates, not precise intrinsic values. Only lean on names with conf:high or conf:med. For conf:low or verdict:Inconclusive, explicitly say the data is too thin/conflicting to call — do NOT invent conviction. Prefer the RANGE over the single base number.
 
 Market context: ${ctx.sentimentLabel}
 
