@@ -32251,8 +32251,12 @@ function _calcInsurance() {
   });
 
   // How many lots needed to hedge (delta hedge)
-  const lotsNeeded = Math.ceil((pfVal * portBeta) / niftyLotVal);
+  const idealLots = (pfVal * portBeta) / niftyLotVal;   // fractional "perfect" hedge
+  const lotsNeeded = Math.max(1, Math.ceil(idealLots));
   const hedgeCoverage = (lotsNeeded * niftyLotVal / (pfVal * portBeta) * 100).toFixed(0);
+  // Nifty options trade in whole lots of 75 → for a small portfolio the minimum 1 lot massively
+  // over-hedges, turning a crash into a *profit* (a directional short, not insurance). Flag it.
+  const overHedged = lotsNeeded > 1.4 * idealLots && idealLots < 0.9;
 
   const selectedPut = strikesAndPremiums[2]; // Use protection-level put
   const totalPremium = selectedPut.putPrem * niftyLotSize * lotsNeeded;
@@ -32261,6 +32265,9 @@ function _calcInsurance() {
   const maxLossAfterHedge = Math.round(pfVal * protPct / 100 - totalPremium);
 
   el.innerHTML = `
+    ${overHedged ? `<div style="padding:10px 14px;background:rgba(249,115,22,.09);border:1px solid rgba(249,115,22,.3);border-radius:8px;margin-bottom:14px;font-size:12px;color:var(--t2);line-height:1.6">
+      ⚠ <strong style="color:var(--orn)">Over-hedged.</strong> A perfect hedge needs only <strong>${idealLots.toFixed(2)} lots</strong>, but Nifty PUTs trade in whole lots of ${niftyLotSize}, so the minimum <strong>1 lot</strong> covers ${hedgeCoverage}% of your ₹${fI(pfVal)} portfolio. Below the strike you'd actually <em>profit</em> from a crash — that's a directional short, not insurance. For precise hedging your portfolio would need to be ~₹${fI(niftyLotVal*(1-protPct/100)/1)}+; otherwise treat this as a partial/speculative hedge or use it only for tail protection.
+    </div>` : ''}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px">
       ${[
         ['Portfolio β', portBeta.toFixed(2), 'var(--t2)', betaSource],
@@ -32732,7 +32739,7 @@ function _renderCoveredCalls() {
              strike5pct, premium5_monthly, monthlyIncome5, monthlyYield5, annualYield5,
              strike10pct, premium10_monthly, assignProb, retIfAssigned, goodCandidate, gateReason };
   })
-  .filter(x => x.lotsHeld >= 1)
+  .filter(x => x.lotsHeld >= 1 && x.ltp >= 20)   // exclude penny stocks — OTM strikes round to ~0 and yields are nonsensical
   .sort((a,b) => (b.goodCandidate-a.goodCandidate) || (b.monthlyIncome5 - a.monthlyIncome5));
 
   if (!eligible.length) {
@@ -32750,7 +32757,7 @@ function _renderCoveredCalls() {
   const aspirational = D.holdings.map(h => {
     const ltp = h.ltp || h.avgPrice;
     const lot = _FNO_LOT_SIZES[h.symbol] || _FNO_LOT_SIZES[h.symbol.replace(/-/g,'_')] || 0;
-    if (!lot || h.qty >= lot) return null;
+    if (!lot || h.qty >= lot || (h.ltp||h.avgPrice) < 20) return null;
     const sharesNeeded = lot - h.qty;
     const capitalNeeded = sharesNeeded * ltp;
     const sigma = 0.30 + (h.beta||1)*0.10;
