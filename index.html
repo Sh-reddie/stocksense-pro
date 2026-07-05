@@ -4852,7 +4852,10 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div class="sec" id="sec-insurance">
     <div class="sec-head">
       <div class="sec-title">🛡 Portfolio Insurance Calculator</div>
-      <button class="btn btn-g btn-sm" onclick="_calcInsurance()">↻ Recalculate</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-p btn-sm" id="ins-refresh-btn" onclick="refreshInsurance()" title="Fetch live India VIX and regress your portfolio beta vs Nifty">📡 Refresh (live VIX + beta)</button>
+        <button class="btn btn-g btn-sm" onclick="_calcInsurance()">↻ Recalculate</button>
+      </div>
     </div>
     <div style="font-size:11px;color:var(--t3);margin-bottom:12px;padding:8px 12px;background:rgba(240,82,82,.05);border:1px solid rgba(240,82,82,.2);border-radius:8px">
       🛡 Buy Nifty PUT options to protect your portfolio from a market crash. Pay a small premium to cap your downside.
@@ -6411,15 +6414,15 @@ function go(id) {
   if(id==='deals') renderDeals();
   if(id==='ipo-tracker') _fetchIPOs();
   if(id==='exit-seq') _renderExitSequencer();
-  if(id==='covered-calls') _renderCoveredCalls();
-  if(id==='sector-rotation') _renderSectorRotation();
+  if(id==='covered-calls'){ _renderCoveredCalls(); if(!D._ccLoaded){ D._ccLoaded=true; (async()=>{ const hs=D.holdings.slice(); for(let i=0;i<hs.length;i+=4){ await Promise.all(hs.slice(i,i+4).map(h=>_getHistory(h,'1y').catch(()=>null))); if(i+4<hs.length)await new Promise(r=>setTimeout(r,200)); } _renderCoveredCalls(); })(); } }
+  if(id==='sector-rotation'){ _renderSectorRotation(); if(!D._srLoaded) refreshSectorMomentum(); }
   if(id==='rebal-plan') _renderRebalPlan();
   if(id==='signal-tracker') _renderSignalTracker();
   if(id==='smart-alerts') _renderSmartAlertsPreview();
   if(id==='portfolio-cal') _renderPortfolioCal();
   if(id==='fund-overlap') _renderFundOverlap();
   if(id==='signal-accuracy') _renderSignalAccuracy();
-  if(id==='insurance') { _calcInsurance(); _prefillInsurance(); }
+  if(id==='insurance') { _prefillInsurance(); _calcInsurance(); if(!D._insLoaded) refreshInsurance(); }
   if(id==='recovery') _populateRecoveryDropdown();
   if(id==='rebal-plan') _renderRebalPlanIntro();
   if(id==='smart-alerts') _renderSmartAlerts();
@@ -7614,6 +7617,20 @@ function _periodReturn(closes,n){ if(!closes||closes.length<n+1)return null; con
 function _rsi14(closes,period=14){ if(!closes||closes.length<period+1)return null; let g=0,l=0; for(let i=closes.length-period;i<closes.length;i++){const d=closes[i]-closes[i-1]; if(d>=0)g+=d; else l-=d;} const al=l/period; if(al===0)return 100; const rs=(g/period)/al; return Math.round(100-100/(1+rs)); }
 function _pctVsDMA(closes,n){ if(!closes||closes.length<n)return null; const sma=closes.slice(-n).reduce((s,x)=>s+x,0)/n; const last=closes[closes.length-1]; return sma>0?(last/sma-1)*100:null; }
 function _dailyRets(closes){ const r=[]; for(let i=1;i<closes.length;i++){ if(closes[i-1]>0) r.push(closes[i]/closes[i-1]-1); } return r; }
+function _stdev(a){ if(!a||a.length<2)return null; const m=a.reduce((s,x)=>s+x,0)/a.length; return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/(a.length-1)); }
+// Annualized realized volatility (default ~3-month window) from a daily close series.
+function _realizedVol(closes, win=63){ if(!closes||closes.length<20)return null; const r=_dailyRets(closes.slice(-(win+1))); const sd=_stdev(r); return sd==null?null:sd*Math.sqrt(252); }
+// Real beta vs Nifty: regress date-aligned daily returns (cov/var). rec/niftyRec are _getHistYF records.
+function _betaVsNifty(rec, niftyRec){
+  if(!rec?.closes||!niftyRec?.closes)return null;
+  const nm={}; niftyRec.dates.forEach((d,i)=>nm[d]=niftyRec.closes[i]);
+  const sC=[],nC=[]; rec.dates.forEach((d,i)=>{ if(nm[d]!=null){ sC.push(rec.closes[i]); nC.push(nm[d]); } });
+  if(sC.length<30)return null;
+  const sr=_dailyRets(sC), nr=_dailyRets(nC); const n=Math.min(sr.length,nr.length); if(n<20)return null;
+  const A=sr.slice(-n),B=nr.slice(-n); const mA=A.reduce((s,x)=>s+x,0)/n,mB=B.reduce((s,x)=>s+x,0)/n;
+  let cov=0,varB=0; for(let i=0;i<n;i++){cov+=(A[i]-mA)*(B[i]-mB);varB+=(B[i]-mB)**2;}
+  return varB>0?cov/varB:null;
+}
 
 // ── Index price cache (persists last-known prices across sessions) ────────────
 // Update both primary (ixN) and duplicate (ixNd) ticker elements
@@ -32022,6 +32039,28 @@ const _REGIME_SECTOR_WEIGHTS = {
   DEFENSIVE:  { Energy:8,  IT:8,  Banking:10, FMCG:28, Auto:5,  Defence:18, Finance:8, Infrastructure:5, Others:10 },
 };
 
+// Real sector momentum from the user's own holdings' cached price history (3M return + RS vs Nifty).
+function _sectorMomentum(){
+  const nifty=_histCacheRead('^NSEI'); const n3=nifty?_periodReturn(nifty.closes,63):null;
+  const bySec={};
+  D.holdings.forEach(h=>{
+    const rec=_histFor(h); if(!rec)return; const r=_periodReturn(rec.closes,63); if(r==null)return;
+    const sec=h.sector||'Others'; (bySec[sec]=bySec[sec]||[]).push(r);
+  });
+  const out={};
+  Object.entries(bySec).forEach(([s,arr])=>{ const m=arr.reduce((a,b)=>a+b,0)/arr.length; out[s]={mom:m, rs:n3!=null?m-n3:null, n:arr.length}; });
+  return {sec:out, nifty3m:n3};
+}
+async function refreshSectorMomentum(){
+  const btn=document.getElementById('sr-mom-btn');
+  if(btn){ btn.disabled=true; btn.dataset.o=btn.textContent; btn.textContent='⏳ Loading…'; }
+  try{ await _getHistYF('^NSEI','1y'); }catch(e){}
+  const hs=D.holdings.slice();
+  for(let i=0;i<hs.length;i+=4){ await Promise.all(hs.slice(i,i+4).map(h=>_getHistory(h,'1y').catch(()=>null))); if(i+4<hs.length)await new Promise(r=>setTimeout(r,200)); }
+  D._srLoaded=true;
+  if(btn){ btn.disabled=false; btn.textContent=btn.dataset.o||'📡 Recompute momentum'; }
+  _renderSectorRotation();
+}
 function _renderSectorRotation() {
   const el = document.getElementById('sr-content');
   if (!el || !D.holdings.length) return;
@@ -32038,45 +32077,61 @@ function _renderSectorRotation() {
     sectorMap[sec] = (sectorMap[sec]||0) + (h.ltp||h.avgPrice)*h.qty;
   });
 
+  // Real sector momentum (3M return + relative strength vs Nifty) from cached price history.
+  const {sec:mom, nifty3m} = _sectorMomentum();
+  const haveMom = Object.keys(mom).length>0;
+
   // All sectors (union of current + ideal)
   const allSectors = new Set([...Object.keys(sectorMap), ...Object.keys(ideal)]);
   const rows = [...allSectors].map(sec => {
     const currentPct = sectorMap[sec] ? (sectorMap[sec]/totalVal*100) : 0;
     const idealPct = ideal[sec] || 0;
     const delta = currentPct - idealPct;
-    const action = Math.abs(delta) < 2 ? '✅ OK' : delta > 0 ? '🔻 Reduce' : '🔼 Add';
-    const actionCol = Math.abs(delta) < 2 ? 'var(--grn)' : delta > 0 ? 'var(--red)' : 'var(--ac)';
+    const m = mom[sec]; const rs = m?m.rs:null;
+    // Momentum-refined action: overweight AND lagging → reduce; underweight AND leading → add.
+    let action, actionCol;
+    if (Math.abs(delta) < 2) { action='✅ OK'; actionCol='var(--grn)'; }
+    else if (delta > 0) { action = (rs!=null&&rs<0)?'🔻 Reduce (lagging)':'🔻 Trim'; actionCol='var(--red)'; }
+    else { action = (rs!=null&&rs>0)?'🔼 Add (leading)':'🔼 Add'; actionCol='var(--ac)'; }
     const rebalAmt = Math.abs(delta/100 * totalVal);
-    return { sec, currentPct, idealPct, delta, action, actionCol, rebalAmt };
-  }).sort((a,b) => Math.abs(b.delta) - Math.abs(a.delta));
+    return { sec, currentPct, idealPct, delta, action, actionCol, rebalAmt, mom:m?m.mom:null, rs };
+  }).sort((a,b) => (b.rs??-999)-(a.rs??-999));
 
   const reduce = rows.filter(r=>r.delta>2);
   const add    = rows.filter(r=>r.delta<-2);
-  const ok     = rows.filter(r=>Math.abs(r.delta)<=2);
+  const leaders = rows.filter(r=>r.rs!=null&&r.currentPct>0).sort((a,b)=>b.rs-a.rs);
 
   el.innerHTML = `
-    <div style="padding:10px 14px;border-radius:8px;background:${regimeKey==='BEAR'?'rgba(240,82,82,.07)':regimeKey==='BULL'?'rgba(45,211,111,.07)':'rgba(79,142,247,.07)'};border:1px solid var(--b2);margin-bottom:14px;display:flex;align-items:center;gap:10px">
+    <div style="padding:10px 14px;border-radius:8px;background:${regimeKey==='BEAR'?'rgba(240,82,82,.07)':regimeKey==='BULL'?'rgba(45,211,111,.07)':'rgba(79,142,247,.07)'};border:1px solid var(--b2);margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="font-weight:700;font-size:13px">Regime: ${regime}</span>
-      <span style="font-size:11px;color:var(--t3)">Ideal weights adjusted for ${regimeKey.toLowerCase()} market. ${reduce.length} sectors to reduce, ${add.length} to add.</span>
+      <span style="font-size:11px;color:var(--t3)">Real sector momentum vs regime-ideal weights. ${reduce.length} to trim, ${add.length} to add.</span>
+      <button class="btn btn-g btn-xs" id="sr-mom-btn" onclick="refreshSectorMomentum()" style="margin-left:auto">📡 Recompute momentum</button>
     </div>
+    ${haveMom ? `<div class="pn" style="margin-bottom:12px"><div class="pn-h"><div class="pn-t">🚀 Sector leadership — real 3-month relative strength vs Nifty (${nifty3m!=null?(nifty3m>=0?'+':'')+nifty3m.toFixed(1)+'%':'—'})</div></div><div class="pn-b" style="display:flex;gap:8px;flex-wrap:wrap">
+      ${leaders.map(r=>`<div style="padding:6px 10px;border-radius:8px;border:1px solid var(--b2);background:${r.rs>=0?'rgba(45,211,111,.07)':'rgba(240,82,82,.06)'}">
+        <div style="font-size:12px;font-weight:700">${r.sec} ${r.rs>=3?'🚀':r.rs>=0?'▲':'▼'}</div>
+        <div style="font-size:10px;color:var(--t4)">3M ${r.mom>=0?'+':''}${r.mom.toFixed(1)}% · vs Nifty ${r.rs>=0?'+':''}${r.rs.toFixed(1)}%</div>
+      </div>`).join('')}
+    </div></div>` : `<div style="font-size:11px;color:var(--t3);margin-bottom:12px;padding:8px 12px;background:var(--s2);border-radius:8px">Click <b>📡 Recompute momentum</b> to rank sectors by real 3-month relative strength (needs cached price history).</div>`}
     <div style="overflow-x:auto"><table class="tbl">
-      <thead><tr><th>Sector</th><th class="mn">Current %</th><th class="mn">Ideal %</th><th class="mn">Gap</th><th class="mn">Action</th><th class="mn">Amount</th></tr></thead>
+      <thead><tr><th>Sector</th><th class="mn">Current %</th><th class="mn">Ideal %</th><th class="mn">Gap</th><th class="mn">3M vs Nifty</th><th class="mn">Action</th><th class="mn">Amount</th></tr></thead>
       <tbody>${rows.map(r=>`<tr>
         <td style="font-weight:600">${r.sec}</td>
         <td class="mn" style="font-family:var(--mono)">${r.currentPct.toFixed(1)}%</td>
         <td class="mn" style="font-family:var(--mono);color:var(--t4)">${r.idealPct}%</td>
         <td class="mn" style="font-family:var(--mono);color:${r.delta>2?'var(--red)':r.delta<-2?'var(--ac)':'var(--grn)'}">${r.delta>0?'+':''}${r.delta.toFixed(1)}%</td>
+        <td class="mn" style="font-family:var(--mono);color:${r.rs==null?'var(--t4)':r.rs>=0?'var(--grn)':'var(--red)'}">${r.rs==null?'—':(r.rs>=0?'+':'')+r.rs.toFixed(1)+'%'}</td>
         <td class="mn"><span style="font-weight:700;color:${r.actionCol}">${r.action}</span></td>
         <td class="mn" style="font-size:11px;color:var(--t3)">${Math.abs(r.delta)>2?'₹'+fI(r.rebalAmt):'—'}</td>
       </tr>`).join('')}</tbody>
     </table></div>
     ${reduce.length ? `<div style="margin-top:12px;padding:10px 14px;background:rgba(240,82,82,.06);border-radius:8px;border-left:3px solid var(--red)">
-      <strong style="color:var(--red)">🔻 Reduce:</strong> ${reduce.map(r=>`${r.sec} by ₹${fI(r.rebalAmt)}`).join(' · ')}
+      <strong style="color:var(--red)">🔻 Trim:</strong> ${reduce.map(r=>`${r.sec} by ₹${fI(r.rebalAmt)}${r.rs!=null&&r.rs<0?' (lagging)':''}`).join(' · ')}
     </div>`:''}
     ${add.length ? `<div style="margin-top:8px;padding:10px 14px;background:rgba(79,142,247,.06);border-radius:8px;border-left:3px solid var(--ac)">
-      <strong style="color:var(--ac)">🔼 Add:</strong> ${add.map(r=>`${r.sec} by ₹${fI(r.rebalAmt)}`).join(' · ')}
+      <strong style="color:var(--ac)">🔼 Add:</strong> ${add.map(r=>`${r.sec} by ₹${fI(r.rebalAmt)}${r.rs!=null&&r.rs>0?' (leading)':''}`).join(' · ')}
     </div>`:''}
-    <div style="margin-top:10px;font-size:10px;color:var(--t4)">Ideal weights based on historical NSE sector performance in ${regimeKey.toLowerCase()} markets. Not SEBI advice.</div>`;
+    <div style="margin-top:10px;font-size:10px;color:var(--t4)">Ideal weights = historical NSE sector performance in ${regimeKey.toLowerCase()} markets; momentum = real 3M return of your holdings in each sector vs Nifty. Not SEBI advice.</div>`;
 }
 
 async function _sectorRotationAI() {
@@ -32127,6 +32182,25 @@ function _prefillInsurance() {
   }
 }
 
+// Live India VIX: prefer cached ^INDIAVIX history, else the value already on the Macro tab, else null.
+function _insVix(){
+  const rec=_histCacheRead('^INDIAVIX'); if(rec&&rec.closes?.length){ const v=rec.closes[rec.closes.length-1]; if(v>3&&v<120)return v; }
+  if(window._indiaVix>3) return window._indiaVix;
+  const el=document.getElementById('mac-vix'); const v=parseFloat((el?.textContent||'').replace(/[^\d.]/g,'')); if(v>3&&v<120)return v;
+  return null;
+}
+// Warm the data insurance needs (VIX + Nifty + holdings history for real beta), then recompute.
+async function refreshInsurance(){
+  const btn=document.getElementById('ins-refresh-btn');
+  if(btn){ btn.disabled=true; btn.dataset.o=btn.textContent; btn.textContent='⏳ Loading…'; }
+  try{ const v=await _getHistYF('^INDIAVIX','1mo'); if(v&&v.closes?.length) window._indiaVix=v.closes[v.closes.length-1]; }catch(e){}
+  try{ await _getHistYF('^NSEI','1y'); }catch(e){}
+  const hs=D.holdings.slice();
+  for(let i=0;i<hs.length;i+=4){ await Promise.all(hs.slice(i,i+4).map(h=>_getHistory(h,'1y').catch(()=>null))); if(i+4<hs.length)await new Promise(r=>setTimeout(r,200)); }
+  D._insLoaded=true;
+  if(btn){ btn.disabled=false; btn.textContent=btn.dataset.o||'📡 Refresh (live VIX + beta)'; }
+  _calcInsurance();
+}
 function _calcInsurance() {
   const el = document.getElementById('ins-result');
   if (!el) return;
@@ -32136,18 +32210,29 @@ function _calcInsurance() {
   const months  = parseInt(document.getElementById('ins-duration')?.value) || 3;
   if (!pfVal || !nifty) { el.innerHTML=''; return; }
 
-  // Portfolio beta (weighted average)
+  // Portfolio beta — REAL, regressed vs Nifty from cached price history (per stock, value-weighted);
+  // falls back to any stored beta, then 1, for holdings without history.
   const totalVal = D.holdings.reduce((s,h)=>s+(h.ltp||h.avgPrice)*h.qty,0) || pfVal;
-  const portBeta = D.holdings.length ? D.holdings.reduce((s,h)=>{
-    const w = (h.ltp||h.avgPrice)*h.qty/totalVal;
-    return s + (h.beta||1)*w;
-  }, 0) : 1;
+  const _niftyRec = _histCacheRead('^NSEI');
+  let _betaWsum=0, _betaReal=0, _betaFromHist=false;
+  D.holdings.forEach(h=>{
+    const w=(h.ltp||h.avgPrice)*h.qty/totalVal;
+    const rec=_histFor(h); const b = (rec&&_niftyRec)? _betaVsNifty(rec,_niftyRec) : null;
+    if(b!=null){ _betaReal+=b*w; _betaFromHist=true; } else { _betaReal+=(h.beta||1)*w; }
+    _betaWsum+=w;
+  });
+  const portBeta = D.holdings.length ? (_betaWsum>0?_betaReal/_betaWsum:1) : 1;
+  const betaSource = _betaFromHist ? 'regressed vs Nifty' : 'stored/assumed';
+
+  // σ from LIVE India VIX (market's own volatility expectation) when available, else 18% fallback.
+  const _vix = _insVix();
+  const sigma = (_vix!=null && _vix>3) ? _vix/100 : 0.18;
+  const sigmaSource = (_vix!=null && _vix>3) ? ('India VIX '+_vix.toFixed(1)) : 'assumed 18%';
 
   // Nifty PUT calculation
   const niftyLotSize = 75; // Current Nifty lot size
   const niftyLotVal  = nifty * niftyLotSize;
   const T = months / 12;
-  const sigma = 0.18; // Nifty historical vol ~18%
   const r = 0.065;
 
   // Strike = Nifty * (1 - protPct/100) — simple OTM put; beta adjusts lots needed, not strike
@@ -32178,13 +32263,13 @@ function _calcInsurance() {
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px">
       ${[
-        ['Portfolio Beta', portBeta.toFixed(2), 'var(--t2)'],
-        ['Lots Needed', lotsNeeded+' lots', 'var(--ac)'],
-        ['Hedge Coverage', hedgeCoverage+'%', 'var(--grn)'],
-        ['Premium Cost', '₹'+fI(totalPremium), 'var(--orn)'],
-        ['Cost % of Portfolio', hedgeCostPct+'%', 'var(--orn)'],
-        ['Max Loss (unhedged)', '₹'+fI(maxLoss), 'var(--red)'],
-      ].map(([l,v,c])=>`<div class="sc c1" style="min-width:0"><div class="sc-lbl">${l}</div><div class="sc-val" style="color:${c};font-size:18px">${v}</div></div>`).join('')}
+        ['Portfolio β', portBeta.toFixed(2), 'var(--t2)', betaSource],
+        ['Volatility σ', (sigma*100).toFixed(1)+'%', 'var(--yel)', sigmaSource],
+        ['Lots Needed', lotsNeeded+' lots', 'var(--ac)', 'Nifty PUT'],
+        ['Hedge Coverage', hedgeCoverage+'%', 'var(--grn)', 'β-adjusted'],
+        ['Premium Cost', '₹'+fI(totalPremium), 'var(--orn)', hedgeCostPct+'% of portfolio'],
+        ['Max Loss (unhedged)', '₹'+fI(maxLoss), 'var(--red)', 'if Nifty −'+protPct+'%'],
+      ].map(([l,v,c,sub])=>`<div class="sc c1" style="min-width:0"><div class="sc-lbl">${l}</div><div class="sc-val" style="color:${c};font-size:18px">${v}</div><div style="font-size:9px;color:var(--t4)">${sub}</div></div>`).join('')}
     </div>
     <div style="overflow-x:auto"><table class="tbl" style="margin-bottom:12px">
       <thead><tr><th>Option Type</th><th class="mn">Strike</th><th class="mn">Put Premium/share</th><th class="mn">Total Cost (${lotsNeeded} lots)</th><th class="mn">Monthly Cost</th></tr></thead>
@@ -32199,13 +32284,33 @@ function _calcInsurance() {
         </tr>`;
       }).join('')}</tbody>
     </table></div>
+    ${(()=>{
+      const moves=[-0.20,-0.15,-0.10,-0.05,0,0.05,0.10];
+      const rows=moves.map(m=>{
+        const niftyAt=nifty*(1+m);
+        const portD=pfVal*portBeta*m;
+        const putPay=Math.max(0,strikeAtProtection-niftyAt)*niftyLotSize*lotsNeeded - totalPremium;
+        return {m,portD,hedged:portD+putPay};
+      });
+      return `<div class="pn" style="margin-bottom:12px"><div class="pn-h"><div class="pn-t">📉 Payoff — portfolio P&L if Nifty moves (hedged vs unhedged)</div></div><div class="pn-b" style="overflow-x:auto">
+        <table class="tbl"><thead><tr><th>Nifty move</th><th class="mn">Unhedged P&L</th><th class="mn">Hedged P&L (net of premium)</th><th>Downside cushioned</th></tr></thead><tbody>
+        ${rows.map(r=>`<tr${Math.abs(r.m+protPct/100)<1e-9?' style="background:var(--s2)"':''}>
+          <td class="mn" style="font-weight:${r.m<0?700:400};color:${r.m<0?'var(--red)':r.m>0?'var(--grn)':'var(--t3)'}">${r.m>0?'+':''}${(r.m*100).toFixed(0)}%</td>
+          <td class="mn" style="color:${r.portD<0?'var(--red)':'var(--grn)'}">${r.portD<0?'−':'+'}₹${fI(Math.abs(r.portD))}</td>
+          <td class="mn" style="font-weight:700;color:${r.hedged<0?'var(--orn)':'var(--grn)'}">${r.hedged<0?'−':'+'}₹${fI(Math.abs(r.hedged))}</td>
+          <td>${r.m<0?`<span style="color:var(--grn);font-size:11px">saved ₹${fI(Math.max(0,r.hedged-r.portD))}</span>`:`<span style="color:var(--t4);font-size:11px">−premium drag</span>`}</td>
+        </tr>`).join('')}
+        </tbody></table>
+        <div style="font-size:10px;color:var(--t4);margin-top:6px">The PUT caps the crash loss; in flat/up markets you lose only the premium (${hedgeCostPct}% of portfolio).</div>
+      </div></div>`;
+    })()}
     <div style="padding:10px 14px;background:rgba(45,211,111,.06);border-radius:8px;font-size:12px;line-height:1.7">
       <strong style="color:var(--grn)">💡 How this works:</strong><br>
       Buy <strong>${lotsNeeded} Nifty PUT contracts</strong> at strike ₹${strikeAtProtection.toLocaleString()} (${months}M expiry).
       If Nifty falls ${protPct}% to ₹${Math.round(nifty*(1-protPct/100)).toLocaleString()}, your portfolio loses ~₹${fI(maxLoss)} but your PUTs gain ~₹${fI(maxLoss)} — offsetting the loss.
       Cost: ₹${fI(totalPremium)} (${hedgeCostPct}% of portfolio) — like insurance premium.
     </div>
-    <div style="margin-top:8px;font-size:10px;color:var(--t4)">Premiums estimated using Black-Scholes (σ=18%). Actual market premiums vary. F&O requires SEBI registration. Not SEBI advice.</div>`;
+    <div style="margin-top:8px;font-size:10px;color:var(--t4)">Premiums via Black-Scholes using σ = ${sigmaSource}; portfolio β ${betaSource} (from your holdings' price history). Nifty lot 75. Actual market premiums vary. F&O requires SEBI registration. Not SEBI advice.</div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -32575,6 +32680,9 @@ function _bsCallPremium(S, K, T, r, sigma) {
   };
   return S*N(d1) - K*Math.exp(-r*T)*N(d2);
 }
+// Call delta = N(d1) ≈ risk-neutral probability the call finishes in-the-money (assignment prob).
+function _normCdf(x){ const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911; const s=x<0?-1:1; const t=1/(1+p*Math.abs(x)); const y=1-(((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-x*x/2); return 0.5*(1+s*y); }
+function _bsCallDelta(S,K,T,r,sigma){ if(T<=0||sigma<=0)return S>K?1:0; const d1=(Math.log(S/K)+(r+sigma*sigma/2)*T)/(sigma*Math.sqrt(T)); return _normCdf(d1); }
 
 function _renderCoveredCalls() {
   const el = document.getElementById('cc-content');
@@ -32591,8 +32699,11 @@ function _renderCoveredCalls() {
     const isFNO = lot > 0;
     const lotsHeld = Math.floor(h.qty / effectiveLot);
 
-    // Black-Scholes parameters
-    const sigma = 0.30 + (h.beta||1)*0.10; // volatility estimate: base 30% + beta adjustment
+    // Black-Scholes parameters — σ from REAL realized volatility (cached price history) when available,
+    // falling back to the old crude estimate only if no history is cached.
+    const _rec = _histFor(h); const _rv = _rec ? _realizedVol(_rec.closes) : null;
+    const sigma = (_rv!=null && _rv>0.05) ? Math.max(0.10, Math.min(0.90, _rv)) : (0.30 + (h.beta||1)*0.10);
+    const volSource = (_rv!=null && _rv>0.05) ? 'realized' : 'est';
     const r = 0.065; // India risk-free rate ~6.5%
     const T_monthly = 25/365; // ~25 trading days to monthly expiry
     const T_weekly = 7/365;
@@ -32604,16 +32715,25 @@ function _renderCoveredCalls() {
     const premium5_monthly = _bsCallPremium(ltp, strike5pct, T_monthly, r, sigma);
     const premium10_monthly = _bsCallPremium(ltp, strike10pct, T_monthly, r, sigma);
 
+    // Assignment probability (delta) and return-if-assigned (upside you'd cap at + premium kept).
+    const assignProb = Math.round(_bsCallDelta(ltp, strike5pct, T_monthly, r, sigma)*100);
+    const retIfAssigned = ((strike5pct - ltp + premium5_monthly)/ltp*100);
+    // Signal gate: don't recommend capping upside on momentum winners or undervalued names.
+    const _mScore = _rec ? _momentumScore(_rec.closes, null) : null;
+    const _verdict = (typeof computeFairValue==='function') ? computeFairValue(h).verdict : null;
+    const goodCandidate = !((_mScore!=null && _mScore>=65) || _verdict==='Undervalued');
+    const gateReason = !goodCandidate ? (_verdict==='Undervalued' ? 'undervalued' : 'strong momentum') : '';
+
     const monthlyIncome5 = premium5_monthly * effectiveLot * lotsHeld;
     const monthlyYield5 = (premium5_monthly / ltp * 100);
     const annualYield5 = monthlyYield5 * 12;
 
-    return { h, ltp, lot, effectiveLot, isFNO, lotsHeld, sigma,
+    return { h, ltp, lot, effectiveLot, isFNO, lotsHeld, sigma, volSource,
              strike5pct, premium5_monthly, monthlyIncome5, monthlyYield5, annualYield5,
-             strike10pct, premium10_monthly };
+             strike10pct, premium10_monthly, assignProb, retIfAssigned, goodCandidate, gateReason };
   })
   .filter(x => x.lotsHeld >= 1)
-  .sort((a,b) => b.monthlyIncome5 - a.monthlyIncome5);
+  .sort((a,b) => (b.goodCandidate-a.goodCandidate) || (b.monthlyIncome5 - a.monthlyIncome5));
 
   if (!eligible.length) {
     el.innerHTML = `<div class="pn"><div class="pn-b" style="text-align:center;padding:30px;color:var(--t4)">
@@ -32676,30 +32796,34 @@ function _renderCoveredCalls() {
     <thead><tr>
       <th>Stock</th><th class="mn">Shares</th><th class="mn">LTP</th>
       <th class="mn" title="5% OTM strike price">Strike (5% OTM)</th>
-      <th class="mn" title="Estimated call premium per share">Premium/Share</th>
+      <th class="mn" title="σ used — realized vol from price history, or estimate">σ (vol)</th>
+      <th class="mn" title="Estimated call premium per share (Black-Scholes at realized vol)">Premium/Share</th>
       <th class="mn" title="Monthly income from selling calls">Monthly Income</th>
-      <th class="mn" title="Monthly yield on position value">Monthly Yield</th>
-      <th class="mn">Annual Yield</th>
-      <th class="mn">F&O?</th>
+      <th class="mn" title="Annualized premium yield">Ann. Yield</th>
+      <th class="mn" title="Delta ≈ probability shares get called away (assigned)">Assign.</th>
+      <th class="mn" title="Total return if assigned = capped upside to strike + premium kept">If Assigned</th>
+      <th class="mn" title="Whether it's sensible to write a call now">Write?</th>
     </tr></thead>
     <tbody>${eligible.map(x=>{
       const col = x.monthlyYield5 > 2 ? 'var(--grn)' : x.monthlyYield5 > 1 ? 'var(--yel)' : 'var(--t2)';
-      return `<tr>
-        <td onclick="openDetail(${x.h.id})" style="cursor:pointer"><div class="sym">${x.h.symbol}</div><div class="snm">${x.h.h?.name?.slice(0,25)||''}</div></td>
-        <td class="mn">${x.h.qty} <span style="font-size:9px;color:var(--t4)">(${x.lotsHeld} lot${x.lotsHeld>1?'s':''})</span></td>
+      return `<tr${x.goodCandidate?'':' style="opacity:.6"'}>
+        <td onclick="openDetail(${x.h.id})" style="cursor:pointer"><div class="sym">${x.h.symbol} ${x.isFNO?'':'<span class="tag t-neu" style="font-size:8px">edu</span>'}</div><div class="snm">${x.h.name?.slice(0,22)||''}</div></td>
+        <td class="mn">${x.h.qty} <span style="font-size:9px;color:var(--t4)">(${x.lotsHeld}L)</span></td>
         <td class="mn">₹${f(x.ltp)}</td>
         <td class="mn" style="color:var(--cyn)">₹${f(x.strike5pct)}</td>
+        <td class="mn" style="font-size:11px;color:${x.volSource==='realized'?'var(--t2)':'var(--t4)'}">${(x.sigma*100).toFixed(0)}%${x.volSource==='realized'?'':' <span title="no history — estimated" style="color:var(--orn)">~</span>'}</td>
         <td class="mn" style="color:var(--ac)">₹${x.premium5_monthly.toFixed(2)}</td>
         <td class="mn" style="font-weight:700;color:${col}">₹${fI(x.monthlyIncome5)}</td>
-        <td class="mn" style="color:${col}">${x.monthlyYield5.toFixed(2)}%</td>
         <td class="mn" style="color:${x.annualYield5>15?'var(--grn)':x.annualYield5>8?'var(--yel)':'var(--t3)'}">${x.annualYield5.toFixed(1)}%</td>
-        <td class="mn"><span class="tag ${x.isFNO?'t-buy':'t-neu'}">${x.isFNO?'✅ F&O':'📚 Edu'}</span></td>
+        <td class="mn" style="color:${x.assignProb>=45?'var(--red)':x.assignProb>=30?'var(--yel)':'var(--t3)'}">${x.assignProb}%</td>
+        <td class="mn" style="color:var(--grn)">+${x.retIfAssigned.toFixed(1)}%</td>
+        <td class="mn">${x.goodCandidate?'<span class="tag t-buy" style="font-size:9px">✅ Yes</span>':'<span class="tag t-sell" style="font-size:9px" title="Don\'t cap upside — '+x.gateReason+'">✋ Hold</span>'}</td>
       </tr>`;
     }).join('')}</tbody>
   </table></div>
   <div style="margin-top:10px;padding:8px 12px;background:var(--s2);border-radius:8px;font-size:11px;color:var(--t3);line-height:1.6">
-    ⚠ <strong>Disclaimer:</strong> Premiums estimated using Black-Scholes (σ = base 30% + beta × 10%). Actual market premiums vary. F&O trading requires SEBI registration. Educational only — not SEBI-registered advice.
-    <br>💡 <strong>How it works:</strong> Sell 1 call option contract per lot you own at the strike price. If stock stays below strike at expiry, you keep the premium. If it rises above strike, your shares get called away at the strike price (capped upside).
+    ⚠ <strong>Disclaimer:</strong> Premiums via Black-Scholes using each stock's <strong>realized volatility</strong> from price history (falls back to an estimate marked “~” when history isn't cached). Actual market premiums differ from model. F&O requires SEBI registration. Educational only — not SEBI-registered advice.
+    <br>💡 <strong>Write? gate:</strong> Covered calls cap your upside, so a stock with strong momentum or an "Undervalued" fair-value verdict is flagged <strong>✋ Hold</strong> — writing a call there risks capping a runner. “Assign.” is the rough probability your shares get called away; “If Assigned” is your total return in that case.
   </div>`;
 }
 
