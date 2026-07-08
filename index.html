@@ -15452,9 +15452,10 @@ async function claude(prompt, sys, overrideModel) {
       const customVal = localStorage.getItem('orCustomModel') || document.getElementById('cfg-or-custom')?.value.trim();
       model = customVal && customVal !== 'custom' ? customVal : 'nvidia/nemotron-3-ultra-550b-a55b:free';
     }
-    // Guard: content-safety model is not a chat model — auto-switch
+    // Guard: content-safety model is not a chat model — auto-switch to the fast
+    // nano (the 550B ultra times out on free tier, so it made a bad fallback)
     if (model === 'nvidia/nemotron-3.5-content-safety:free') {
-      model = 'nvidia/nemotron-3-ultra-550b-a55b:free';
+      model = 'nvidia/nemotron-3-nano-30b-a3b:free';
     }
     if (!key) return '⚠ No OpenRouter API key. Go to Settings → AI Provider → add your free key from openrouter.ai';
     // Use a stable HTTPS referer — file:// URLs cause OpenRouter to reject the request
@@ -15548,8 +15549,8 @@ async function claudeJSON(prompt, sys) {
   // User's selected model goes first — honour their Settings choice
   let _userModel = localStorage.getItem('orModel') || 'nvidia/nemotron-3-ultra-550b-a55b:free';
   if (_userModel === 'custom') _userModel = localStorage.getItem('orCustomModel') || 'nvidia/nemotron-3-ultra-550b-a55b:free';
-  // Guard: content-safety model is not a chat model
-  if (_userModel === 'nvidia/nemotron-3.5-content-safety:free') _userModel = 'nvidia/nemotron-3-ultra-550b-a55b:free';
+  // Guard: content-safety model is not a chat model — fall back to fast nano, not the timeout-prone 550B ultra
+  if (_userModel === 'nvidia/nemotron-3.5-content-safety:free') _userModel = 'nvidia/nemotron-3-nano-30b-a3b:free';
   // Keep free-tier model as-is (user explicitly chose it)
   // Fallback cascade: tried in order if user's model fails / is rate-limited
   // IMPORTANT: Exclude slow/reasoning models (nemotron-ultra, glm) — they have 90s timeouts
