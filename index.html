@@ -15478,7 +15478,7 @@ async function claude(prompt, sys, overrideModel) {
         },
         body:JSON.stringify({
           model: _activeModel,
-          max_tokens:2048,
+          max_tokens:4096,
           temperature:0.7,
           messages:[{role:'system',content:sysMsg},{role:'user',content:prompt}]
         }),
@@ -15582,7 +15582,7 @@ async function claudeJSON(prompt, sys) {
       },
       body: JSON.stringify({
         model: _activeModel,
-        max_tokens: 1024,
+        max_tokens: 4096,   // reasoning-capable free models burn ~2k tokens thinking before emitting content — 1024 returned empty responses
         temperature: 0.3,
         messages: [{ role: 'system', content: sysMsg }, { role: 'user', content: prompt }]
       }),
@@ -22078,6 +22078,8 @@ async function _snapPull(sec, id) {
 // Exec summary) locally + to D1 so they survive reloads; restored on open.
 function _aihPersist(key, html) {
   try {
+    // Never persist failure states — a saved error would mask the retry button forever
+    if (!html || /AI (diagnosis|call) failed|rate.?limited|timed out|returned an error|empty response/i.test(html.slice(0, 300))) return;
     const rec = { html, ts: Date.now() };
     localStorage.setItem('ss_aih_' + key, JSON.stringify(rec));
     _snapPush('ai_health', key, rec);
