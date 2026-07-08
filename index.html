@@ -25328,8 +25328,9 @@ function runStress(marketPct) {
   const scenName  = {15:'🚀 Bull','-10':'📉 Mild Correction','-20':'🐻 Bear Market','-35':'💥 Market Crash'}[String(marketPct)] || `📊 Custom ${scenLabel}`;
   const impactCol = totalImpact >= 0 ? 'var(--grn)' : 'var(--red)';
   const survivePct = (totalNew / totalCur * 100 - 100).toFixed(1);
-  const worstStock = rows[rows.length - 1];
-  const bestStock  = rows[0];
+  // Sort direction differs by scenario: bull = best-first, bear = worst-first
+  const worstStock = marketPct >= 0 ? rows[rows.length - 1] : rows[0];
+  const bestStock  = marketPct >= 0 ? rows[0] : rows[rows.length - 1];
 
   summary.innerHTML = [
     {l:'SCENARIO', v: scenName, sub:'', c:'var(--ac)'},
